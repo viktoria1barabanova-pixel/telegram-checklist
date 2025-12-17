@@ -1,29 +1,74 @@
-<script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbziSVp0snizGju85jBW8uvnLAxmY6SyEq2FN9wyKFsjpiu3P16tEw1j-_2i6n70_6NYRA/exec";
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checklist MVP</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    .box { padding: 12px; background:#f6f6f6; border-radius: 12px; overflow:auto; }
+    .muted { color:#666; }
+  </style>
+</head>
+<body>
+  <h1>Тест загрузки чек-листа</h1>
+  <div id="status" class="muted">Старт…</div>
+  <div id="out" class="box" style="margin-top:12px; display:none;"></div>
 
-  // чтобы не был белый экран — покажем статус
-  const statusEl = document.createElement("div");
-  statusEl.style.marginTop = "16px";
-  statusEl.textContent = "Загружаю чек-лист из таблицы…";
-  document.body.appendChild(statusEl);
+  <script>
+    // 1) Чтобы не было "белого экрана" даже при падении JS:
+    const statusEl = document.getElementById("status");
+    const outEl = document.getElementById("out");
 
-  window.__onChecklistLoaded = function (data) {
-    statusEl.textContent = "Данные загружены ✅ (смотри ниже)";
-    const pre = document.createElement("pre");
-    pre.style.cssText = "margin-top:12px;padding:12px;background:#f6f6f6;border-radius:12px;overflow:auto;";
-    pre.textContent = JSON.stringify(data, null, 2);
-    document.body.appendChild(pre);
-  };
+    window.onerror = function (msg, src, line, col, err) {
+      statusEl.textContent = "JS ошибка ❌ " + msg + " (строка " + line + ")";
+      outEl.style.display = "block";
+      outEl.textContent = (err && err.stack) ? err.stack : String(msg);
+      return true;
+    };
 
-  window.__onChecklistError = function () {
-    statusEl.textContent = "Не получилось загрузить данные ❌ Проверь деплой Apps Script.";
-  };
+    // 2) ВСТАВЬ СЮДА свою googleusercontent-ссылку:
+    const DATA_URL = "ВСТАВЬ_ТУТ_ССЫЛКУ_script.googleusercontent.com_КОТОРУЮ_ТЫ_ПРИСЛАЛА";
 
-  // JSONP загрузка
-  (function loadJSONP() {
-    const s = document.createElement("script");
-    s.src = API_URL + "?action=all&callback=__onChecklistLoaded&_=" + Date.now();
-    s.onerror = window.__onChecklistError;
-    document.head.appendChild(s);
-  })();
-</script>
+    (async function () {
+      try {
+        statusEl.textContent = "Загружаю JSON…";
+
+        // Кэш Telegram/браузера иногда мешает — добавим параметр
+        const url = DATA_URL + (DATA_URL.includes("?") ? "&" : "?") + "_=" + Date.now();
+
+        const res = await fetch(url, { method: "GET" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        const text = await res.text();
+
+        // Иногда Google отдаёт не JSON, а обёртку/редирект. Покажем, что пришло.
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          statusEl.textContent = "Пришло не JSON (показываю текст) ⚠️";
+          outEl.style.display = "block";
+          outEl.textContent = text.slice(0, 4000);
+          return;
+        }
+
+        statusEl.textContent = "Данные загружены ✅";
+        outEl.style.display = "block";
+        outEl.textContent = JSON.stringify(data, null, 2);
+
+        // Telegram-приятности (не обяз)
+        if (window.Telegram && Telegram.WebApp) {
+          Telegram.WebApp.ready();
+        }
+      } catch (e) {
+        statusEl.textContent = "Ошибка загрузки ❌ " + (e?.message ?? e);
+        outEl.style.display = "block";
+        outEl.textContent = (e && e.stack) ? e.stack : String(e);
+      }
+    })();
+  </script>
+</body>
+</html>
