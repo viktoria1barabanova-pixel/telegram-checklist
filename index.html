@@ -6,67 +6,540 @@
   <title>Checklist MVP</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; }
-    h1 { font-size: 20px; margin: 0 0 8px; }
-    .box { padding: 12px; background:#f6f6f6; border-radius: 12px; overflow:auto; }
-    .muted { color:#666; }
+    :root { --pad: 14px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: var(--pad); }
+    h1 { font-size: 20px; margin: 0 0 10px; }
+    h2 { font-size: 16px; margin: 18px 0 10px; }
+    .muted { color: #666; }
+    .card { border: 1px solid #e7e7e7; border-radius: 14px; padding: 12px; margin: 10px 0; background: #fff; }
+    .row { display: grid; gap: 10px; }
+    label { font-size: 12px; color: #666; }
+    select, button { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; font-size: 16px; background: #fff; }
+    button { border: none; background: #111; color: #fff; }
+    button:disabled { background: #bbb; }
+    .tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin: 10px 0; }
+    .tab { padding: 10px 12px; border-radius: 999px; border: 1px solid #ddd; background: #fff; white-space: nowrap; cursor: pointer; }
+    .tab.active { background: #111; color: #fff; border-color: #111; }
+    .q-title { font-weight: 700; margin-bottom: 4px; }
+    .q-desc { font-size: 13px; color: #666; margin-bottom: 10px; }
+    .opt { display:flex; align-items:center; gap:10px; padding: 10px; border-radius: 12px; border: 1px solid #eee; margin-top: 8px; }
+    .group { font-weight: 800; margin: 16px 0 6px; }
+    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+    .zone { font-size: 18px; font-weight: 900; padding: 14px; border-radius: 16px; margin: 10px 0; }
+    .zone.green { background: #eaffea; }
+    .zone.yellow { background: #fff7da; }
+    .zone.red { background: #ffe3e3; }
+    .zone.gray { background: #efefef; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    .hr { height: 1px; background: #eee; margin: 12px 0; }
   </style>
 </head>
 <body>
-  <h1>Тест загрузки чек-листа</h1>
-  <div id="status" class="muted">Старт…</div>
-  <div id="out" class="box" style="margin-top:12px; display:none;"></div>
+  <div id="app" class="muted">Загружаю данные…</div>
 
   <script>
-    // 1) Чтобы не было "белого экрана" даже при падении JS:
-    const statusEl = document.getElementById("status");
-    const outEl = document.getElementById("out");
-
-    window.onerror = function (msg, src, line, col, err) {
-      statusEl.textContent = "JS ошибка ❌ " + msg + " (строка " + line + ")";
-      outEl.style.display = "block";
-      outEl.textContent = (err && err.stack) ? err.stack : String(msg);
-      return true;
-    };
-
-    // 2) ВСТАВЬ СЮДА свою googleusercontent-ссылку:
+    // ======= ВСТАВЬ СВОЮ ССЫЛКУ (googleusercontent) =======
     const DATA_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiyljux_U7F68ps9KyXJzRukGmVW3SgZTd6AddEgpo3-SmjFGEHjgWA9hWkvKdCZ-BZhekBIRWjS2-c8aVJxA1qN-rfPsCW1O2Iux81WLkjvWKGtj78vA8KBNDB4Z8HMIv_SjE-GaxhjZAqbNXWDkQCDw7g_hK5KZHcSKqk0uBRKn197IUv1U58Kp3MmFRzRDXmG3cGwtzys1Wru-K1ginJ4HYXdNKPm6MYXxGLNFmqZAJdv3iDLUju-QgcF5UjKwjTCzaG1pl7gPQHpoommny_hhLaCULlCS4OVyKEAVKaLlNDaIc&lib=Mvk1fIrRpznQ6K3_hkhR_pd6CVQE1TEdn";
 
-    (async function () {
+    // ======= STATE =======
+    const appEl = document.getElementById("app");
+    let DATA = null;
+
+    const STATE = {
+      branchId: "",
+      enabledSections: [],
+      activeSection: "",
+      answers: {}, // question_id -> option_id
+    };
+
+    // local draft key (per branch)
+    function draftKey() {
+      return `checklist_draft_${STATE.branchId || "no_branch"}`;
+    }
+    function saveDraft() {
       try {
-        statusEl.textContent = "Загружаю JSON…";
+        localStorage.setItem(draftKey(), JSON.stringify({
+          branchId: STATE.branchId,
+          enabledSections: STATE.enabledSections,
+          activeSection: STATE.activeSection,
+          answers: STATE.answers,
+          savedAt: Date.now()
+        }));
+      } catch {}
+    }
+    function loadDraft(branchId) {
+      try {
+        const raw = localStorage.getItem(`checklist_draft_${branchId}`);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
 
-        // Кэш Telegram/браузера иногда мешает — добавим параметр
-        const url = DATA_URL + (DATA_URL.includes("?") ? "&" : "?") + "_=" + Date.now();
+    // ======= HELPERS =======
+    const toBool = (v) => v === true || v === "TRUE" || v === "true" || v === 1 || v === "1";
+    const norm = (v) => (v ?? "").toString().trim();
+    const uniq = (arr) => [...new Set(arr)];
 
-        const res = await fetch(url, { method: "GET" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
+    function getActiveBranches() {
+      return (DATA.branches || []).filter(b => toBool(b.active) && norm(b.branch_id) && norm(b.branch_name));
+    }
 
-        const text = await res.text();
+    function getActiveSections() {
+      return (DATA.sections || [])
+        .filter(s => toBool(s.active) && norm(s.section_code))
+        .sort((a,b) => Number(a.sort_order||0) - Number(b.sort_order||0));
+    }
 
-        // Иногда Google отдаёт не JSON, а обёртку/редирект. Покажем, что пришло.
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          statusEl.textContent = "Пришло не JSON (показываю текст) ⚠️";
-          outEl.style.display = "block";
-          outEl.textContent = text.slice(0, 4000);
+    function sectionsByCode() {
+      const m = new Map();
+      for (const s of getActiveSections()) m.set(norm(s.section_code), s);
+      return m;
+    }
+
+    // checklist rows: 1 row = 1 option
+    function getChecklistRows() {
+      return (DATA.checklist || []).filter(r => toBool(r.active) && norm(r.section_code) && norm(r.question_id) && norm(r.option_id));
+    }
+
+    function buildQuestions(enabledSectionCodes) {
+      const rows = getChecklistRows().filter(r => enabledSectionCodes.includes(norm(r.section_code)));
+
+      // group: section -> question_id -> {text, desc, group, options[]}
+      const bySection = {};
+      for (const r of rows) {
+        const sec = norm(r.section_code);
+        const qid = norm(r.question_id);
+        bySection[sec] ??= {};
+        bySection[sec][qid] ??= {
+          section_code: sec,
+          question_id: qid,
+          question_group: norm(r.question_group),
+          question_text: norm(r.question_text),
+          question_description: norm(r.question_description),
+          sort_order: Number(r.sort_order || 0),
+          options: []
+        };
+        bySection[sec][qid].options.push({
+          option_id: norm(r.option_id),
+          option_text: norm(r.option_text),
+          score: Number(r.score || 0),
+          is_error: toBool(r.is_error),
+          severity: norm(r.severity), // critical/noncritical/empty
+          require_photo_if_error: toBool(r.require_photo_if_error),
+          exclude_from_max: toBool(r.exclude_from_max),
+        });
+      }
+
+      // convert to arrays and sort
+      const out = {};
+      for (const [sec, qs] of Object.entries(bySection)) {
+        const arr = Object.values(qs).sort((a,b)=>a.sort_order-b.sort_order || a.question_id.localeCompare(b.question_id));
+        out[sec] = arr;
+      }
+      return out;
+    }
+
+    function getDefaultEnabledSectionsForBranch(branch) {
+      const raw = norm(branch.enabled_sections_default);
+      if (!raw) return [];
+      return raw.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    // ======= UI RENDER =======
+    function render(html) {
+      appEl.innerHTML = html;
+    }
+
+    function renderError(title, err) {
+      render(`
+        <h1>${escapeHtml(title)}</h1>
+        <div class="card">
+          <div class="muted">Если хочешь — скинь это мне, я быстро разрулю.</div>
+          <div class="hr"></div>
+          <pre>${escapeHtml(String(err?.stack || err))}</pre>
+        </div>
+      `);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, m => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    function renderStart() {
+      const branches = getActiveBranches();
+      const cities = uniq(branches.map(b => norm(b.city)).filter(Boolean)).sort();
+
+      render(`
+        <h1>Проверка филиала</h1>
+        <div class="card">
+          <div class="row">
+            <div>
+              <label>Город</label>
+              <select id="city">
+                <option value="">Выбери город</option>
+                ${cities.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+              </select>
+            </div>
+            <div>
+              <label>Филиал</label>
+              <select id="branch" disabled>
+                <option value="">Сначала выбери город</option>
+              </select>
+            </div>
+            <button id="next" disabled>Начать</button>
+          </div>
+        </div>
+        <div class="muted">Данные тянутся из твоей таблицы ✅</div>
+      `);
+
+      const citySel = document.getElementById("city");
+      const branchSel = document.getElementById("branch");
+      const nextBtn = document.getElementById("next");
+
+      citySel.addEventListener("change", () => {
+        const city = citySel.value;
+        const list = branches.filter(b => norm(b.city) === norm(city));
+        branchSel.innerHTML = `<option value="">Выбери филиал</option>` + list
+          .map(b => `<option value="${escapeHtml(norm(b.branch_id))}">${escapeHtml(norm(b.branch_name))}</option>`)
+          .join("");
+        branchSel.disabled = false;
+        nextBtn.disabled = true;
+      });
+
+      branchSel.addEventListener("change", () => {
+        nextBtn.disabled = !branchSel.value;
+      });
+
+      nextBtn.addEventListener("click", () => {
+        STATE.branchId = branchSel.value;
+        const draft = loadDraft(STATE.branchId);
+        if (draft) {
+          STATE.enabledSections = draft.enabledSections || [];
+          STATE.activeSection = draft.activeSection || "";
+          STATE.answers = draft.answers || {};
+        } else {
+          STATE.enabledSections = [];
+          STATE.activeSection = "";
+          STATE.answers = {};
+        }
+        renderSelectSections();
+      });
+    }
+
+    function renderSelectSections() {
+      const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
+      if (!branch) return renderError("Не найден филиал", STATE.branchId);
+
+      const sectionMap = sectionsByCode();
+      const allSections = getActiveSections();
+      const defaultEnabled = getDefaultEnabledSectionsForBranch(branch);
+      const canDisable = (s) => toBool(s.can_be_disabled);
+
+      // initial checked: draft if exists, else default, else all
+      let initial = STATE.enabledSections.length ? STATE.enabledSections : (defaultEnabled.length ? defaultEnabled : allSections.map(s=>norm(s.section_code)));
+      initial = initial.filter(code => sectionMap.has(code)); // only existing
+
+      render(`
+        <h1>Какие зоны есть в филиале?</h1>
+        <div class="card">
+          <div class="muted"><span class="pill">${escapeHtml(norm(branch.city))}</span> <span class="pill">${escapeHtml(norm(branch.branch_name))}</span></div>
+          <div class="hr"></div>
+          ${allSections.map(s => {
+            const code = norm(s.section_code);
+            const checked = initial.includes(code) ? "checked" : "";
+            const disabled = canDisable(s) ? "" : "disabled";
+            return `
+              <div class="opt">
+                <input type="checkbox" id="sec_${escapeHtml(code)}" ${checked} ${disabled}/>
+                <div>
+                  <div style="font-weight:700">${escapeHtml(norm(s.title) || code)}</div>
+                  <div class="muted" style="font-size:12px">${escapeHtml(code)}</div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+          <div class="hr"></div>
+          <button id="toForm">Продолжить</button>
+          <button id="back" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">Назад</button>
+        </div>
+      `);
+
+      document.getElementById("back").onclick = () => renderStart();
+
+      document.getElementById("toForm").onclick = () => {
+        const enabled = allSections
+          .map(s => norm(s.section_code))
+          .filter(code => {
+            const cb = document.getElementById(`sec_${code}`);
+            return cb && cb.checked;
+          });
+
+        if (!enabled.length) {
+          alert("Выбери хотя бы одну зону 🙏");
           return;
         }
 
-        statusEl.textContent = "Данные загружены ✅";
-        outEl.style.display = "block";
-        outEl.textContent = JSON.stringify(data, null, 2);
+        STATE.enabledSections = enabled;
+        const first = enabled.find(c => sectionMap.has(c)) || enabled[0];
+        STATE.activeSection = STATE.activeSection && enabled.includes(STATE.activeSection) ? STATE.activeSection : first;
 
-        // Telegram-приятности (не обяз)
-        if (window.Telegram && Telegram.WebApp) {
-          Telegram.WebApp.ready();
+        saveDraft();
+        renderForm();
+      };
+    }
+
+    function renderForm() {
+      const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
+      const sectionMap = sectionsByCode();
+      const questionsBySection = buildQuestions(STATE.enabledSections);
+
+      function renderSectionTabs() {
+        return `
+          <div class="tabs">
+            ${STATE.enabledSections.map(code => {
+              const s = sectionMap.get(code);
+              const title = s ? norm(s.title) : code;
+              const active = (code === STATE.activeSection) ? "active" : "";
+              return `<div class="tab ${active}" data-code="${escapeHtml(code)}">${escapeHtml(title)}</div>`;
+            }).join("")}
+          </div>
+        `;
+      }
+
+      function renderQuestionsForActiveSection() {
+        const code = STATE.activeSection;
+        const list = questionsBySection[code] || [];
+        if (!list.length) return `<div class="card muted">В этой зоне пока нет вопросов.</div>`;
+
+        // group by question_group (visual)
+        let html = "";
+        let currentGroup = null;
+
+        for (const q of list) {
+          const g = norm(q.question_group);
+          if (g && g !== currentGroup) {
+            currentGroup = g;
+            html += `<div class="group">${escapeHtml(g)}</div>`;
+          }
+
+          const selected = STATE.answers[q.question_id] || "";
+
+          html += `
+            <div class="card" data-qid="${escapeHtml(q.question_id)}">
+              <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
+              ${q.question_description ? `<div class="q-desc">${escapeHtml(q.question_description)}</div>` : ""}
+              ${q.options.map(opt => {
+                const checked = (selected === opt.option_id) ? "checked" : "";
+                return `
+                  <label class="opt">
+                    <input type="radio" name="q_${escapeHtml(q.question_id)}" value="${escapeHtml(opt.option_id)}" ${checked}/>
+                    <div style="flex:1">
+                      <div>${escapeHtml(opt.option_text || opt.option_id)}</div>
+                      <div class="muted" style="font-size:12px">
+                        +${escapeHtml(opt.score)} балл(ов)
+                        ${opt.is_error ? " • ошибка" : ""}
+                        ${opt.severity ? " • " + escapeHtml(opt.severity) : ""}
+                      </div>
+                    </div>
+                  </label>
+                `;
+              }).join("")}
+            </div>
+          `;
         }
+        return html;
+      }
+
+      render(`
+        <h1>Проверка</h1>
+        <div class="muted"><span class="pill">${escapeHtml(norm(branch.city))}</span> <span class="pill">${escapeHtml(norm(branch.branch_name))}</span></div>
+        ${renderSectionTabs()}
+        <div id="sectionContent">${renderQuestionsForActiveSection()}</div>
+        <div class="card">
+          <button id="finish">Завершить и посчитать</button>
+          <button id="backToSections" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">Зоны</button>
+          <button id="backToStart" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">К выбору филиала</button>
+          <div class="muted" style="margin-top:10px;font-size:12px;">Автосейв включен ✅</div>
+        </div>
+      `);
+
+      // tabs
+      document.querySelectorAll(".tab").forEach(el => {
+        el.addEventListener("click", () => {
+          const code = el.getAttribute("data-code");
+          if (!code) return;
+          STATE.activeSection = code;
+          saveDraft();
+          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+          el.classList.add("active");
+          document.getElementById("sectionContent").innerHTML = renderQuestionsForActiveSection();
+          bindAnswerHandlers();
+        });
+      });
+
+      function bindAnswerHandlers() {
+        document.querySelectorAll('input[type="radio"]').forEach(inp => {
+          inp.addEventListener("change", () => {
+            const name = inp.name; // q_<question_id>
+            const qid = name.replace(/^q_/, "");
+            STATE.answers[qid] = inp.value;
+            saveDraft();
+          });
+        });
+      }
+      bindAnswerHandlers();
+
+      document.getElementById("backToSections").onclick = () => renderSelectSections();
+      document.getElementById("backToStart").onclick = () => renderStart();
+
+      document.getElementById("finish").onclick = () => {
+        const result = calculateResult(questionsBySection, STATE.answers, DATA.settings || {});
+        renderResult(result, branch);
+      };
+    }
+
+    // ======= CALCULATION =======
+    function calculateResult(questionsBySection, answers, settings) {
+      const rows = [];
+      for (const [sec, qs] of Object.entries(questionsBySection)) {
+        for (const q of qs) rows.push(q);
+      }
+
+      // max_score: for each question pick max score among options excluding exclude_from_max
+      let maxScore = 0;
+      let earned = 0;
+
+      const errorsCritical = [];
+      const errorsNonCritical = [];
+
+      let hasCritical = false;
+
+      for (const q of rows) {
+        // max
+        const eligibleForMax = q.options.filter(o => !o.exclude_from_max);
+        const qMax = eligibleForMax.length ? Math.max(...eligibleForMax.map(o => Number(o.score||0))) : 0;
+        maxScore += qMax;
+
+        const chosenOptId = answers[q.question_id];
+        if (!chosenOptId) continue;
+
+        const opt = q.options.find(o => o.option_id === chosenOptId);
+        if (!opt) continue;
+
+        earned += Number(opt.score || 0);
+
+        if (opt.is_error) {
+          const item = {
+            question_id: q.question_id,
+            question_text: q.question_text,
+            option_text: opt.option_text,
+            severity: opt.severity || "noncritical",
+            require_photo_if_error: opt.require_photo_if_error,
+          };
+          if ((opt.severity || "").toLowerCase() === "critical") {
+            hasCritical = true;
+            errorsCritical.push(item);
+          } else {
+            errorsNonCritical.push(item);
+          }
+        }
+      }
+
+      const percent = maxScore > 0 ? Math.round((earned / maxScore) * 1000) / 10 : 0;
+
+      // thresholds
+      const redMax = Number(settings.red_zone_max_percent ?? 70);
+      const yellowMax = Number(settings.yellow_zone_max_percent ?? 80);
+      const blockGreenIfCritical = toBool(settings.block_green_if_critical ?? true);
+
+      let zone = "green";
+      if (percent <= redMax) zone = "red";
+      else if (percent <= yellowMax) zone = "yellow";
+      else zone = "green";
+
+      if (blockGreenIfCritical && hasCritical && zone === "green") zone = "yellow";
+
+      return {
+        earned,
+        maxScore,
+        percent,
+        zone,
+        hasCritical,
+        errorsCritical,
+        errorsNonCritical,
+      };
+    }
+
+    function zoneTitle(zone) {
+      if (zone === "green") return "ЗЕЛЁНАЯ ЗОНА";
+      if (zone === "yellow") return "ЖЁЛТАЯ ЗОНА";
+      if (zone === "red") return "КРАСНАЯ ЗОНА";
+      return "СЕРАЯ ЗОНА";
+    }
+
+    function renderResult(result, branch) {
+      const zoneClass = result.zone;
+      render(`
+        <h1>Итог</h1>
+        <div class="muted"><span class="pill">${escapeHtml(norm(branch.city))}</span> <span class="pill">${escapeHtml(norm(branch.branch_name))}</span></div>
+
+        <div class="zone ${zoneClass}">
+          ${escapeHtml(zoneTitle(result.zone))}<br/>
+          ${escapeHtml(result.earned)} / ${escapeHtml(result.maxScore)} • ${escapeHtml(result.percent)}%
+        </div>
+
+        <div class="card">
+          <h2>Критические ошибки (${result.errorsCritical.length})</h2>
+          ${result.errorsCritical.length ? result.errorsCritical.map(e => `
+            <div class="opt">
+              <div style="flex:1">
+                <div style="font-weight:700">❌ ${escapeHtml(e.question_text)}</div>
+                <div class="muted" style="font-size:12px">${escapeHtml(e.option_text)} ${e.require_photo_if_error ? "• нужно фото" : ""}</div>
+              </div>
+            </div>
+          `).join("") : `<div class="muted">Нет ✅</div>`}
+
+          <div class="hr"></div>
+
+          <h2>Некритические ошибки (${result.errorsNonCritical.length})</h2>
+          ${result.errorsNonCritical.length ? result.errorsNonCritical.map(e => `
+            <div class="opt">
+              <div style="flex:1">
+                <div style="font-weight:700">⚠️ ${escapeHtml(e.question_text)}</div>
+                <div class="muted" style="font-size:12px">${escapeHtml(e.option_text)} ${e.require_photo_if_error ? "• нужно фото" : ""}</div>
+              </div>
+            </div>
+          `).join("") : `<div class="muted">Нет ✅</div>`}
+        </div>
+
+        <div class="card">
+          <button id="backForm">Вернуться к форме</button>
+          <button id="backStart" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">Новая проверка</button>
+        </div>
+      `);
+
+      document.getElementById("backForm").onclick = () => renderForm();
+      document.getElementById("backStart").onclick = () => renderStart();
+    }
+
+    // ======= BOOT =======
+    (async function boot() {
+      try {
+        appEl.textContent = "Загружаю данные…";
+        const res = await fetch(DATA_URL);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        DATA = await res.json();
+
+        // Telegram ready
+        if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready();
+
+        renderStart();
       } catch (e) {
-        statusEl.textContent = "Ошибка загрузки ❌ " + (e?.message ?? e);
-        outEl.style.display = "block";
-        outEl.textContent = (e && e.stack) ? e.stack : String(e);
+        renderError("Не получилось загрузить таблицу", e);
       }
     })();
   </script>
