@@ -1,31 +1,23 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Telegram Checklist</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      padding: 20px;
-    }
-    h1 {
-      font-size: 22px;
-    }
-    p {
-      color: #666;
-    }
-    button {
-      padding: 12px 16px;
-      font-size: 16px;
-      margin-top: 20px;
-    }
-  </style>
-</head>
-<body>
-  <h1>Тестовая форма</h1>
-  <p>Если ты это видишь — Telegram Web App работает ✅</p>
+<script>
+  const API_URL = "ВСТАВЬ_СЮДА_ССЫЛКУ_.../exec";
 
-  <button onclick="Telegram.WebApp.close()">Закрыть</button>
-</body>
-</html>
+  async function loadData() {
+    const res = await fetch(API_URL + "?action=all");
+    const data = await res.json();
+    console.log("DATA:", data);
+
+    document.body.insertAdjacentHTML("beforeend", `
+      <pre style="margin-top:20px; padding:12px; background:#f6f6f6; border-radius:12px; overflow:auto;">
+${escapeHtml(JSON.stringify(data, null, 2))}
+      </pre>
+    `);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
+
+  loadData();
+</script>
