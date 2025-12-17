@@ -1,23 +1,29 @@
 <script>
-  const API_URL = https://script.google.com/macros/s/AKfycbziSVp0snizGju85jBW8uvnLAxmY6SyEq2FN9wyKFsjpiu3P16tEw1j-_2i6n70_6NYRA/exec;
+  const API_URL = "https://script.google.com/macros/s/AKfycbziSVp0snizGju85jBW8uvnLAxmY6SyEq2FN9wyKFsjpiu3P16tEw1j-_2i6n70_6NYRA/exec";
 
-  async function loadData() {
-    const res = await fetch(API_URL + "?action=all");
-    const data = await res.json();
-    console.log("DATA:", data);
+  // чтобы не был белый экран — покажем статус
+  const statusEl = document.createElement("div");
+  statusEl.style.marginTop = "16px";
+  statusEl.textContent = "Загружаю чек-лист из таблицы…";
+  document.body.appendChild(statusEl);
 
-    document.body.insertAdjacentHTML("beforeend", `
-      <pre style="margin-top:20px; padding:12px; background:#f6f6f6; border-radius:12px; overflow:auto;">
-${escapeHtml(JSON.stringify(data, null, 2))}
-      </pre>
-    `);
-  }
+  window.__onChecklistLoaded = function (data) {
+    statusEl.textContent = "Данные загружены ✅ (смотри ниже)";
+    const pre = document.createElement("pre");
+    pre.style.cssText = "margin-top:12px;padding:12px;background:#f6f6f6;border-radius:12px;overflow:auto;";
+    pre.textContent = JSON.stringify(data, null, 2);
+    document.body.appendChild(pre);
+  };
 
-  function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-    }[m]));
-  }
+  window.__onChecklistError = function () {
+    statusEl.textContent = "Не получилось загрузить данные ❌ Проверь деплой Apps Script.";
+  };
 
-  loadData();
+  // JSONP загрузка
+  (function loadJSONP() {
+    const s = document.createElement("script");
+    s.src = API_URL + "?action=all&callback=__onChecklistLoaded&_=" + Date.now();
+    s.onerror = window.__onChecklistError;
+    document.head.appendChild(s);
+  })();
 </script>
