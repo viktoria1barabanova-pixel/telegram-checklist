@@ -722,16 +722,33 @@ document.querySelectorAll('[data-photo-toggle]').forEach(btn => {
     if (!wrap) return;
 
     const willOpen = !wrap.classList.contains('open');
-    wrap.classList.toggle('open');
-
-    // switch + / −
-    btn.textContent = willOpen ? '−' : '+';
 
     if (willOpen) {
-      requestAnimationFrame(() => {
-        const img = wrap.querySelector('img') || wrap;
-        centerIntoView(img);
-      });
+      wrap.classList.add('open');
+      btn.textContent = '−';
+
+      const img = wrap.querySelector('img');
+      const target = img || wrap;
+
+      const doCenter = () => {
+        // wait for layout after display change
+        requestAnimationFrame(() => {
+          // small delay improves first-open centering on mobile/desktop
+          setTimeout(() => centerIntoView(target), 40);
+        });
+      };
+
+      // If image hasn't loaded yet, center after it loads
+      if (img && !img.complete) {
+        img.addEventListener('load', doCenter, { once: true });
+        img.addEventListener('error', doCenter, { once: true });
+      }
+
+      // Also center immediately (covers cached images)
+      doCenter();
+    } else {
+      wrap.classList.remove('open');
+      btn.textContent = '+';
     }
   });
 });
