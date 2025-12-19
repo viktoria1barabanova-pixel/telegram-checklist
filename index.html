@@ -3,88 +3,116 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Checklist MVP</title>
+  <title>Checklist</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    :root { --pad: 14px; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: var(--pad); }
+    :root { --pad: 14px; --danger:#ff4d4f; --dangerBg:#fff1f0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: var(--pad); background:#fff; }
     h1 { font-size: 20px; margin: 0 0 10px; }
-    h2 { font-size: 16px; margin: 18px 0 10px; }
+    h2 { font-size: 16px; margin: 16px 0 10px; }
     .muted { color: #666; }
     .card { border: 1px solid #e7e7e7; border-radius: 14px; padding: 12px; margin: 10px 0; background: #fff; }
+    .card.error { border: 2px solid var(--danger); background: var(--dangerBg); }
     .row { display: grid; gap: 10px; }
     label { font-size: 12px; color: #666; }
     select, button { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; font-size: 16px; background: #fff; }
-    button { border: none; background: #111; color: #fff; }
-    button:disabled { background: #bbb; }
+    button { border: none; background: #111; color: #fff; cursor: pointer; }
+    button:disabled { background: #bbb; cursor: not-allowed; }
+    .btnSecondary { background:#fff; color:#111; border:1px solid #ddd; }
     .tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin: 10px 0; }
     .tab { padding: 10px 12px; border-radius: 999px; border: 1px solid #ddd; background: #fff; white-space: nowrap; cursor: pointer; }
     .tab.active { background: #111; color: #fff; border-color: #111; }
-    .q-title { font-weight: 700; margin-bottom: 4px; }
-    .q-desc { font-size: 13px; color: #666; margin-bottom: 10px; }
-    .opt { display:flex; align-items:center; gap:10px; padding: 10px; border-radius: 12px; border: 1px solid #eee; margin-top: 8px; }
-    .group { font-weight: 800; margin: 16px 0 6px; }
     .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
-    .zone { font-size: 18px; font-weight: 900; padding: 14px; border-radius: 16px; margin: 10px 0; }
-    .zone.green { background: #eaffea; }
-    .zone.yellow { background: #fff7da; }
-    .zone.red { background: #ffe3e3; }
-    .zone.gray { background: #efefef; }
-    pre { white-space: pre-wrap; word-wrap: break-word; }
     .hr { height: 1px; background: #eee; margin: 12px 0; }
+
+    .q-title { font-weight: 800; margin-bottom: 6px; }
+    .q-desc { font-size: 13px; color: #666; margin-bottom: 10px; }
+    .opt { display:flex; align-items:flex-start; gap:10px; padding: 10px; border-radius: 12px; border: 1px solid #eee; margin-top: 8px; }
+    .opt input { margin-top: 3px; }
+    .groupTitle { font-weight: 900; margin: 14px 0 8px; }
+
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .progress { font-size: 12px; color:#666; }
+    .warn { color: var(--danger); font-weight: 700; }
   </style>
 </head>
 <body>
   <div id="app" class="muted">Загружаю данные…</div>
 
   <script>
-    // ======= ВСТАВЬ СВОЮ ССЫЛКУ (googleusercontent) =======
-    const DATA_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiyljux_U7F68ps9KyXJzRukGmVW3SgZTd6AddEgpo3-SmjFGEHjgWA9hWkvKdCZ-BZhekBIRWjS2-c8aVJxA1qN-rfPsCW1O2Iux81WLkjvWKGtj78vA8KBNDB4Z8HMIv_SjE-GaxhjZAqbNXWDkQCDw7g_hK5KZHcSKqk0uBRKn197IUv1U58Kp3MmFRzRDXmG3cGwtzys1Wru-K1ginJ4HYXdNKPm6MYXxGLNFmqZAJdv3iDLUju-QgcF5UjKwjTCzaG1pl7gPQHpoommny_hhLaCULlCS4OVyKEAVKaLlNDaIc&lib=Mvk1fIrRpznQ6K3_hkhR_pd6CVQE1TEdn";
+    // ====== 1) ПОДСТАВЬ СВОЙ URL (googleusercontent) ======
+    const DATA_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=PASTE_YOUR_LINK_HERE";
 
-    // ======= STATE =======
+    // ====== UTILS ======
     const appEl = document.getElementById("app");
+    const norm = (v) => (v ?? "").toString().trim();
+    const toBool = (v) => v === true || v === "TRUE" || v === "true" || v === 1 || v === "1";
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
+    const uniq = (arr) => [...new Set(arr)];
+
+    function render(html) { appEl.innerHTML = html; }
+
+    function renderError(title, err) {
+      render(`
+        <h1>${escapeHtml(title)}</h1>
+        <div class="card">
+          <div class="muted">Скинь мне этот текст — быстро разрулю.</div>
+          <div class="hr"></div>
+          <pre style="white-space:pre-wrap">${escapeHtml(String(err?.stack || err))}</pre>
+        </div>
+      `);
+    }
+
+    // ====== STATE ======
     let DATA = null;
 
     const STATE = {
+      city: "",
       branchId: "",
       enabledSections: [],
       activeSection: "",
-      answers: {}, // question_id -> option_id
+      // answers
+      singleAnswers: {},   // key: section_code|question_id -> "ideal" | "acceptable" | "bad"
+      checkboxAnswers: {}, // key: groupKey -> Set(itemId)
+      checkboxTouched: {}, // key: groupKey -> true/false (обязательность)
     };
 
-    // local draft key (per branch)
-    function draftKey() {
-      return `checklist_draft_${STATE.branchId || "no_branch"}`;
-    }
+    function draftKey() { return `draft_v2_${STATE.branchId || "no_branch"}`; }
+
     function saveDraft() {
       try {
+        const serialCheckbox = {};
+        for (const [k, set] of Object.entries(STATE.checkboxAnswers)) serialCheckbox[k] = [...set];
         localStorage.setItem(draftKey(), JSON.stringify({
+          city: STATE.city,
           branchId: STATE.branchId,
           enabledSections: STATE.enabledSections,
           activeSection: STATE.activeSection,
-          answers: STATE.answers,
+          singleAnswers: STATE.singleAnswers,
+          checkboxAnswers: serialCheckbox,
+          checkboxTouched: STATE.checkboxTouched,
           savedAt: Date.now()
         }));
       } catch {}
     }
+
     function loadDraft(branchId) {
       try {
-        const raw = localStorage.getItem(`checklist_draft_${branchId}`);
+        const raw = localStorage.getItem(`draft_v2_${branchId}`);
         if (!raw) return null;
-        return JSON.parse(raw);
-      } catch {
-        return null;
-      }
+        const d = JSON.parse(raw);
+        // restore Sets
+        const restored = {};
+        for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
+        d.checkboxAnswers = restored;
+        return d;
+      } catch { return null; }
     }
 
-    // ======= HELPERS =======
-    const toBool = (v) => v === true || v === "TRUE" || v === "true" || v === 1 || v === "1";
-    const norm = (v) => (v ?? "").toString().trim();
-    const uniq = (arr) => [...new Set(arr)];
-
-    function getActiveBranches() {
-      return (DATA.branches || []).filter(b => toBool(b.active) && norm(b.branch_id) && norm(b.branch_name));
-    }
+    // ====== DATA ADAPTER (твой формат таблицы) ======
+    // ожидаем DATA.checklist строки с колонками:
+    // section_code, question_id, question_text, question_description, question_type,
+    // ideal_answer, acceptable_answer, bad_answer, score, severity, exclude_from_max, active, sort_order
 
     function getActiveSections() {
       return (DATA.sections || [])
@@ -98,80 +126,149 @@
       return m;
     }
 
-    // checklist rows: 1 row = 1 option
+    function getActiveBranches() {
+      return (DATA.branches || [])
+        .filter(b => toBool(b.active) && norm(b.city) && norm(b.branch_id) && norm(b.branch_name));
+    }
+
     function getChecklistRows() {
-      return (DATA.checklist || []).filter(r => toBool(r.active) && norm(r.section_code) && norm(r.question_id) && norm(r.option_id));
+      return (DATA.checklist || [])
+        .filter(r => toBool(r.active) && norm(r.section_code) && norm(r.question_id) && norm(r.question_type));
     }
 
-    function buildQuestions(enabledSectionCodes) {
-      const rows = getChecklistRows().filter(r => enabledSectionCodes.includes(norm(r.section_code)));
-
-      // group: section -> question_id -> {text, desc, group, options[]}
-      const bySection = {};
-      for (const r of rows) {
-        const sec = norm(r.section_code);
-        const qid = norm(r.question_id);
-        bySection[sec] ??= {};
-        bySection[sec][qid] ??= {
-          section_code: sec,
-          question_id: qid,
-          question_group: norm(r.question_group),
-          question_text: norm(r.question_text),
-          question_description: norm(r.question_description),
-          sort_order: Number(r.sort_order || 0),
-          options: []
-        };
-        bySection[sec][qid].options.push({
-          option_id: norm(r.option_id),
-          option_text: norm(r.option_text),
-          score: Number(r.score || 0),
-          is_error: toBool(r.is_error),
-          severity: norm(r.severity), // critical/noncritical/empty
-          require_photo_if_error: toBool(r.require_photo_if_error),
-          exclude_from_max: toBool(r.exclude_from_max),
-        });
-      }
-
-      // convert to arrays and sort
-      const out = {};
-      for (const [sec, qs] of Object.entries(bySection)) {
-        const arr = Object.values(qs).sort((a,b)=>a.sort_order-b.sort_order || a.question_id.localeCompare(b.question_id));
-        out[sec] = arr;
-      }
-      return out;
-    }
-
-    function getDefaultEnabledSectionsForBranch(branch) {
+    function enabledSectionsFromBranch(branch) {
       const raw = norm(branch.enabled_sections_default);
       if (!raw) return [];
       return raw.split(",").map(s => s.trim()).filter(Boolean);
     }
 
-    // ======= UI RENDER =======
-    function render(html) {
-      appEl.innerHTML = html;
+    // SINGLE questions: group by section_code + question_id
+    function buildSingles(rows, enabledSections) {
+      const m = {}; // sec -> [{...}]
+      for (const r of rows) {
+        const type = norm(r.question_type).toLowerCase();
+        if (type !== "single" && type !== "radio") continue;
+        const sec = norm(r.section_code);
+        if (!enabledSections.includes(sec)) continue;
+
+        const key = `${sec}|${norm(r.question_id)}`;
+        m[sec] ??= [];
+        // one row per single question (в твоей таблице это 1 строка)
+        m[sec].push({
+          key,
+          section_code: sec,
+          question_id: norm(r.question_id),
+          question_text: norm(r.question_text),
+          question_description: norm(r.question_description),
+          ideal_answer: norm(r.ideal_answer),
+          acceptable_answer: norm(r.acceptable_answer),
+          bad_answer: norm(r.bad_answer),
+          score: Number(r.score || 0),
+          severity: norm(r.severity) || "noncritical",
+          exclude_from_max: toBool(r.exclude_from_max),
+          sort_order: Number(r.sort_order || 0)
+        });
+      }
+      for (const sec of Object.keys(m)) {
+        m[sec].sort((a,b)=>a.sort_order-b.sort_order || a.question_id.localeCompare(b.question_id));
+      }
+      return m;
     }
 
-    function renderError(title, err) {
-      render(`
-        <h1>${escapeHtml(title)}</h1>
-        <div class="card">
-          <div class="muted">Если хочешь — скинь это мне, я быстро разрулю.</div>
-          <div class="hr"></div>
-          <pre>${escapeHtml(String(err?.stack || err))}</pre>
-        </div>
-      `);
+    // CHECKBOX groups: group by section_code + question_description
+    // group title = question_description, item text = question_text, item id = question_id
+    function buildCheckboxGroups(rows, enabledSections) {
+      const m = {}; // sec -> [group]
+      const tmp = {}; // groupKey -> group
+      for (const r of rows) {
+        const type = norm(r.question_type).toLowerCase();
+        if (type !== "checkbox") continue;
+        const sec = norm(r.section_code);
+        if (!enabledSections.includes(sec)) continue;
+
+        const title = norm(r.question_description) || "Чек-лист";
+        const groupKey = `${sec}||${title}`;
+
+        tmp[groupKey] ??= {
+          groupKey,
+          section_code: sec,
+          title,
+          sort_order: Number(r.sort_order || 0),
+          items: []
+        };
+
+        tmp[groupKey].items.push({
+          item_id: norm(r.question_id),
+          text: norm(r.question_text),
+          score: Number(r.score || 0),
+          severity: norm(r.severity) || "noncritical",
+          exclude_from_max: toBool(r.exclude_from_max),
+          // трактуем как "идеал = TRUE, стрём = FALSE"
+          ideal_value: norm(r.ideal_answer).toUpperCase() === "TRUE",
+          bad_value: norm(r.bad_answer).toUpperCase() === "FALSE"
+        });
+      }
+
+      for (const g of Object.values(tmp)) {
+        // sort items by sort_order? в твоей таблице sort_order общий — оставим по item_id если нет
+        g.items.sort((a,b)=>a.item_id.localeCompare(b.item_id));
+        m[g.section_code] ??= [];
+        m[g.section_code].push(g);
+      }
+
+      for (const sec of Object.keys(m)) {
+        m[sec].sort((a,b)=>a.sort_order-b.sort_order || a.title.localeCompare(b.title));
+      }
+      return m;
     }
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, m => ({
-        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-      }[m]));
+    // ====== VALIDATION ======
+    function validateAll(singlesBySec, checkboxGroupsBySec, enabledSections) {
+      const sectionMap = sectionsByCode();
+
+      const missingSingles = new Set();     // keys of single questions
+      const missingCheckboxGroups = new Set(); // groupKeys not touched
+
+      const missingSections = new Set();
+
+      // singles
+      for (const sec of enabledSections) {
+        for (const q of (singlesBySec[sec] || [])) {
+          if (!STATE.singleAnswers[q.key]) {
+            missingSingles.add(q.key);
+            missingSections.add(sec);
+          }
+        }
+      }
+
+      // checkbox groups: must be touched
+      for (const sec of enabledSections) {
+        for (const g of (checkboxGroupsBySec[sec] || [])) {
+          if (!STATE.checkboxTouched[g.groupKey]) {
+            missingCheckboxGroups.add(g.groupKey);
+            missingSections.add(sec);
+          }
+        }
+      }
+
+      const missingSectionTitles = [...missingSections].map(code => {
+        const s = sectionMap.get(code);
+        return s ? norm(s.title) : code;
+      });
+
+      return {
+        ok: missingSingles.size === 0 && missingCheckboxGroups.size === 0,
+        missingSingles,
+        missingCheckboxGroups,
+        missingSections,
+        missingSectionTitles
+      };
     }
 
+    // ====== UI: START ======
     function renderStart() {
       const branches = getActiveBranches();
-      const cities = uniq(branches.map(b => norm(b.city)).filter(Boolean)).sort();
+      const cities = uniq(branches.map(b => norm(b.city))).sort();
 
       render(`
         <h1>Проверка филиала</h1>
@@ -181,24 +278,26 @@
               <label>Город</label>
               <select id="city">
                 <option value="">Выбери город</option>
-                ${cities.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+                ${cities.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
               </select>
             </div>
+
             <div>
               <label>Филиал</label>
               <select id="branch" disabled>
                 <option value="">Сначала выбери город</option>
               </select>
             </div>
-            <button id="next" disabled>Начать</button>
+
+            <button id="go" disabled>Начать</button>
           </div>
         </div>
-        <div class="muted">Данные тянутся из твоей таблицы ✅</div>
+        <div class="muted">Все вопросы обязательные ✅</div>
       `);
 
       const citySel = document.getElementById("city");
       const branchSel = document.getElementById("branch");
-      const nextBtn = document.getElementById("next");
+      const goBtn = document.getElementById("go");
 
       citySel.addEventListener("change", () => {
         const city = citySel.value;
@@ -207,143 +306,126 @@
           .map(b => `<option value="${escapeHtml(norm(b.branch_id))}">${escapeHtml(norm(b.branch_name))}</option>`)
           .join("");
         branchSel.disabled = false;
-        nextBtn.disabled = true;
+        goBtn.disabled = true;
       });
 
       branchSel.addEventListener("change", () => {
-        nextBtn.disabled = !branchSel.value;
+        goBtn.disabled = !branchSel.value;
       });
 
-      nextBtn.addEventListener("click", () => {
+      goBtn.addEventListener("click", () => {
+        STATE.city = citySel.value;
         STATE.branchId = branchSel.value;
-        const draft = loadDraft(STATE.branchId);
-        if (draft) {
-          STATE.enabledSections = draft.enabledSections || [];
-          STATE.activeSection = draft.activeSection || "";
-          STATE.answers = draft.answers || {};
-        } else {
-          STATE.enabledSections = [];
-          STATE.activeSection = "";
-          STATE.answers = {};
-        }
-        renderSelectSections();
-      });
-    }
 
-    function renderSelectSections() {
-      const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
-      if (!branch) return renderError("Не найден филиал", STATE.branchId);
+        const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
+        const defaults = branch ? enabledSectionsFromBranch(branch) : [];
+        const allSections = getActiveSections().map(s => norm(s.section_code));
+        STATE.enabledSections = defaults.length ? defaults : allSections;
 
-      const sectionMap = sectionsByCode();
-      const allSections = getActiveSections();
-      const defaultEnabled = getDefaultEnabledSectionsForBranch(branch);
-      const canDisable = (s) => toBool(s.can_be_disabled);
-
-      // initial checked: draft if exists, else default, else all
-      let initial = STATE.enabledSections.length ? STATE.enabledSections : (defaultEnabled.length ? defaultEnabled : allSections.map(s=>norm(s.section_code)));
-      initial = initial.filter(code => sectionMap.has(code)); // only existing
-
-      render(`
-        <h1>Какие зоны есть в филиале?</h1>
-        <div class="card">
-          <div class="muted"><span class="pill">${escapeHtml(norm(branch.city))}</span> <span class="pill">${escapeHtml(norm(branch.branch_name))}</span></div>
-          <div class="hr"></div>
-          ${allSections.map(s => {
-            const code = norm(s.section_code);
-            const checked = initial.includes(code) ? "checked" : "";
-            const disabled = canDisable(s) ? "" : "disabled";
-            return `
-              <div class="opt">
-                <input type="checkbox" id="sec_${escapeHtml(code)}" ${checked} ${disabled}/>
-                <div>
-                  <div style="font-weight:700">${escapeHtml(norm(s.title) || code)}</div>
-                  <div class="muted" style="font-size:12px">${escapeHtml(code)}</div>
-                </div>
-              </div>
-            `;
-          }).join("")}
-          <div class="hr"></div>
-          <button id="toForm">Продолжить</button>
-          <button id="back" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">Назад</button>
-        </div>
-      `);
-
-      document.getElementById("back").onclick = () => renderStart();
-
-      document.getElementById("toForm").onclick = () => {
-        const enabled = allSections
-          .map(s => norm(s.section_code))
-          .filter(code => {
-            const cb = document.getElementById(`sec_${code}`);
-            return cb && cb.checked;
-          });
-
-        if (!enabled.length) {
-          alert("Выбери хотя бы одну зону 🙏");
-          return;
+        // load draft if exists
+        const d = loadDraft(STATE.branchId);
+        if (d) {
+          STATE.enabledSections = d.enabledSections?.length ? d.enabledSections : STATE.enabledSections;
+          STATE.activeSection = d.activeSection || "";
+          STATE.singleAnswers = d.singleAnswers || {};
+          STATE.checkboxTouched = d.checkboxTouched || {};
+          STATE.checkboxAnswers = d.checkboxAnswers || {};
         }
 
-        STATE.enabledSections = enabled;
-        const first = enabled.find(c => sectionMap.has(c)) || enabled[0];
-        STATE.activeSection = STATE.activeSection && enabled.includes(STATE.activeSection) ? STATE.activeSection : first;
+        // set active section
+        if (!STATE.activeSection || !STATE.enabledSections.includes(STATE.activeSection)) {
+          STATE.activeSection = STATE.enabledSections[0];
+        }
 
         saveDraft();
-        renderForm();
-      };
+        renderSurvey();
+      });
     }
 
-    function renderForm() {
+    // ====== UI: SURVEY ======
+    function renderSurvey() {
       const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
       const sectionMap = sectionsByCode();
-      const questionsBySection = buildQuestions(STATE.enabledSections);
 
-      function renderSectionTabs() {
+      const rows = getChecklistRows();
+      const singlesBySec = buildSingles(rows, STATE.enabledSections);
+      const checkboxGroupsBySec = buildCheckboxGroups(rows, STATE.enabledSections);
+
+      function sectionTitle(code) {
+        const s = sectionMap.get(code);
+        return s ? norm(s.title) : code;
+      }
+
+      function renderTabs() {
         return `
           <div class="tabs">
             ${STATE.enabledSections.map(code => {
-              const s = sectionMap.get(code);
-              const title = s ? norm(s.title) : code;
-              const active = (code === STATE.activeSection) ? "active" : "";
-              return `<div class="tab ${active}" data-code="${escapeHtml(code)}">${escapeHtml(title)}</div>`;
+              const active = code === STATE.activeSection ? "active" : "";
+              return `<div class="tab ${active}" data-sec="${escapeHtml(code)}">${escapeHtml(sectionTitle(code))}</div>`;
             }).join("")}
           </div>
         `;
       }
 
-      function renderQuestionsForActiveSection() {
-        const code = STATE.activeSection;
-        const list = questionsBySection[code] || [];
-        if (!list.length) return `<div class="card muted">В этой зоне пока нет вопросов.</div>`;
+      function renderActiveSectionContent() {
+        const sec = STATE.activeSection;
+        const singles = singlesBySec[sec] || [];
+        const groups = checkboxGroupsBySec[sec] || [];
 
-        // group by question_group (visual)
         let html = "";
-        let currentGroup = null;
 
-        for (const q of list) {
-          const g = norm(q.question_group);
-          if (g && g !== currentGroup) {
-            currentGroup = g;
-            html += `<div class="group">${escapeHtml(g)}</div>`;
-          }
-
-          const selected = STATE.answers[q.question_id] || "";
-
+        // SINGLE QUESTIONS
+        for (const q of singles) {
+          const selected = STATE.singleAnswers[q.key] || "";
           html += `
-            <div class="card" data-qid="${escapeHtml(q.question_id)}">
+            <div class="card question" data-single-key="${escapeHtml(q.key)}">
               <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
               ${q.question_description ? `<div class="q-desc">${escapeHtml(q.question_description)}</div>` : ""}
-              ${q.options.map(opt => {
-                const checked = (selected === opt.option_id) ? "checked" : "";
+              <label class="opt">
+                <input type="radio" name="s_${escapeHtml(q.key)}" value="ideal" ${selected==="ideal"?"checked":""}/>
+                <div style="flex:1">
+                  <div>${escapeHtml(q.ideal_answer || "Идеал")}</div>
+                  <div class="muted" style="font-size:12px">+${escapeHtml(q.score)} балл(ов)</div>
+                </div>
+              </label>
+              <label class="opt">
+                <input type="radio" name="s_${escapeHtml(q.key)}" value="acceptable" ${selected==="acceptable"?"checked":""}/>
+                <div style="flex:1">
+                  <div>${escapeHtml(q.acceptable_answer || "Норм")}</div>
+                  <div class="muted" style="font-size:12px">+${escapeHtml(q.score/2)} балл(ов)</div>
+                </div>
+              </label>
+              <label class="opt">
+                <input type="radio" name="s_${escapeHtml(q.key)}" value="bad" ${selected==="bad"?"checked":""}/>
+                <div style="flex:1">
+                  <div>${escapeHtml(q.bad_answer || "Стрём")}</div>
+                  <div class="muted" style="font-size:12px">+0 • ошибка • ${escapeHtml(q.severity)}</div>
+                </div>
+              </label>
+            </div>
+          `;
+        }
+
+        // CHECKBOX GROUPS
+        for (const g of groups) {
+          const set = STATE.checkboxAnswers[g.groupKey] || new Set();
+          const touched = !!STATE.checkboxTouched[g.groupKey];
+
+          html += `
+            <div class="card question" data-group-key="${escapeHtml(g.groupKey)}">
+              <div class="groupTitle">${escapeHtml(g.title)}</div>
+              <div class="muted" style="font-size:12px;margin-bottom:8px">
+                Отметь, что есть. Этот блок обязателен (нужно хотя бы взаимодействие).
+                ${touched ? "" : ` <span class="warn">Не заполнено</span>`}
+              </div>
+              ${g.items.map(it => {
+                const checked = set.has(it.item_id) ? "checked" : "";
                 return `
                   <label class="opt">
-                    <input type="radio" name="q_${escapeHtml(q.question_id)}" value="${escapeHtml(opt.option_id)}" ${checked}/>
+                    <input type="checkbox" data-group="${escapeHtml(g.groupKey)}" data-item="${escapeHtml(it.item_id)}" ${checked}/>
                     <div style="flex:1">
-                      <div>${escapeHtml(opt.option_text || opt.option_id)}</div>
-                      <div class="muted" style="font-size:12px">
-                        +${escapeHtml(opt.score)} балл(ов)
-                        ${opt.is_error ? " • ошибка" : ""}
-                        ${opt.severity ? " • " + escapeHtml(opt.severity) : ""}
-                      </div>
+                      <div>${escapeHtml(it.text || it.item_id)}</div>
+                      <div class="muted" style="font-size:12px">+${escapeHtml(it.score)} • если нет — ошибка • ${escapeHtml(it.severity)}</div>
                     </div>
                   </label>
                 `;
@@ -351,195 +433,152 @@
             </div>
           `;
         }
+
+        if (!html) {
+          html = `<div class="card muted">В этом разделе пока нет вопросов.</div>`;
+        }
         return html;
       }
 
+      // Render shell
       render(`
-        <h1>Проверка</h1>
-        <div class="muted"><span class="pill">${escapeHtml(norm(branch.city))}</span> <span class="pill">${escapeHtml(norm(branch.branch_name))}</span></div>
-        ${renderSectionTabs()}
-        <div id="sectionContent">${renderQuestionsForActiveSection()}</div>
+        <div class="topbar">
+          <div>
+            <h1 style="margin:0">Проверка</h1>
+            <div class="muted">
+              <span class="pill">${escapeHtml(norm(branch?.city || STATE.city))}</span>
+              <span class="pill">${escapeHtml(norm(branch?.branch_name || STATE.branchId))}</span>
+            </div>
+          </div>
+          <div class="progress" id="progress"></div>
+        </div>
+
+        ${renderTabs()}
+
+        <div id="content">${renderActiveSectionContent()}</div>
+
         <div class="card">
-          <button id="finish">Завершить и посчитать</button>
-          <button id="backToSections" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">Зоны</button>
-          <button id="backToStart" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">К выбору филиала</button>
-          <div class="muted" style="margin-top:10px;font-size:12px;">Автосейв включен ✅</div>
+          <button id="finish" disabled>Завершить</button>
+          <button id="back" class="btnSecondary" style="margin-top:8px">К выбору филиала</button>
+          <div class="muted" style="margin-top:10px;font-size:12px">Автосейв ✅</div>
         </div>
       `);
 
-      // tabs
-      document.querySelectorAll(".tab").forEach(el => {
-        el.addEventListener("click", () => {
-          const code = el.getAttribute("data-code");
-          if (!code) return;
-          STATE.activeSection = code;
-          saveDraft();
-          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-          el.classList.add("active");
-          document.getElementById("sectionContent").innerHTML = renderQuestionsForActiveSection();
-          bindAnswerHandlers();
-        });
-      });
+      const contentEl = document.getElementById("content");
+      const finishBtn = document.getElementById("finish");
+      const progressEl = document.getElementById("progress");
 
-      function bindAnswerHandlers() {
-        document.querySelectorAll('input[type="radio"]').forEach(inp => {
-          inp.addEventListener("change", () => {
-            const name = inp.name; // q_<question_id>
-            const qid = name.replace(/^q_/, "");
-            STATE.answers[qid] = inp.value;
-            saveDraft();
-          });
-        });
-      }
-      bindAnswerHandlers();
+      function updateProgressAndFinishState() {
+        const v = validateAll(singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
 
-      document.getElementById("backToSections").onclick = () => renderSelectSections();
-      document.getElementById("backToStart").onclick = () => renderStart();
+        // progress numbers
+        const totalSingles = STATE.enabledSections.reduce((sum, sec) => sum + (singlesBySec[sec]?.length || 0), 0);
+        const answeredSingles = totalSingles - v.missingSingles.size;
 
-      document.getElementById("finish").onclick = () => {
-        const result = calculateResult(questionsBySection, STATE.answers, DATA.settings || {});
-        renderResult(result, branch);
-      };
-    }
+        const totalGroups = STATE.enabledSections.reduce((sum, sec) => sum + (checkboxGroupsBySec[sec]?.length || 0), 0);
+        const touchedGroups = totalGroups - v.missingCheckboxGroups.size;
 
-    // ======= CALCULATION =======
-    function calculateResult(questionsBySection, answers, settings) {
-      const rows = [];
-      for (const [sec, qs] of Object.entries(questionsBySection)) {
-        for (const q of qs) rows.push(q);
+        progressEl.textContent = `single: ${answeredSingles}/${totalSingles} • чекблоки: ${touchedGroups}/${totalGroups}`;
+        finishBtn.disabled = !v.ok;
       }
 
-      // max_score: for each question pick max score among options excluding exclude_from_max
-      let maxScore = 0;
-      let earned = 0;
+      function clearErrors() {
+        document.querySelectorAll(".card.question").forEach(el => el.classList.remove("error"));
+      }
 
-      const errorsCritical = [];
-      const errorsNonCritical = [];
-
-      let hasCritical = false;
-
-      for (const q of rows) {
-        // max
-        const eligibleForMax = q.options.filter(o => !o.exclude_from_max);
-        const qMax = eligibleForMax.length ? Math.max(...eligibleForMax.map(o => Number(o.score||0))) : 0;
-        maxScore += qMax;
-
-        const chosenOptId = answers[q.question_id];
-        if (!chosenOptId) continue;
-
-        const opt = q.options.find(o => o.option_id === chosenOptId);
-        if (!opt) continue;
-
-        earned += Number(opt.score || 0);
-
-        if (opt.is_error) {
-          const item = {
-            question_id: q.question_id,
-            question_text: q.question_text,
-            option_text: opt.option_text,
-            severity: opt.severity || "noncritical",
-            require_photo_if_error: opt.require_photo_if_error,
-          };
-          if ((opt.severity || "").toLowerCase() === "critical") {
-            hasCritical = true;
-            errorsCritical.push(item);
-          } else {
-            errorsNonCritical.push(item);
-          }
+      function paintErrors(v) {
+        // singles
+        for (const key of v.missingSingles) {
+          const el = document.querySelector(`[data-single-key="${CSS.escape(key)}"]`);
+          if (el) el.classList.add("error");
+        }
+        // checkbox groups
+        for (const gk of v.missingCheckboxGroups) {
+          const el = document.querySelector(`[data-group-key="${CSS.escape(gk)}"]`);
+          if (el) el.classList.add("error");
         }
       }
 
-      const percent = maxScore > 0 ? Math.round((earned / maxScore) * 1000) / 10 : 0;
+      function bindHandlers() {
+        // tab switching
+        document.querySelectorAll(".tab").forEach(el => {
+          el.addEventListener("click", () => {
+            const sec = el.getAttribute("data-sec");
+            if (!sec) return;
+            STATE.activeSection = sec;
+            saveDraft();
 
-      // thresholds
-      const redMax = Number(settings.red_zone_max_percent ?? 70);
-      const yellowMax = Number(settings.yellow_zone_max_percent ?? 80);
-      const blockGreenIfCritical = toBool(settings.block_green_if_critical ?? true);
+            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            el.classList.add("active");
 
-      let zone = "green";
-      if (percent <= redMax) zone = "red";
-      else if (percent <= yellowMax) zone = "yellow";
-      else zone = "green";
+            contentEl.innerHTML = renderActiveSectionContent();
+            bindHandlers(); // rebind for new content
+            updateProgressAndFinishState();
+          });
+        });
 
-      if (blockGreenIfCritical && hasCritical && zone === "green") zone = "yellow";
+        // single radios
+        document.querySelectorAll('input[type="radio"]').forEach(inp => {
+          inp.addEventListener("change", () => {
+            const name = inp.name; // s_<key>
+            const key = name.replace(/^s_/, "");
+            STATE.singleAnswers[key] = inp.value;
+            saveDraft();
+            updateProgressAndFinishState();
+          });
+        });
 
-      return {
-        earned,
-        maxScore,
-        percent,
-        zone,
-        hasCritical,
-        errorsCritical,
-        errorsNonCritical,
+        // checkbox items
+        document.querySelectorAll('input[type="checkbox"][data-group]').forEach(inp => {
+          inp.addEventListener("change", () => {
+            const gk = inp.getAttribute("data-group");
+            const item = inp.getAttribute("data-item");
+
+            STATE.checkboxTouched[gk] = true;
+            STATE.checkboxAnswers[gk] ??= new Set();
+
+            if (inp.checked) STATE.checkboxAnswers[gk].add(item);
+            else STATE.checkboxAnswers[gk].delete(item);
+
+            saveDraft();
+            updateProgressAndFinishState();
+          });
+        });
+      }
+
+      bindHandlers();
+      updateProgressAndFinishState();
+
+      document.getElementById("back").onclick = () => renderStart();
+
+      finishBtn.onclick = () => {
+        clearErrors();
+        const v = validateAll(singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
+        if (!v.ok) {
+          paintErrors(v);
+          alert("Не заполнены ответы в разделах: " + v.missingSectionTitles.join(", "));
+          updateProgressAndFinishState();
+          return;
+        }
+        // на этом шаге просто покажем, что всё ок
+        alert("Готово ✅ Все ответы заполнены. Дальше подключим подсчёт баллов и итоговую плашку.");
       };
     }
 
-    function zoneTitle(zone) {
-      if (zone === "green") return "ЗЕЛЁНАЯ ЗОНА";
-      if (zone === "yellow") return "ЖЁЛТАЯ ЗОНА";
-      if (zone === "red") return "КРАСНАЯ ЗОНА";
-      return "СЕРАЯ ЗОНА";
-    }
-
-    function renderResult(result, branch) {
-      const zoneClass = result.zone;
-      render(`
-        <h1>Итог</h1>
-        <div class="muted"><span class="pill">${escapeHtml(norm(branch.city))}</span> <span class="pill">${escapeHtml(norm(branch.branch_name))}</span></div>
-
-        <div class="zone ${zoneClass}">
-          ${escapeHtml(zoneTitle(result.zone))}<br/>
-          ${escapeHtml(result.earned)} / ${escapeHtml(result.maxScore)} • ${escapeHtml(result.percent)}%
-        </div>
-
-        <div class="card">
-          <h2>Критические ошибки (${result.errorsCritical.length})</h2>
-          ${result.errorsCritical.length ? result.errorsCritical.map(e => `
-            <div class="opt">
-              <div style="flex:1">
-                <div style="font-weight:700">❌ ${escapeHtml(e.question_text)}</div>
-                <div class="muted" style="font-size:12px">${escapeHtml(e.option_text)} ${e.require_photo_if_error ? "• нужно фото" : ""}</div>
-              </div>
-            </div>
-          `).join("") : `<div class="muted">Нет ✅</div>`}
-
-          <div class="hr"></div>
-
-          <h2>Некритические ошибки (${result.errorsNonCritical.length})</h2>
-          ${result.errorsNonCritical.length ? result.errorsNonCritical.map(e => `
-            <div class="opt">
-              <div style="flex:1">
-                <div style="font-weight:700">⚠️ ${escapeHtml(e.question_text)}</div>
-                <div class="muted" style="font-size:12px">${escapeHtml(e.option_text)} ${e.require_photo_if_error ? "• нужно фото" : ""}</div>
-              </div>
-            </div>
-          `).join("") : `<div class="muted">Нет ✅</div>`}
-        </div>
-
-        <div class="card">
-          <button id="backForm">Вернуться к форме</button>
-          <button id="backStart" style="margin-top:8px;background:#fff;color:#111;border:1px solid #ddd;">Новая проверка</button>
-        </div>
-      `);
-
-      document.getElementById("backForm").onclick = () => renderForm();
-      document.getElementById("backStart").onclick = () => renderStart();
-    }
-
-    // ======= BOOT =======
+    // ====== BOOT ======
     (async function boot() {
       try {
+        // Telegram ready
+        if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready();
+
         appEl.textContent = "Загружаю данные…";
         const res = await fetch(DATA_URL);
         if (!res.ok) throw new Error("HTTP " + res.status);
         DATA = await res.json();
 
-        // Telegram ready
-        if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready();
-
         renderStart();
       } catch (e) {
-        renderError("Не получилось загрузить таблицу", e);
+        renderError("Не получилось загрузить данные из таблицы", e);
       }
     })();
   </script>
