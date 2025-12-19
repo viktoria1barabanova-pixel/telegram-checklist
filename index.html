@@ -78,7 +78,6 @@
       // answers
       singleAnswers: {},   // key: section_code|question_id -> "ideal" | "acceptable" | "bad"
       checkboxAnswers: {}, // key: groupKey -> Set(itemId)
-      checkboxTouched: {}, // key: groupKey -> true/false (обязательность)
     };
 
     function draftKey() { return `draft_v2_${STATE.branchId || "no_branch"}`; }
@@ -94,7 +93,6 @@
           activeSection: STATE.activeSection,
           singleAnswers: STATE.singleAnswers,
           checkboxAnswers: serialCheckbox,
-          checkboxTouched: STATE.checkboxTouched,
           savedAt: Date.now()
         }));
       } catch {}
@@ -231,8 +229,6 @@
       const sectionMap = sectionsByCode();
 
       const missingSingles = new Set();     // keys of single questions
-      const missingCheckboxGroups = new Set(); // groupKeys not touched
-
       const missingSections = new Set();
 
       // singles
@@ -245,42 +241,29 @@
         }
       }
 
-      // checkbox groups: must be touched
-      for (const sec of enabledSections) {
-        for (const g of (checkboxGroupsBySec[sec] || [])) {
-          if (!STATE.checkboxTouched[g.groupKey]) {
-            missingCheckboxGroups.add(g.groupKey);
-            missingSections.add(sec);
-          }
-        }
-      }
-
       const missingSectionTitles = [...missingSections].map(code => {
         const s = sectionMap.get(code);
         return s ? norm(s.title) : code;
       });
 
       return {
-        ok: missingSingles.size === 0 && missingCheckboxGroups.size === 0,
+        ok: missingSingles.size === 0,
         missingSingles,
-        missingCheckboxGroups,
         missingSections,
         missingSectionTitles
       };
     }
 
-    // ====== UI: START ======
-    function renderStart() {
+    // ====== RESULTS (итог / зона / ошибки) ======
     function computeResult(rows, singlesBySec, checkboxGroupsBySec, enabledSections) {
       let earned = 0;
       let maxScore = 0;
 
       const issuesBySection = {}; // sec -> array of strings
-
-      function addIssue(sec, text) {
+      const addIssue = (sec, text) => {
         issuesBySection[sec] ??= [];
         issuesBySection[sec].push(text);
-      }
+      };
 
       // SINGLE scoring
       for (const sec of enabledSections) {
@@ -296,7 +279,6 @@
             earned += Number(q.score || 0) / 2;
             addIssue(sec, `${q.question_text}: ${q.acceptable_answer}`);
           } else if (sel === "bad") {
-            // 0 points
             addIssue(sec, `${q.question_text}: ${q.bad_answer}`);
           }
         }
@@ -306,8 +288,6 @@
       for (const sec of enabledSections) {
         for (const g of (checkboxGroupsBySec[sec] || [])) {
           const set = STATE.checkboxAnswers[g.groupKey] || new Set();
-          const touched = !!STATE.checkboxTouched[g.groupKey];
-          if (!touched) continue; // validation guarantees touched, but keep safe
 
           for (const it of (g.items || [])) {
             if (!it.exclude_from_max) maxScore += Number(it.score || 0);
@@ -315,7 +295,6 @@
             if (set.has(it.item_id)) {
               earned += Number(it.score || 0);
             } else {
-              // missing checkbox item = issue
               addIssue(sec, `${g.title}: нет «${it.text}»`);
             }
           }
@@ -323,7 +302,6 @@
       }
 
       const percent = maxScore > 0 ? Math.round((earned / maxScore) * 1000) / 10 : 0;
-
       let zone = "green";
       if (percent <= ZONE_RED_MAX) zone = "red";
       else if (percent <= ZONE_YELLOW_MAX) zone = "yellow";
@@ -383,6 +361,9 @@
       document.getElementById("backToForm").onclick = () => renderSurvey();
       document.getElementById("backToStart").onclick = () => renderStart();
     }
+
+    // ====== UI: START ======
+    function renderStart() {
       const branches = getActiveBranches();
       const cities = uniq(branches.map(b => norm(b.city))).sort();
 
@@ -444,7 +425,6 @@
           STATE.enabledSections = d.enabledSections?.length ? d.enabledSections : STATE.enabledSections;
           STATE.activeSection = d.activeSection || "";
           STATE.singleAnswers = d.singleAnswers || {};
-          STATE.checkboxTouched = d.checkboxTouched || {};
           STATE.checkboxAnswers = d.checkboxAnswers || {};
         }
 
@@ -529,14 +509,12 @@
         // CHECKBOX GROUPS
         for (const g of groups) {
           const set = STATE.checkboxAnswers[g.groupKey] || new Set();
-          const touched = !!STATE.checkboxTouched[g.groupKey];
 
           html += `
             <div class="card question" data-group-key="${escapeHtml(g.groupKey)}">
               <div class="groupTitle">${escapeHtml(g.title)}</div>
               <div class="muted" style="font-size:12px;margin-bottom:8px">
-                Отметь, что есть. Этот блок обязателен (нужно хотя бы взаимодействие).
-                ${touched ? "" : ` <span class="warn">Не заполнено</span>`}
+                Отметь, что есть. Если ничего нет — оставь пустым.
               </div>
               ${g.items.map(it => {
                 const checked = set.has(it.item_id) ? "checked" : "";
@@ -600,11 +578,6 @@
           const el = document.querySelector(`[data-single-key="${CSS.escape(key)}"]`);
           if (el) el.classList.add("error");
         }
-        // checkbox groups
-        for (const gk of v.missingCheckboxGroups) {
-          const el = document.querySelector(`[data-group-key="${CSS.escape(gk)}"]`);
-          if (el) el.classList.add("error");
-        }
       }
 
       function bindHandlers() {
@@ -642,7 +615,6 @@
             const gk = inp.getAttribute("data-group");
             const item = inp.getAttribute("data-item");
 
-            STATE.checkboxTouched[gk] = true;
             STATE.checkboxAnswers[gk] ??= new Set();
 
             if (inp.checked) STATE.checkboxAnswers[gk].add(item);
