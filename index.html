@@ -63,9 +63,40 @@
     const toBool = (v) => v === true || v === "TRUE" || v === "true" || v === 1 || v === "1";
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
     const uniq = (arr) => [...new Set(arr)];
-const normPhoto = (r) => {
-  const u = norm(r.photo || r.photo_url || r.image || r.image_url);
+const driveToDirect = (url) => {
+  const u = norm(url);
+  if (!u) return "";
+
+  // Already direct or normal URL
+  if (!/^https?:\/\//i.test(u)) return "";
+
+  // Google Drive patterns
+  // 1) https://drive.google.com/file/d/FILE_ID/view?... 
+  // 2) https://drive.google.com/open?id=FILE_ID
+  // 3) https://drive.google.com/uc?id=FILE_ID&export=download
+  let id = "";
+
+  const m1 = u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1 && m1[1]) id = m1[1];
+
+  if (!id) {
+    const m2 = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m2 && m2[1]) id = m2[1];
+  }
+
+  if (id) {
+    // Direct-view endpoint
+    return `https://drive.google.com/uc?export=view&id=${id}`;
+  }
+
+  // Not a Drive share link we recognize; return as-is
   return u;
+};
+
+const normPhoto = (r) => {
+  const raw = norm(r.photo || r.photo_url || r.image || r.image_url);
+  if (!raw) return "";
+  return driveToDirect(raw);
 };
 
     function render(html) { appEl.innerHTML = html; }
