@@ -42,7 +42,7 @@
   </style>
 </head>
 <body>
-  <div id="app" class="muted">Загружаю данные…</div>
+  <div id="app" class="muted"></div>
 
   <script>
     // ====== 1) ПОДСТАВЬ СВОЙ URL (googleusercontent) ======
@@ -364,8 +364,8 @@
     }
 
     // ====== UI: START ======
-    function renderStart() {
-      const branches = getActiveBranches();
+    function renderStart(isLoading = false) {
+      const branches = DATA ? getActiveBranches() : [];
       const cities = uniq(branches.map(b => norm(b.city))).sort();
 
       render(`
@@ -375,27 +375,29 @@
             <div>
               <label>Город</label>
               <select id="city">
-                <option value="">Выбери город</option>
+                <option value="">${isLoading ? "Загружаю список…" : "Выбери город"}</option>
                 ${cities.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
               </select>
             </div>
 
             <div>
               <label>Филиал</label>
-              <select id="branch" disabled>
+              <select id="branch" ${isLoading ? "disabled" : "disabled"}>
                 <option value="">Сначала выбери город</option>
               </select>
             </div>
 
-            <button id="go" disabled>Начать</button>
+            <button id="go" disabled>${isLoading ? "Загружаю…" : "Начать"}</button>
           </div>
         </div>
-        <div class="muted">Все вопросы обязательные ✅</div>
+        <div class="muted">${isLoading ? "Подгружаю вопросы и список филиалов…" : "Все вопросы обязательные ✅"}</div>
       `);
 
       const citySel = document.getElementById("city");
       const branchSel = document.getElementById("branch");
       const goBtn = document.getElementById("go");
+
+      if (isLoading) return;
 
       citySel.addEventListener("change", () => {
         const city = citySel.value;
@@ -652,12 +654,14 @@
         // Telegram ready
         if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready();
 
-        appEl.textContent = "Загружаю данные…";
+        // Show start UI immediately while data loads
+        renderStart(true);
+
         const res = await fetch(DATA_URL);
         if (!res.ok) throw new Error("HTTP " + res.status);
         DATA = await res.json();
 
-        renderStart();
+        renderStart(false);
       } catch (e) {
         renderError("Не получилось загрузить данные из таблицы", e);
       }
