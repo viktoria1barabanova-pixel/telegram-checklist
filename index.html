@@ -85,9 +85,9 @@ const driveToDirect = (url) => {
   }
 
   if (id) {
-    // Use thumbnail endpoint (works better for embedding on GitHub Pages / desktop)
-    // sz can be adjusted; w1200 keeps quality decent
-    return `https://drive.google.com/thumbnail?id=${id}&sz=w1200`;
+    // Use googleusercontent image host. This is the most reliable for <img src> in browsers.
+    // Note: Drive file must be shared as “Anyone with the link”.
+    return `https://lh3.googleusercontent.com/d/${id}=w1200`;
   }
 
   // Not a Drive share link we recognize; return as-is
