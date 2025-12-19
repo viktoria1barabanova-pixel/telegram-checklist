@@ -87,6 +87,8 @@
 
     function draftKey() { return `draft_v2_${STATE.branchId || "no_branch"}`; }
 
+    const DRAFT_TTL_MS = 5 * 60 * 60 * 1000; // 5 hours
+
     function saveDraft() {
       try {
         const serialCheckbox = {};
@@ -108,6 +110,12 @@
         const raw = localStorage.getItem(`draft_v2_${branchId}`);
         if (!raw) return null;
         const d = JSON.parse(raw);
+        const savedAt = Number(d.savedAt || 0);
+        if (!savedAt || (Date.now() - savedAt) > DRAFT_TTL_MS) {
+          // Draft is expired (or invalid) — remove and ignore
+          localStorage.removeItem(`draft_v2_${branchId}`);
+          return null;
+        }
         // restore Sets
         const restored = {};
         for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
