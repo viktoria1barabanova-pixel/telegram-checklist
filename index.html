@@ -43,6 +43,10 @@
     // ====== 1) ПОДСТАВЬ СВОЙ URL (googleusercontent) ======
     const DATA_URL = "https://script.google.com/macros/s/AKfycbx-yZVSUsNaNKqNv_bJ8IFHgJ49vgJ3hK4qT4OI7nDKkyjXun1R1npEwxHbbs5M0UawSQ/exec";
 
+    // ====== ZONE THRESHOLDS (percent) ======
+    const ZONE_RED_MAX = 70;    // 0..70 => red
+    const ZONE_YELLOW_MAX = 85; // 70..85 => yellow
+
     // ====== UTILS ======
     const appEl = document.getElementById("app");
     const norm = (v) => (v ?? "").toString().trim();
@@ -164,7 +168,7 @@
           acceptable_answer: norm(r.acceptable_answer),
           bad_answer: norm(r.bad_answer),
           score: Number(r.score || 0),
-          severity: norm(r.severity) || "noncritical",
+          severity: norm(r.severity),
           exclude_from_max: toBool(r.exclude_from_max),
           sort_order: Number(r.sort_order || 0)
         });
@@ -201,7 +205,7 @@
           item_id: norm(r.question_id),
           text: norm(r.question_text),
           score: Number(r.score || 0),
-          severity: norm(r.severity) || "noncritical",
+          severity: norm(r.severity),
           exclude_from_max: toBool(r.exclude_from_max),
           // трактуем как "идеал = TRUE, стрём = FALSE"
           ideal_value: norm(r.ideal_answer).toUpperCase() === "TRUE",
@@ -267,6 +271,118 @@
 
     // ====== UI: START ======
     function renderStart() {
+    function computeResult(rows, singlesBySec, checkboxGroupsBySec, enabledSections) {
+      let earned = 0;
+      let maxScore = 0;
+
+      const issuesBySection = {}; // sec -> array of strings
+
+      function addIssue(sec, text) {
+        issuesBySection[sec] ??= [];
+        issuesBySection[sec].push(text);
+      }
+
+      // SINGLE scoring
+      for (const sec of enabledSections) {
+        for (const q of (singlesBySec[sec] || [])) {
+          if (!q.exclude_from_max) maxScore += Number(q.score || 0);
+
+          const sel = STATE.singleAnswers[q.key];
+          if (!sel) continue;
+
+          if (sel === "ideal") {
+            earned += Number(q.score || 0);
+          } else if (sel === "acceptable") {
+            earned += Number(q.score || 0) / 2;
+            addIssue(sec, `${q.question_text}: ${q.acceptable_answer}`);
+          } else if (sel === "bad") {
+            // 0 points
+            addIssue(sec, `${q.question_text}: ${q.bad_answer}`);
+          }
+        }
+      }
+
+      // CHECKBOX scoring (checked items add points; unchecked are treated as issues)
+      for (const sec of enabledSections) {
+        for (const g of (checkboxGroupsBySec[sec] || [])) {
+          const set = STATE.checkboxAnswers[g.groupKey] || new Set();
+          const touched = !!STATE.checkboxTouched[g.groupKey];
+          if (!touched) continue; // validation guarantees touched, but keep safe
+
+          for (const it of (g.items || [])) {
+            if (!it.exclude_from_max) maxScore += Number(it.score || 0);
+
+            if (set.has(it.item_id)) {
+              earned += Number(it.score || 0);
+            } else {
+              // missing checkbox item = issue
+              addIssue(sec, `${g.title}: нет «${it.text}»`);
+            }
+          }
+        }
+      }
+
+      const percent = maxScore > 0 ? Math.round((earned / maxScore) * 1000) / 10 : 0;
+
+      let zone = "green";
+      if (percent <= ZONE_RED_MAX) zone = "red";
+      else if (percent <= ZONE_YELLOW_MAX) zone = "yellow";
+
+      return { earned, maxScore, percent, zone, issuesBySection };
+    }
+
+    function zoneLabel(zone) {
+      if (zone === "red") return "КРАСНАЯ ЗОНА";
+      if (zone === "yellow") return "ЖЁЛТАЯ ЗОНА";
+      return "ЗЕЛЁНАЯ ЗОНА";
+    }
+
+    function renderResultScreen(result, branch) {
+      const sectionMap = sectionsByCode();
+      const secTitle = (code) => {
+        const s = sectionMap.get(code);
+        return s ? norm(s.title) : code;
+      };
+
+      const issuesSections = Object.keys(result.issuesBySection || {});
+
+      render(`
+        <h1>Итог</h1>
+        <div class="muted">
+          <span class="pill">${escapeHtml(norm(branch?.city || STATE.city))}</span>
+          <span class="pill">${escapeHtml(norm(branch?.branch_name || STATE.branchId))}</span>
+        </div>
+
+        <div class="card" style="border:none;padding:0">
+          <div class="pill" style="display:inline-block;margin-top:10px;font-weight:900">
+            ${escapeHtml(zoneLabel(result.zone))}
+          </div>
+          <div style="margin-top:8px;font-size:18px;font-weight:900">
+            ${escapeHtml(result.earned)} / ${escapeHtml(result.maxScore)} • ${escapeHtml(result.percent)}%
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 style="margin-top:0">Где есть ошибки</h2>
+          ${issuesSections.length ? issuesSections.map(sec => `
+            <div style="margin-top:12px">
+              <div style="font-weight:900">${escapeHtml(secTitle(sec))}</div>
+              <div class="muted" style="font-size:12px;margin-top:6px">
+                ${(result.issuesBySection[sec] || []).map(x => `• ${escapeHtml(x)}`).join('<br/>')}
+              </div>
+            </div>
+          `).join('') : `<div class="muted">Ошибок нет ✅</div>`}
+        </div>
+
+        <div class="card">
+          <button id="backToForm">Вернуться к опроснику</button>
+          <button id="backToStart" class="btnSecondary" style="margin-top:8px">Новая проверка</button>
+        </div>
+      `);
+
+      document.getElementById("backToForm").onclick = () => renderSurvey();
+      document.getElementById("backToStart").onclick = () => renderStart();
+    }
       const branches = getActiveBranches();
       const cities = uniq(branches.map(b => norm(b.city))).sort();
 
@@ -381,24 +497,31 @@
             <div class="card question" data-single-key="${escapeHtml(q.key)}">
               <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
               ${q.question_description ? `<div class="q-desc">${escapeHtml(q.question_description)}</div>` : ""}
-              <label class="opt">
-                <input type="radio" name="s_${escapeHtml(q.key)}" value="ideal" ${selected==="ideal"?"checked":""}/>
-                <div style="flex:1">
-                  <div>${escapeHtml(q.ideal_answer || "Идеал")}</div>
-                </div>
-              </label>
-              <label class="opt">
-                <input type="radio" name="s_${escapeHtml(q.key)}" value="acceptable" ${selected==="acceptable"?"checked":""}/>
-                <div style="flex:1">
-                  <div>${escapeHtml(q.acceptable_answer || "Норм")}</div>
-                </div>
-              </label>
-              <label class="opt">
-                <input type="radio" name="s_${escapeHtml(q.key)}" value="bad" ${selected==="bad"?"checked":""}/>
-                <div style="flex:1">
-                  <div>${escapeHtml(q.bad_answer || "Стрём")}</div>
-                </div>
-              </label>
+              ${(() => {
+                const opts = [
+                  { value: "ideal", text: norm(q.ideal_answer) },
+                  { value: "acceptable", text: norm(q.acceptable_answer) },
+                  { value: "bad", text: norm(q.bad_answer) }
+                ].filter(o => o.text);
+
+                // If the previously selected value no longer exists (e.g., acceptable removed), clear it
+                const allowed = new Set(opts.map(o => o.value));
+                if (selected && !allowed.has(selected)) {
+                  delete STATE.singleAnswers[q.key];
+                  saveDraft();
+                }
+
+                const selectedNow = STATE.singleAnswers[q.key] || "";
+
+                return opts.map(opt => `
+                  <label class="opt">
+                    <input type="radio" name="s_${escapeHtml(q.key)}" value="${escapeHtml(opt.value)}" ${selectedNow===opt.value?"checked":""}/>
+                    <div style="flex:1">
+                      <div>${escapeHtml(opt.text)}</div>
+                    </div>
+                  </label>
+                `).join("");
+              })()}
             </div>
           `;
         }
@@ -446,7 +569,6 @@
               <span class="pill">${escapeHtml(norm(branch?.branch_name || STATE.branchId))}</span>
             </div>
           </div>
-          <div class="progress" id="progress"></div>
         </div>
 
         ${renderTabs()}
@@ -462,19 +584,9 @@
 
       const contentEl = document.getElementById("content");
       const finishBtn = document.getElementById("finish");
-      const progressEl = document.getElementById("progress");
 
       function updateProgressAndFinishState() {
         const v = validateAll(singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
-
-        // progress numbers
-        const totalSingles = STATE.enabledSections.reduce((sum, sec) => sum + (singlesBySec[sec]?.length || 0), 0);
-        const answeredSingles = totalSingles - v.missingSingles.size;
-
-        const totalGroups = STATE.enabledSections.reduce((sum, sec) => sum + (checkboxGroupsBySec[sec]?.length || 0), 0);
-        const touchedGroups = totalGroups - v.missingCheckboxGroups.size;
-
-        progressEl.textContent = `single: ${answeredSingles}/${totalSingles} • чекблоки: ${touchedGroups}/${totalGroups}`;
         finishBtn.disabled = !v.ok;
       }
 
@@ -556,8 +668,8 @@
           updateProgressAndFinishState();
           return;
         }
-        // на этом шаге просто покажем, что всё ок
-        alert("Готово ✅ Все ответы заполнены. Дальше подключим подсчёт баллов и итоговую плашку.");
+        const result = computeResult(rows, singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
+        renderResultScreen(result, branch);
       };
     }
 
