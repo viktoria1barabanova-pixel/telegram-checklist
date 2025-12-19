@@ -385,21 +385,18 @@
                 <input type="radio" name="s_${escapeHtml(q.key)}" value="ideal" ${selected==="ideal"?"checked":""}/>
                 <div style="flex:1">
                   <div>${escapeHtml(q.ideal_answer || "Идеал")}</div>
-                  <div class="muted" style="font-size:12px">+${escapeHtml(q.score)} балл(ов)</div>
                 </div>
               </label>
               <label class="opt">
                 <input type="radio" name="s_${escapeHtml(q.key)}" value="acceptable" ${selected==="acceptable"?"checked":""}/>
                 <div style="flex:1">
                   <div>${escapeHtml(q.acceptable_answer || "Норм")}</div>
-                  <div class="muted" style="font-size:12px">+${escapeHtml(q.score/2)} балл(ов)</div>
                 </div>
               </label>
               <label class="opt">
                 <input type="radio" name="s_${escapeHtml(q.key)}" value="bad" ${selected==="bad"?"checked":""}/>
                 <div style="flex:1">
                   <div>${escapeHtml(q.bad_answer || "Стрём")}</div>
-                  <div class="muted" style="font-size:12px">+0 • ошибка • ${escapeHtml(q.severity)}</div>
                 </div>
               </label>
             </div>
@@ -425,7 +422,6 @@
                     <input type="checkbox" data-group="${escapeHtml(g.groupKey)}" data-item="${escapeHtml(it.item_id)}" ${checked}/>
                     <div style="flex:1">
                       <div>${escapeHtml(it.text || it.item_id)}</div>
-                      <div class="muted" style="font-size:12px">+${escapeHtml(it.score)} • если нет — ошибка • ${escapeHtml(it.severity)}</div>
                     </div>
                   </label>
                 `;
