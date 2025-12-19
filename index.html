@@ -311,18 +311,19 @@ function buildCheckboxGroups(rows, enabledSections) {
         }
       }
 
-// CHECKBOX scoring (each checkbox row is a yes/no item)
-const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
-for (const sec of enabledSections) {
-  for (const it of (checkboxGroupsBySec[sec] || [])) {
-    if (!it.exclude_from_max) maxScore += Number(it.score || 0);
+      // CHECKBOX scoring (each checkbox row is a yes/no item)
+      const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
+      for (const sec of enabledSections) {
+        for (const it of (checkboxGroupsBySec[sec] || [])) {
+          if (!it.exclude_from_max) maxScore += Number(it.score || 0);
 
-    if (checkedSet.has(it.key)) {
-      earned += Number(it.score || 0);
-    } else {
-      addIssue(sec, `${it.title}`);
-    }
-  }
+          if (checkedSet.has(it.key)) {
+            earned += Number(it.score || 0);
+          } else {
+            addIssue(sec, `${it.title}`);
+          }
+        }
+      }
 
       const percent = maxScore > 0 ? Math.round((earned / maxScore) * 1000) / 10 : 0;
       let zone = "green";
