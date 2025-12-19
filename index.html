@@ -32,6 +32,11 @@
 
     .q-title { font-weight: 800; margin-bottom: 6px; }
     .q-desc { font-size: 13px; color: #666; margin-bottom: 10px; }
+.descRow { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.photoToggle { width:auto; min-width:36px; padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fff; color:#111; font-weight:900; cursor:pointer; }
+.photoWrap { margin-top:10px; display:none; }
+.photoWrap.open { display:block; }
+.photoWrap img { width:100%; border-radius:12px; display:block; }
     .opt { display:flex; align-items:flex-start; gap:10px; padding: 10px; border-radius: 12px; border: 1px solid #eee; margin-top: 8px; }
     .opt input { margin-top: 3px; }
     .groupTitle { font-weight: 900; margin: 14px 0 8px; }
@@ -58,6 +63,10 @@
     const toBool = (v) => v === true || v === "TRUE" || v === "true" || v === 1 || v === "1";
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
     const uniq = (arr) => [...new Set(arr)];
+const normPhoto = (r) => {
+  const u = norm(r.photo || r.photo_url || r.image || r.image_url);
+  return u;
+};
 
     function render(html) { appEl.innerHTML = html; }
 
@@ -192,6 +201,7 @@ function clearDraftForBranch(branchId) {
           question_id: norm(r.question_id),
           question_text: norm(r.question_text),
           question_description: norm(r.question_description),
+photo: normPhoto(r),
           ideal_answer: norm(r.ideal_answer),
           acceptable_answer: norm(r.acceptable_answer),
           bad_answer: norm(r.bad_answer),
@@ -207,52 +217,39 @@ function clearDraftForBranch(branchId) {
       return m;
     }
 
-    // CHECKBOX groups: group by section_code + question_description
-    // group title = question_description, item text = question_text, item id = question_id
-    function buildCheckboxGroups(rows, enabledSections) {
-      const m = {}; // sec -> [group]
-      const tmp = {}; // groupKey -> group
-      for (const r of rows) {
-        const type = norm(r.question_type).toLowerCase();
-        if (type !== "checkbox") continue;
-        const sec = norm(r.section_code);
-        if (!enabledSections.includes(sec)) continue;
+// CHECKBOX items: each row is a separate yes/no checkbox (no grouping)
+function buildCheckboxGroups(rows, enabledSections) {
+  const m = {}; // sec -> [item]
 
-        const title = norm(r.question_description) || "Чек-лист";
-        const groupKey = `${sec}||${title}`;
+  for (const r of rows) {
+    const type = norm(r.question_type).toLowerCase();
+    if (type !== "checkbox") continue;
 
-        tmp[groupKey] ??= {
-          groupKey,
-          section_code: sec,
-          title,
-          sort_order: Number(r.sort_order || 0),
-          items: []
-        };
+    const sec = norm(r.section_code);
+    if (!enabledSections.includes(sec)) continue;
 
-        tmp[groupKey].items.push({
-          item_id: norm(r.question_id),
-          text: norm(r.question_text),
-          score: Number(r.score || 0),
-          severity: norm(r.severity),
-          exclude_from_max: toBool(r.exclude_from_max),
-          // трактуем как "идеал = TRUE, стрём = FALSE"
-          ideal_value: norm(r.ideal_answer).toUpperCase() === "TRUE",
-          bad_value: norm(r.bad_answer).toUpperCase() === "FALSE"
-        });
-      }
+    const key = `${sec}|${norm(r.question_id)}`;
+    m[sec] ??= [];
+    m[sec].push({
+      key,
+      section_code: sec,
+      question_id: norm(r.question_id),
+      title: norm(r.question_text) || norm(r.question_id),
+      description: norm(r.question_description),
+      photo: normPhoto(r),
+      score: Number(r.score || 0),
+      severity: norm(r.severity),
+      exclude_from_max: toBool(r.exclude_from_max),
+      sort_order: Number(r.sort_order || 0)
+    });
+  }
 
-      for (const g of Object.values(tmp)) {
-        // sort items by sort_order? в твоей таблице sort_order общий — оставим по item_id если нет
-        g.items.sort((a,b)=>a.item_id.localeCompare(b.item_id));
-        m[g.section_code] ??= [];
-        m[g.section_code].push(g);
-      }
+  for (const sec of Object.keys(m)) {
+    m[sec].sort((a,b)=>a.sort_order-b.sort_order || a.question_id.localeCompare(b.question_id));
+  }
 
-      for (const sec of Object.keys(m)) {
-        m[sec].sort((a,b)=>a.sort_order-b.sort_order || a.title.localeCompare(b.title));
-      }
-      return m;
-    }
+  return m;
+}
 
     // ====== VALIDATION ======
     function validateAll(singlesBySec, checkboxGroupsBySec, enabledSections) {
@@ -314,22 +311,18 @@ function clearDraftForBranch(branchId) {
         }
       }
 
-      // CHECKBOX scoring (checked items add points; unchecked are treated as issues)
-      for (const sec of enabledSections) {
-        for (const g of (checkboxGroupsBySec[sec] || [])) {
-          const set = STATE.checkboxAnswers[g.groupKey] || new Set();
+// CHECKBOX scoring (each checkbox row is a yes/no item)
+const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
+for (const sec of enabledSections) {
+  for (const it of (checkboxGroupsBySec[sec] || [])) {
+    if (!it.exclude_from_max) maxScore += Number(it.score || 0);
 
-          for (const it of (g.items || [])) {
-            if (!it.exclude_from_max) maxScore += Number(it.score || 0);
-
-            if (set.has(it.item_id)) {
-              earned += Number(it.score || 0);
-            } else {
-              addIssue(sec, `${g.title}: нет «${it.text}»`);
-            }
-          }
-        }
-      }
+    if (checkedSet.has(it.key)) {
+      earned += Number(it.score || 0);
+    } else {
+      addIssue(sec, `${it.title}`);
+    }
+  }
 
       const percent = maxScore > 0 ? Math.round((earned / maxScore) * 1000) / 10 : 0;
       let zone = "green";
@@ -518,7 +511,15 @@ if (STATE.isFinished && STATE.lastResult) {
           html += `
             <div class="card question" data-single-key="${escapeHtml(q.key)}">
               <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
-              ${q.question_description ? `<div class="q-desc">${escapeHtml(q.question_description)}</div>` : ""}
+              ${(q.question_description || q.photo) ? `
+  <div class="q-desc">
+    <div class="descRow">
+      <div>${q.question_description ? escapeHtml(q.question_description) : ""}</div>
+      ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
+    </div>
+    ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt=""/></div>` : ""}
+  </div>
+` : ""}
               ${(() => {
                 const opts = [
                   { value: "ideal", text: norm(q.ideal_answer) },
@@ -548,30 +549,32 @@ if (STATE.isFinished && STATE.lastResult) {
           `;
         }
 
-        // CHECKBOX GROUPS
-        for (const g of groups) {
-          const set = STATE.checkboxAnswers[g.groupKey] || new Set();
+// CHECKBOX ITEMS (each row = one yes/no item)
+const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
+for (const it of groups) {
+  const checked = checkedSet.has(it.key) ? "checked" : "";
 
-          html += `
-            <div class="card question" data-group-key="${escapeHtml(g.groupKey)}">
-              <div class="groupTitle">${escapeHtml(g.title)}</div>
-              <div class="muted" style="font-size:12px;margin-bottom:8px">
-                Отметь, что есть. Если ничего нет — оставь пустым.
-              </div>
-              ${g.items.map(it => {
-                const checked = set.has(it.item_id) ? "checked" : "";
-                return `
-                  <label class="opt">
-                    <input type="checkbox" data-group="${escapeHtml(g.groupKey)}" data-item="${escapeHtml(it.item_id)}" ${checked}/>
-                    <div style="flex:1">
-                      <div>${escapeHtml(it.text || it.item_id)}</div>
-                    </div>
-                  </label>
-                `;
-              }).join("")}
-            </div>
-          `;
-        }
+  html += `
+    <div class="card question" data-checkbox-key="${escapeHtml(it.key)}">
+      <div class="q-title">${escapeHtml(it.title)}</div>
+
+      ${(it.description || it.photo) ? `
+        <div class="q-desc">
+          <div class="descRow">
+            <div>${it.description ? escapeHtml(it.description) : ""}</div>
+            ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
+          </div>
+          ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt=""/></div>` : ""}
+        </div>
+      ` : ""}
+
+      <label class="opt">
+        <input type="checkbox" data-checkbox-key="${escapeHtml(it.key)}" ${checked}/>
+        <div style="flex:1"><div>Есть</div></div>
+      </label>
+    </div>
+  `;
+}
 
         if (!html) {
           html = `<div class="card muted">В этом разделе пока нет вопросов.</div>`;
@@ -653,20 +656,29 @@ if (STATE.isFinished && STATE.lastResult) {
         });
 
         // checkbox items
-        document.querySelectorAll('input[type="checkbox"][data-group]').forEach(inp => {
-          inp.addEventListener("change", () => {
-            const gk = inp.getAttribute("data-group");
-            const item = inp.getAttribute("data-item");
+// checkbox items (per-row yes/no)
+document.querySelectorAll('input[type="checkbox"][data-checkbox-key]').forEach(inp => {
+  inp.addEventListener("change", () => {
+    const key = inp.getAttribute("data-checkbox-key");
+    STATE.checkboxAnswers["_items"] ??= new Set();
 
-            STATE.checkboxAnswers[gk] ??= new Set();
+    if (inp.checked) STATE.checkboxAnswers["_items"].add(key);
+    else STATE.checkboxAnswers["_items"].delete(key);
 
-            if (inp.checked) STATE.checkboxAnswers[gk].add(item);
-            else STATE.checkboxAnswers[gk].delete(item);
+    saveDraft();
+    updateProgressAndFinishState();
+  });
+});
 
-            saveDraft();
-            updateProgressAndFinishState();
-          });
-        });
+// photo toggle (+) for both single + checkbox cards
+document.querySelectorAll('[data-photo-toggle]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const k = btn.getAttribute('data-photo-toggle');
+    const wrap = document.querySelector(`[data-photo-wrap="${CSS.escape(k)}"]`);
+    if (!wrap) return;
+    wrap.classList.toggle('open');
+  });
+});
       }
 
       bindHandlers();
