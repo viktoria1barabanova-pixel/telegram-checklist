@@ -23,6 +23,11 @@
     .tab { padding: 10px 12px; border-radius: 999px; border: 1px solid #ddd; background: #fff; white-space: nowrap; cursor: pointer; }
     .tab.active { background: #111; color: #fff; border-color: #111; }
     .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
+    .zoneBanner { width: 100%; padding: 14px 12px; border-radius: 14px; font-weight: 900; text-align: center; color: #111; }
+    .zoneBanner.red { background: #ff4d4f; color: #fff; }
+    .zoneBanner.yellow { background: #faad14; color: #111; }
+    .zoneBanner.green { background: #52c41a; color: #111; }
+    .resultPercent { margin-top: 10px; font-size: 28px; font-weight: 900; }
     .hr { height: 1px; background: #eee; margin: 12px 0; }
 
     .q-title { font-weight: 800; margin-bottom: 6px; }
@@ -332,12 +337,8 @@
         </div>
 
         <div class="card" style="border:none;padding:0">
-          <div class="pill" style="display:inline-block;margin-top:10px;font-weight:900">
-            ${escapeHtml(zoneLabel(result.zone))}
-          </div>
-          <div style="margin-top:8px;font-size:18px;font-weight:900">
-            ${escapeHtml(result.earned)} / ${escapeHtml(result.maxScore)} • ${escapeHtml(result.percent)}%
-          </div>
+          <div class="zoneBanner ${escapeHtml(result.zone)}">${escapeHtml(zoneLabel(result.zone))}</div>
+          <div class="resultPercent">${escapeHtml(result.percent)}%</div>
         </div>
 
         <div class="card">
