@@ -704,13 +704,55 @@ document.querySelectorAll('input[type="checkbox"][data-checkbox-key]').forEach(i
 });
 
 // photo toggle (+) for both single + checkbox cards
+// When opening, smoothly scroll the image into the center of the screen
+function centerIntoView(el) {
+  try {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+  } catch {
+    const rect = el.getBoundingClientRect();
+    const y = (window.pageYOffset || document.documentElement.scrollTop || 0) + rect.top - (window.innerHeight / 2) + (rect.height / 2);
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  }
+}
+
 document.querySelectorAll('[data-photo-toggle]').forEach(btn => {
   btn.addEventListener('click', () => {
     const k = btn.getAttribute('data-photo-toggle');
     const wrap = document.querySelector(`[data-photo-wrap="${CSS.escape(k)}"]`);
     if (!wrap) return;
+
+    const willOpen = !wrap.classList.contains('open');
     wrap.classList.toggle('open');
+
+    // switch + / −
+    btn.textContent = willOpen ? '−' : '+';
+
+    if (willOpen) {
+      requestAnimationFrame(() => {
+        const img = wrap.querySelector('img') || wrap;
+        centerIntoView(img);
+      });
+    }
   });
+});
+
+// image error handler (Drive permissions / broken links)
+document.querySelectorAll('.photoWrap img').forEach(img => {
+  img.addEventListener('error', () => {
+    // prevent duplicate messages
+    const wrap = img.closest('.photoWrap');
+    if (!wrap) return;
+    if (wrap.querySelector('[data-img-error]')) return;
+
+    img.style.display = 'none';
+    const msg = document.createElement('div');
+    msg.setAttribute('data-img-error', '1');
+    msg.className = 'muted';
+    msg.style.fontSize = '12px';
+    msg.style.marginTop = '8px';
+    msg.textContent = 'Фото недоступно — проверь доступ по ссылке (Drive: «Все у кого есть ссылка»).';
+    wrap.appendChild(msg);
+  }, { once: true });
 });
       }
 
