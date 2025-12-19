@@ -85,8 +85,9 @@ const driveToDirect = (url) => {
   }
 
   if (id) {
-    // Direct-view endpoint
-    return `https://drive.google.com/uc?export=view&id=${id}`;
+    // Use thumbnail endpoint (works better for embedding on GitHub Pages / desktop)
+    // sz can be adjusted; w1200 keeps quality decent
+    return `https://drive.google.com/thumbnail?id=${id}&sz=w1200`;
   }
 
   // Not a Drive share link we recognize; return as-is
@@ -549,7 +550,7 @@ if (STATE.isFinished && STATE.lastResult) {
       <div>${q.question_description ? escapeHtml(q.question_description) : ""}</div>
       ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
     </div>
-    ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt=""/></div>` : ""}
+    ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
   </div>
 ` : ""}
               ${(() => {
@@ -596,7 +597,7 @@ for (const it of groups) {
             <div>${it.description ? escapeHtml(it.description) : ""}</div>
             ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
           </div>
-          ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt=""/></div>` : ""}
+          ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
         </div>
       ` : ""}
 
