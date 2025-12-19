@@ -75,15 +75,17 @@
     // ====== STATE ======
     let DATA = null;
 
-    const STATE = {
-      city: "",
-      branchId: "",
-      enabledSections: [],
-      activeSection: "",
-      // answers
-      singleAnswers: {},   // key: section_code|question_id -> "ideal" | "acceptable" | "bad"
-      checkboxAnswers: {}, // key: groupKey -> Set(itemId)
-    };
+const STATE = {
+  city: "",
+  branchId: "",
+  enabledSections: [],
+  activeSection: "",
+  // answers
+  singleAnswers: {},   // key: section_code|question_id -> "ideal" | "acceptable" | "bad"
+  checkboxAnswers: {}, // key: groupKey -> Set(itemId)
+  isFinished: false,
+  lastResult: null, // сюда сохраним итог, чтобы показывать его и блокировать редактирование
+};
 
     function draftKey() { return `draft_v2_${STATE.branchId || "no_branch"}`; }
 
@@ -100,7 +102,9 @@
           activeSection: STATE.activeSection,
           singleAnswers: STATE.singleAnswers,
           checkboxAnswers: serialCheckbox,
-          savedAt: Date.now()
+	savedAt: Date.now(),
+	isFinished: STATE.isFinished,
+	lastResult: STATE.lastResult
         }));
       } catch {}
     }
@@ -123,6 +127,19 @@
         return d;
       } catch { return null; }
     }
+
+function clearDraftForBranch(branchId) {
+  try {
+    if (!branchId) return;
+    localStorage.removeItem(`draft_v2_${branchId}`);
+  } catch {}
+
+  STATE.singleAnswers = {};
+  STATE.checkboxAnswers = {};
+  STATE.activeSection = "";
+  STATE.isFinished = false;
+  STATE.lastResult = null;
+}
 
     // ====== DATA ADAPTER (твой формат таблицы) ======
     // ожидаем DATA.checklist строки с колонками:
@@ -362,13 +379,16 @@
         </div>
 
         <div class="card">
-          <button id="backToForm">Вернуться к опроснику</button>
-          <button id="backToStart" class="btnSecondary" style="margin-top:8px">Новая проверка</button>
-        </div>
+	  <button id="resetDraftResult" class="btnSecondary">Сбросить черновик этого филиала</button>
+	  <button id="backToStart" class="btnSecondary" style="margin-top:8px">Новая проверка</button>
+	</div>
       `);
 
-      document.getElementById("backToForm").onclick = () => renderSurvey();
-      document.getElementById("backToStart").onclick = () => renderStart();
+document.getElementById("resetDraftResult").onclick = () => {
+  clearDraftForBranch(STATE.branchId);
+  renderStart();
+};
+document.getElementById("backToStart").onclick = () => renderStart();
     }
 
     // ====== UI: START ======
@@ -437,6 +457,8 @@
           STATE.activeSection = d.activeSection || "";
           STATE.singleAnswers = d.singleAnswers || {};
           STATE.checkboxAnswers = d.checkboxAnswers || {};
+	STATE.isFinished = !!d.isFinished;
+	STATE.lastResult = d.lastResult || null;
         }
 
         // set active section
@@ -445,12 +467,21 @@
         }
 
         saveDraft();
-        renderSurvey();
+	if (STATE.isFinished && STATE.lastResult) {
+	  renderResultScreen(STATE.lastResult, branch);
+	  return;
+}
+renderSurvey();
       });
     }
 
     // ====== UI: SURVEY ======
     function renderSurvey() {
+if (STATE.isFinished && STATE.lastResult) {
+  const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
+  renderResultScreen(STATE.lastResult, branch);
+  return;
+}
       const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
       const sectionMap = sectionsByCode();
 
@@ -564,11 +595,12 @@
 
         <div id="content">${renderActiveSectionContent()}</div>
 
-        <div class="card">
-          <button id="finish" disabled>Завершить</button>
-          <button id="back" class="btnSecondary" style="margin-top:8px">К выбору филиала</button>
-          <div class="muted" style="margin-top:10px;font-size:12px">Автосейв ✅</div>
-        </div>
+<div class="card">
+  <button id="finish" disabled>Завершить</button>
+  <button id="resetDraft" class="btnSecondary" style="margin-top:8px">Сбросить черновик этого филиала</button>
+  <button id="back" class="btnSecondary" style="margin-top:8px">К выбору филиала</button>
+  <div class="muted" style="margin-top:10px;font-size:12px">Автосейв ✅ (черновик хранится 5 часов)</div>
+</div>
       `);
 
       const contentEl = document.getElementById("content");
@@ -641,6 +673,10 @@
       updateProgressAndFinishState();
 
       document.getElementById("back").onclick = () => renderStart();
+document.getElementById("resetDraft").onclick = () => {
+  clearDraftForBranch(STATE.branchId);
+  renderStart();
+};
 
       finishBtn.onclick = () => {
         clearErrors();
@@ -651,8 +687,11 @@
           updateProgressAndFinishState();
           return;
         }
-        const result = computeResult(rows, singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
-        renderResultScreen(result, branch);
+const result = computeResult(rows, singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
+STATE.isFinished = true;
+STATE.lastResult = result;
+saveDraft();
+renderResultScreen(result, branch);
       };
     }
 
