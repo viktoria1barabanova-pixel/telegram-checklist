@@ -129,15 +129,15 @@
 
       // Markdown: [text](url)
       // (Run before bare URL so it doesn't double-linkify)
-      s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, text, url) => {
+      s = s.replace(/\[([^\]]+)\]\s*\(\s*(https?:\/\/[^\s)]+)\s*\)/g, (m, text, url) => {
         const safeText = escapeHtml(String(text));
         const safeUrl = escapeHtml(String(url));
         return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeText}</a>`;
       });
 
       // Bare URLs (http/https)
-      // Avoid linking inside existing anchors
-      s = s.replace(/(^|[^">])(https?:\/\/[^\s<]+)/g, (m, prefix, url) => {
+      // Avoid linking inside existing anchors and after = (attributes) or after ](
+      s = s.replace(/(^|[^\w\">=])(https?:\/\/[^\s<]+)/g, (m, prefix, url) => {
         const safeUrl = escapeHtml(String(url));
         return `${prefix}<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
       });
@@ -707,15 +707,13 @@
         STATE.branchId = branchSel.value;
 
         const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
-        const defaultsRaw = branch ? enabledSectionsFromBranch(branch) : [];
         const allSections = getActiveSections().map(s => norm(s.section_code));
-        const chosen = defaultsRaw.length ? defaultsRaw : allSections;
-        STATE.enabledSections = sortSectionCodesByOrder(chosen);
+        STATE.enabledSections = sortSectionCodesByOrder(allSections);
 
         // load draft if exists
         const d = loadDraft(STATE.branchId);
         if (d) {
-          STATE.enabledSections = sortSectionCodesByOrder(d.enabledSections?.length ? d.enabledSections : STATE.enabledSections);
+          STATE.enabledSections = sortSectionCodesByOrder(STATE.enabledSections);
           STATE.activeSection = d.activeSection || "";
           STATE.singleAnswers = d.singleAnswers || {};
           STATE.checkboxAnswers = d.checkboxAnswers || {};
