@@ -19,7 +19,18 @@
     button { border: none; background: #111; color: #fff; cursor: pointer; }
     button:disabled { background: #bbb; cursor: not-allowed; }
     .btnSecondary { background:#fff; color:#111; border:1px solid #ddd; }
-    .tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin: 10px 0; }
+    .tabs {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0 6px;
+      margin: 0 0 12px;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
     .tab { padding: 10px 12px; border-radius: 999px; border: 1px solid #ddd; background: #fff; white-space: nowrap; cursor: pointer; }
     .tab.active { background: #111; color: #fff; border-color: #111; }
     .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#f2f2f2; font-size: 12px; }
