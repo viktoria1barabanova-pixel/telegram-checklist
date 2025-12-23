@@ -44,6 +44,9 @@
 
     .q-title { font-weight: 800; margin-bottom: 6px; }
     .q-desc { font-size: 13px; color: #666; margin-bottom: 10px; }
+    .q-desc a { color:#1a73e8; text-decoration: underline; }
+    .q-desc a:visited { color:#1a73e8; }
+    .q-desc a:hover { opacity:.85; }
     .descRow { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
     .photoToggle { width:auto; min-width:36px; padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fff; color:#111; font-weight:900; cursor:pointer; }
     .photoWrap { margin-top:10px; display:none; }
@@ -108,6 +111,39 @@
     const toBool = (v) => v === true || v === "TRUE" || v === "true" || v === 1 || v === "1";
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
     const uniq = (arr) => [...new Set(arr)];
+
+    // Convert plain text to HTML with safe clickable links.
+    // Supports:
+    //  - Markdown links: [text](https://example.com)
+    //  - Bare URLs: https://example.com
+    // Keeps all other text escaped.
+    function richTextHtml(input) {
+      const s0 = norm(input);
+      if (!s0) return "";
+
+      // Escape first (so user can't inject HTML), then re-introduce <a> tags safely.
+      let s = escapeHtml(s0);
+
+      // Convert new lines to <br>
+      s = s.replace(/\r\n|\r|\n/g, "<br>");
+
+      // Markdown: [text](url)
+      // (Run before bare URL so it doesn't double-linkify)
+      s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, text, url) => {
+        const safeText = escapeHtml(String(text));
+        const safeUrl = escapeHtml(String(url));
+        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeText}</a>`;
+      });
+
+      // Bare URLs (http/https)
+      // Avoid linking inside existing anchors
+      s = s.replace(/(^|[^">])(https?:\/\/[^\s<]+)/g, (m, prefix, url) => {
+        const safeUrl = escapeHtml(String(url));
+        return `${prefix}<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
+      });
+
+      return s;
+    }
 
     const IS_TG = !!(window.Telegram && Telegram.WebApp);
     const getTgName = () => {
@@ -795,7 +831,7 @@
               ${(q.question_description || q.photo) ? `
                 <div class="q-desc">
                   <div class="descRow">
-                    <div>${q.question_description ? escapeHtml(q.question_description) : ""}</div>
+                    <div>${q.question_description ? richTextHtml(q.question_description) : ""}</div>
                     ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
                   </div>
                   ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
@@ -844,7 +880,7 @@
               ${(it.description || it.photo) ? `
                 <div class="q-desc">
                   <div class="descRow">
-                    <div>${it.description ? escapeHtml(it.description) : ""}</div>
+                    <div>${it.description ? richTextHtml(it.description) : ""}</div>
                     ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
                   </div>
                   ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
