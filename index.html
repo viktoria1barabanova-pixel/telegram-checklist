@@ -33,11 +33,12 @@
 
     .q-title { font-weight: 800; margin-bottom: 6px; }
     .q-desc { font-size: 13px; color: #666; margin-bottom: 10px; }
-.descRow { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
-.photoToggle { width:auto; min-width:36px; padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fff; color:#111; font-weight:900; cursor:pointer; }
-.photoWrap { margin-top:10px; display:none; }
-.photoWrap.open { display:block; }
-.photoWrap img { width:100%; border-radius:12px; display:block; }
+    .descRow { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .photoToggle { width:auto; min-width:36px; padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fff; color:#111; font-weight:900; cursor:pointer; }
+    .photoWrap { margin-top:10px; display:none; }
+    .photoWrap.open { display:block; }
+    .photoWrap img { width:100%; border-radius:12px; display:block; }
+
     .opt { display:flex; align-items:flex-start; gap:10px; padding: 10px; border-radius: 12px; border: 1px solid #eee; margin-top: 8px; }
     .opt input { margin-top: 3px; }
     .groupTitle { font-weight: 900; margin: 14px 0 8px; }
@@ -45,10 +46,42 @@
     .topbar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .progress { font-size: 12px; color:#666; }
     .warn { color: var(--danger); font-weight: 700; }
+
+    /* ===== thumbnails + modal for issue photos ===== */
+    .thumbGrid { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .thumb { width:74px; height:74px; border-radius:12px; object-fit:cover; border:1px solid #e7e7e7; cursor:pointer; background:#f5f5f5; }
+    .thumbBtn { width:auto; padding:6px 10px; border-radius:10px; border:1px solid #ddd; background:#fff; color:#111; cursor:pointer; }
+
+    .modalOverlay { position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:center; justify-content:center; padding:18px; z-index:9999; }
+    .modalOverlay.open { display:flex; }
+    .modalBox { max-width:980px; width:100%; max-height:92vh; background:#111; border-radius:18px; overflow:hidden; border:1px solid rgba(255,255,255,.12); }
+    .modalTop { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:rgba(0,0,0,.35); color:#fff; }
+    .modalTop .title { font-weight:800; font-size:14px; opacity:.9; }
+    .modalTop .actions { display:flex; gap:8px; }
+    .modalTop button { width:auto; padding:8px 10px; border-radius:12px; background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.14); }
+    .modalImgWrap { display:flex; align-items:center; justify-content:center; background:#111; }
+    .modalImg { max-width:100%; max-height:82vh; display:block; }
   </style>
 </head>
 <body>
   <div id="app" class="muted"></div>
+
+  <!-- Image modal -->
+  <div id="imgModal" class="modalOverlay" role="dialog" aria-modal="true">
+    <div class="modalBox">
+      <div class="modalTop">
+        <div class="title" id="imgModalTitle">Фото</div>
+        <div class="actions">
+          <button type="button" id="imgPrev">◀</button>
+          <button type="button" id="imgNext">▶</button>
+          <button type="button" id="imgClose">✕</button>
+        </div>
+      </div>
+      <div class="modalImgWrap">
+        <img id="imgModalEl" class="modalImg" alt="" />
+      </div>
+    </div>
+  </div>
 
   <script>
     // ====== 1) ПОДСТАВЬ СВОЙ URL (googleusercontent) ======
@@ -73,44 +106,88 @@
         return norm([u.last_name, u.first_name].filter(Boolean).join(" ")) || norm(u.username) || "";
       } catch { return ""; }
     };
-const driveToDirect = (url) => {
-  const u = norm(url);
-  if (!u) return "";
 
-  // Already direct or normal URL
-  if (!/^https?:\/\//i.test(u)) return "";
+    const driveToDirect = (url) => {
+      const u = norm(url);
+      if (!u) return "";
+      if (!/^https?:\/\//i.test(u)) return "";
 
-  // Google Drive patterns
-  // 1) https://drive.google.com/file/d/FILE_ID/view?... 
-  // 2) https://drive.google.com/open?id=FILE_ID
-  // 3) https://drive.google.com/uc?id=FILE_ID&export=download
-  let id = "";
+      let id = "";
+      const m1 = u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (m1 && m1[1]) id = m1[1];
 
-  const m1 = u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (m1 && m1[1]) id = m1[1];
+      if (!id) {
+        const m2 = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (m2 && m2[1]) id = m2[1];
+      }
 
-  if (!id) {
-    const m2 = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    if (m2 && m2[1]) id = m2[1];
-  }
+      if (id) return `https://lh3.googleusercontent.com/d/${id}=w1200`;
+      return u;
+    };
 
-  if (id) {
-    // Use googleusercontent image host. This is the most reliable for <img src> in browsers.
-    // Note: Drive file must be shared as “Anyone with the link”.
-    return `https://lh3.googleusercontent.com/d/${id}=w1200`;
-  }
-
-  // Not a Drive share link we recognize; return as-is
-  return u;
-};
-
-const normPhoto = (r) => {
-  const raw = norm(r.photo || r.photo_url || r.image || r.image_url);
-  if (!raw) return "";
-  return driveToDirect(raw);
-};
+    const normPhoto = (r) => {
+      const raw = norm(r.photo || r.photo_url || r.image || r.image_url);
+      if (!raw) return "";
+      return driveToDirect(raw);
+    };
 
     function render(html) { appEl.innerHTML = html; }
+
+    // ====== IMAGE MODAL (global, null-guards) ======
+    const modalEl = document.getElementById('imgModal');
+    const modalImg = document.getElementById('imgModalEl');
+    const modalTitle = document.getElementById('imgModalTitle');
+    const btnPrev = document.getElementById('imgPrev');
+    const btnNext = document.getElementById('imgNext');
+    const btnClose = document.getElementById('imgClose');
+
+    let MODAL_IMAGES = [];
+    let MODAL_INDEX = 0;
+
+    function modalRender() {
+      if (!modalImg || !modalTitle) return;
+      const src = MODAL_IMAGES[MODAL_INDEX] || '';
+      modalImg.src = src;
+      modalTitle.textContent = `Фото ${MODAL_INDEX + 1}/${MODAL_IMAGES.length}`;
+      if (btnPrev) btnPrev.disabled = MODAL_IMAGES.length <= 1;
+      if (btnNext) btnNext.disabled = MODAL_IMAGES.length <= 1;
+    }
+
+    function openImageModal(images, index = 0) {
+      if (!modalEl) return;
+      MODAL_IMAGES = (images || []).filter(Boolean);
+      MODAL_INDEX = Math.max(0, Math.min(index, MODAL_IMAGES.length - 1));
+      if (!MODAL_IMAGES.length) return;
+      modalEl.classList.add('open');
+      modalRender();
+    }
+
+    function closeImageModal() {
+      if (!modalEl) return;
+      modalEl.classList.remove('open');
+      if (modalImg) modalImg.src = '';
+      MODAL_IMAGES = [];
+      MODAL_INDEX = 0;
+    }
+
+    if (btnClose) btnClose.addEventListener('click', closeImageModal);
+    if (modalEl) modalEl.addEventListener('click', (e) => { if (e.target === modalEl) closeImageModal(); });
+    if (btnPrev) btnPrev.addEventListener('click', () => {
+      if (MODAL_IMAGES.length <= 1) return;
+      MODAL_INDEX = (MODAL_INDEX - 1 + MODAL_IMAGES.length) % MODAL_IMAGES.length;
+      modalRender();
+    });
+    if (btnNext) btnNext.addEventListener('click', () => {
+      if (MODAL_IMAGES.length <= 1) return;
+      MODAL_INDEX = (MODAL_INDEX + 1) % MODAL_IMAGES.length;
+      modalRender();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (!modalEl || !modalEl.classList.contains('open')) return;
+      if (e.key === 'Escape') closeImageModal();
+      if (e.key === 'ArrowLeft' && btnPrev) btnPrev.click();
+      if (e.key === 'ArrowRight' && btnNext) btnNext.click();
+    });
 
     function renderError(title, err) {
       render(`
@@ -124,22 +201,48 @@ const normPhoto = (r) => {
     }
 
     // ====== STATE ======
-let DATA = null;
+    let DATA = null;
 
-const STATE = {
-  city: "",
-  fio: "", // required outside Telegram
-  branchId: "",
-  enabledSections: [],
-  activeSection: "",
-  // answers
-  singleAnswers: {},   // key: section_code|question_id -> "ideal" | "acceptable" | "bad"
-  checkboxAnswers: {}, // key: groupKey -> Set(itemId)
-  isFinished: false,
-  lastResult: null, // сюда сохраним итог, чтобы показывать его и блокировать редактирование
-  issueNotes: {}, // key -> { text: string, photo: string(dataURL) }
-  noteOpen: {},   // key -> boolean (toggle for checkbox issue note UI)
-};
+    const STATE = {
+      city: "",
+      fio: "", // required outside Telegram
+      branchId: "",
+      enabledSections: [],
+      activeSection: "",
+      // answers
+      singleAnswers: {},   // key: section_code|question_id -> "ideal" | "acceptable" | "bad"
+      checkboxAnswers: {}, // key: groupKey -> Set(itemId)
+      isFinished: false,
+      lastResult: null, // сюда сохраним итог, чтобы показывать его и блокировать редактирование
+      issueNotes: {}, // key -> { text: string, photos: string[](dataURL) }
+      noteOpen: {},   // key -> boolean (toggle for checkbox issue note UI)
+    };
+
+    // ===== Notes migration (photo -> photos[]) =====
+    function safeEnsureNote(key) {
+      STATE.issueNotes[key] ??= { text: "", photos: [] };
+      const n = STATE.issueNotes[key];
+
+      // Backward compat: old drafts may have `photo` (string)
+      if (n.photo && (!Array.isArray(n.photos) || n.photos.length === 0)) {
+        n.photos = [n.photo];
+        delete n.photo;
+      }
+      if (!Array.isArray(n.photos)) n.photos = [];
+      if (typeof n.text !== "string") n.text = (n.text ?? "").toString();
+      return n;
+    }
+
+    function migrateAllNotes() {
+      try {
+        for (const k of Object.keys(STATE.issueNotes || {})) safeEnsureNote(k);
+      } catch {}
+    }
+
+    function notePhotos(key) {
+      const n = safeEnsureNote(key);
+      return Array.isArray(n.photos) ? n.photos.filter(Boolean) : [];
+    }
 
     function draftKey() { return `draft_v2_${STATE.branchId || "no_branch"}`; }
 
@@ -173,7 +276,6 @@ const STATE = {
         const d = JSON.parse(raw);
         const savedAt = Number(d.savedAt || 0);
         if (!savedAt || (Date.now() - savedAt) > DRAFT_TTL_MS) {
-          // Draft is expired (or invalid) — remove and ignore
           localStorage.removeItem(`draft_v2_${branchId}`);
           return null;
         }
@@ -181,31 +283,40 @@ const STATE = {
         const restored = {};
         for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
         d.checkboxAnswers = restored;
+
+        // migrate notes stored in draft (photo -> photos[])
+        d.issueNotes = d.issueNotes || {};
+        for (const k of Object.keys(d.issueNotes)) {
+          const n = d.issueNotes[k] || {};
+          if (n.photo && (!Array.isArray(n.photos) || n.photos.length === 0)) {
+            n.photos = [n.photo];
+            delete n.photo;
+          }
+          if (!Array.isArray(n.photos)) n.photos = [];
+          d.issueNotes[k] = n;
+        }
+
         return d;
       } catch { return null; }
     }
 
-function clearDraftForBranch(branchId) {
-  try {
-    if (!branchId) return;
-    localStorage.removeItem(`draft_v2_${branchId}`);
-  } catch {}
+    function clearDraftForBranch(branchId) {
+      try {
+        if (!branchId) return;
+        localStorage.removeItem(`draft_v2_${branchId}`);
+      } catch {}
 
-  STATE.singleAnswers = {};
-  STATE.checkboxAnswers = {};
-  STATE.activeSection = "";
-  STATE.isFinished = false;
-  STATE.lastResult = null;
-  STATE.fio = "";
-  STATE.issueNotes = {};
-  STATE.noteOpen = {};
-}
+      STATE.singleAnswers = {};
+      STATE.checkboxAnswers = {};
+      STATE.activeSection = "";
+      STATE.isFinished = false;
+      STATE.lastResult = null;
+      STATE.fio = "";
+      STATE.issueNotes = {};
+      STATE.noteOpen = {};
+    }
 
     // ====== DATA ADAPTER (твой формат таблицы) ======
-    // ожидаем DATA.checklist строки с колонками:
-    // section_code, question_id, question_text, question_description, question_type,
-    // ideal_answer, acceptable_answer, bad_answer, score, severity, exclude_from_max, active, sort_order
-
     function getActiveSections() {
       return (DATA.sections || [])
         .filter(s => toBool(s.active) && norm(s.section_code))
@@ -234,7 +345,7 @@ function clearDraftForBranch(branchId) {
       return raw.split(",").map(s => s.trim()).filter(Boolean);
     }
 
-    // SINGLE questions: group by section_code + question_id
+    // SINGLE questions: one row per question
     function buildSingles(rows, enabledSections) {
       const m = {}; // sec -> [{...}]
       for (const r of rows) {
@@ -245,14 +356,13 @@ function clearDraftForBranch(branchId) {
 
         const key = `${sec}|${norm(r.question_id)}`;
         m[sec] ??= [];
-        // one row per single question (в твоей таблице это 1 строка)
         m[sec].push({
           key,
           section_code: sec,
           question_id: norm(r.question_id),
           question_text: norm(r.question_text),
           question_description: norm(r.question_description),
-photo: normPhoto(r),
+          photo: normPhoto(r),
           ideal_answer: norm(r.ideal_answer),
           acceptable_answer: norm(r.acceptable_answer),
           bad_answer: norm(r.bad_answer),
@@ -268,41 +378,36 @@ photo: normPhoto(r),
       return m;
     }
 
-// CHECKBOX items: each row is a separate yes/no checkbox (no grouping)
-function buildCheckboxGroups(rows, enabledSections) {
-  const m = {}; // sec -> [item]
+    // CHECKBOX items: each row is a separate yes/no checkbox (no grouping)
+    function buildCheckboxGroups(rows, enabledSections) {
+      const m = {}; // sec -> [item]
+      for (const r of rows) {
+        const type = norm(r.question_type).toLowerCase();
+        if (type !== "checkbox") continue;
 
-  for (const r of rows) {
-    const type = norm(r.question_type).toLowerCase();
-    if (type !== "checkbox") continue;
+        const sec = norm(r.section_code);
+        if (!enabledSections.includes(sec)) continue;
 
-    const sec = norm(r.section_code);
-    if (!enabledSections.includes(sec)) continue;
-
-    const key = `${sec}|${norm(r.question_id)}`;
-    m[sec] ??= [];
-    m[sec].push({
-      key,
-      section_code: sec,
-      question_id: norm(r.question_id),
-      title: norm(r.question_text) || norm(r.question_id),
-      description: norm(r.question_description),
-      photo: normPhoto(r),
-      score: Number(r.score || 0),
-      severity: norm(r.severity),
-      exclude_from_max: toBool(r.exclude_from_max),
-      sort_order: Number(r.sort_order || 0)
-    });
-  }
-
-  for (const sec of Object.keys(m)) {
-    m[sec].sort((a,b)=>a.sort_order-b.sort_order || a.question_id.localeCompare(b.question_id));
-  }
-
-  return m;
-}
-
-    // ====== SORT SECTION CODES BY ORDER ======
+        const key = `${sec}|${norm(r.question_id)}`;
+        m[sec] ??= [];
+        m[sec].push({
+          key,
+          section_code: sec,
+          question_id: norm(r.question_id),
+          title: norm(r.question_text) || norm(r.question_id),
+          description: norm(r.question_description),
+          photo: normPhoto(r),
+          score: Number(r.score || 0),
+          severity: norm(r.severity),
+          exclude_from_max: toBool(r.exclude_from_max),
+          sort_order: Number(r.sort_order || 0)
+        });
+      }
+      for (const sec of Object.keys(m)) {
+        m[sec].sort((a,b)=>a.sort_order-b.sort_order || a.question_id.localeCompare(b.question_id));
+      }
+      return m;
+    }
 
     function sortSectionCodesByOrder(codes) {
       const map = sectionsByCode();
@@ -320,11 +425,9 @@ function buildCheckboxGroups(rows, enabledSections) {
     // ====== VALIDATION ======
     function validateAll(singlesBySec, checkboxGroupsBySec, enabledSections) {
       const sectionMap = sectionsByCode();
-
-      const missingSingles = new Set();     // keys of single questions
+      const missingSingles = new Set();
       const missingSections = new Set();
 
-      // singles
       for (const sec of enabledSections) {
         for (const q of (singlesBySec[sec] || [])) {
           if (!STATE.singleAnswers[q.key]) {
@@ -352,10 +455,10 @@ function buildCheckboxGroups(rows, enabledSections) {
       let earned = 0;
       let maxScore = 0;
 
-      const issuesBySection = {}; // sec -> array of strings
-      const addIssue = (sec, text) => {
+      const issuesBySection = {}; // sec -> array of { key, text }
+      const addIssue = (sec, item) => {
         issuesBySection[sec] ??= [];
-        issuesBySection[sec].push(text);
+        issuesBySection[sec].push(item);
       };
 
       // SINGLE scoring
@@ -370,14 +473,14 @@ function buildCheckboxGroups(rows, enabledSections) {
             earned += Number(q.score || 0);
           } else if (sel === "acceptable") {
             earned += Number(q.score || 0) / 2;
-            addIssue(sec, `${q.question_text}: ${q.acceptable_answer}`);
+            addIssue(sec, { key: q.key, text: `${q.question_text}: ${q.acceptable_answer}` });
           } else if (sel === "bad") {
-            addIssue(sec, `${q.question_text}: ${q.bad_answer}`);
+            addIssue(sec, { key: q.key, text: `${q.question_text}: ${q.bad_answer}` });
           }
         }
       }
 
-      // CHECKBOX scoring (each checkbox row is a yes/no item)
+      // CHECKBOX scoring
       const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
       for (const sec of enabledSections) {
         for (const it of (checkboxGroupsBySec[sec] || [])) {
@@ -386,7 +489,7 @@ function buildCheckboxGroups(rows, enabledSections) {
           if (checkedSet.has(it.key)) {
             earned += Number(it.score || 0);
           } else {
-            addIssue(sec, `${it.title}`);
+            addIssue(sec, { key: it.key, text: `${it.title}` });
           }
         }
       }
@@ -435,23 +538,50 @@ function buildCheckboxGroups(rows, enabledSections) {
             <div style="margin-top:12px">
               <div style="font-weight:900">${escapeHtml(secTitle(sec))}</div>
               <div class="muted" style="font-size:12px;margin-top:6px">
-                ${(result.issuesBySection[sec] || []).map(x => `• ${escapeHtml(x)}`).join('<br/>')}
+                ${(result.issuesBySection[sec] || []).map(it => {
+                  const key = (typeof it === "object" && it) ? (it.key || "") : "";
+                  const text = (typeof it === "object" && it) ? (it.text || "") : String(it || "");
+                  const note = key ? safeEnsureNote(key) : { text:"", photos:[] };
+                  const photos = key ? notePhotos(key) : [];
+                  const comment = norm(note.text);
+
+                  return `
+                    <div style="margin-top:8px">
+                      • ${escapeHtml(text)}
+                      ${comment ? `<div class="muted" style="margin-top:4px">Комментарий: ${escapeHtml(comment)}</div>` : ``}
+                      ${photos.length ? `
+                        <div class="thumbGrid">
+                          ${photos.map((src, idx) => `<img class="thumb" src="${escapeHtml(src)}" data-res-thumb="${escapeHtml(key)}" data-idx="${idx}" alt="" />`).join('')}
+                        </div>
+                      ` : ``}
+                    </div>
+                  `;
+                }).join('')}
               </div>
             </div>
           `).join('') : `<div class="muted">Ошибок нет ✅</div>`}
         </div>
 
         <div class="card">
-	  <button id="resetDraftResult" class="btnSecondary">Сбросить черновик этого филиала</button>
-	  <button id="backToStart" class="btnSecondary" style="margin-top:8px">Новая проверка</button>
-	</div>
+          <button id="resetDraftResult" class="btnSecondary">Сбросить черновик этого филиала</button>
+          <button id="backToStart" class="btnSecondary" style="margin-top:8px">Новая проверка</button>
+        </div>
       `);
 
-document.getElementById("resetDraftResult").onclick = () => {
-  clearDraftForBranch(STATE.branchId);
-  renderStart();
-};
-document.getElementById("backToStart").onclick = () => renderStart();
+      document.getElementById("resetDraftResult").onclick = () => {
+        clearDraftForBranch(STATE.branchId);
+        renderStart();
+      };
+      document.getElementById("backToStart").onclick = () => renderStart();
+
+      document.querySelectorAll('img.thumb[data-res-thumb]').forEach(img => {
+        img.addEventListener('click', () => {
+          const key = img.getAttribute('data-res-thumb');
+          const idx = Number(img.getAttribute('data-idx') || 0);
+          if (!key) return;
+          openImageModal(notePhotos(key), idx);
+        });
+      });
     }
 
     // ====== UI: START ======
@@ -533,7 +663,6 @@ document.getElementById("backToStart").onclick = () => renderStart();
         const defaultsRaw = branch ? enabledSectionsFromBranch(branch) : [];
         const allSections = getActiveSections().map(s => norm(s.section_code));
         const chosen = defaultsRaw.length ? defaultsRaw : allSections;
-        // IMPORTANT: tabs order must follow Sections.sort_order
         STATE.enabledSections = sortSectionCodesByOrder(chosen);
 
         // load draft if exists
@@ -548,9 +677,11 @@ document.getElementById("backToStart").onclick = () => renderStart();
           STATE.fio = d.fio || STATE.fio;
           STATE.issueNotes = d.issueNotes || {};
           STATE.noteOpen = d.noteOpen || {};
+          migrateAllNotes();
+        } else {
+          migrateAllNotes();
         }
 
-        // set active section
         if (!STATE.activeSection || !STATE.enabledSections.includes(STATE.activeSection)) {
           STATE.activeSection = STATE.enabledSections[0];
         }
@@ -566,11 +697,12 @@ document.getElementById("backToStart").onclick = () => renderStart();
 
     // ====== UI: SURVEY ======
     function renderSurvey() {
-if (STATE.isFinished && STATE.lastResult) {
-  const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
-  renderResultScreen(STATE.lastResult, branch);
-  return;
-}
+      if (STATE.isFinished && STATE.lastResult) {
+        const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
+        renderResultScreen(STATE.lastResult, branch);
+        return;
+      }
+
       const branch = getActiveBranches().find(b => norm(b.branch_id) === norm(STATE.branchId));
       const sectionMap = sectionsByCode();
 
@@ -594,10 +726,52 @@ if (STATE.isFinished && STATE.lastResult) {
         `;
       }
 
+      function ensureNote(key) { return safeEnsureNote(key); }
+
+      function noteBlockHtml(key, show) {
+        const n = ensureNote(key);
+        const hidden = show ? "" : "display:none";
+        const photos = notePhotos(key);
+
+        return `
+        <div class="noteBlock" data-note-block="${escapeHtml(key)}" style="margin-top:10px;${hidden}">
+          <label>Комментарий</label>
+          <textarea data-note-text="${escapeHtml(key)}" placeholder="Комментарий" style="width:100%;min-height:74px;padding:12px;border-radius:12px;border:1px solid #ddd;font-size:14px;resize:vertical">${escapeHtml(n.text || "")}</textarea>
+
+          <div style="margin-top:10px">
+            <label>Фото (можно несколько, до 5)</label>
+            <input type="file" accept="image/*" multiple data-note-file="${escapeHtml(key)}" style="width:100%" />
+          </div>
+
+          ${photos.length ? `
+            <div class="thumbGrid">
+              ${photos.map((src, idx) => `
+                <div>
+                  <img class="thumb" src="${escapeHtml(src)}" data-note-thumb="${escapeHtml(key)}" data-idx="${idx}" alt="" />
+                  <div style="margin-top:6px">
+                    <button type="button" class="btnSecondary thumbBtn" data-note-remove-one="${escapeHtml(key)}" data-idx="${idx}">Удалить</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : ""}
+        </div>
+      `;
+      }
+
+      function readImageAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
       function renderActiveSectionContent() {
         const sec = STATE.activeSection;
         const singles = singlesBySec[sec] || [];
-        const groups = checkboxGroupsBySec[sec] || [];
+        const items = checkboxGroupsBySec[sec] || [];
 
         let html = "";
 
@@ -608,14 +782,14 @@ if (STATE.isFinished && STATE.lastResult) {
             <div class="card question" data-single-key="${escapeHtml(q.key)}">
               <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
               ${(q.question_description || q.photo) ? `
-  <div class="q-desc">
-    <div class="descRow">
-      <div>${q.question_description ? escapeHtml(q.question_description) : ""}</div>
-      ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
-    </div>
-    ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
-  </div>
-` : ""}
+                <div class="q-desc">
+                  <div class="descRow">
+                    <div>${q.question_description ? escapeHtml(q.question_description) : ""}</div>
+                    ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
+                  </div>
+                  ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
+                </div>
+              ` : ""}
               ${(() => {
                 const opts = [
                   { value: "ideal", text: norm(q.ideal_answer) },
@@ -623,7 +797,6 @@ if (STATE.isFinished && STATE.lastResult) {
                   { value: "bad", text: norm(q.bad_answer) }
                 ].filter(o => o.text);
 
-                // If the previously selected value no longer exists (e.g., acceptable removed), clear it
                 const allowed = new Set(opts.map(o => o.value));
                 if (selected && !allowed.has(selected)) {
                   delete STATE.singleAnswers[q.key];
@@ -635,9 +808,7 @@ if (STATE.isFinished && STATE.lastResult) {
                 return opts.map(opt => `
                   <label class="opt">
                     <input type="radio" name="s_${escapeHtml(q.key)}" value="${escapeHtml(opt.value)}" ${selectedNow===opt.value?"checked":""}/>
-                    <div style="flex:1">
-                      <div>${escapeHtml(opt.text)}</div>
-                    </div>
+                    <div style="flex:1"><div>${escapeHtml(opt.text)}</div></div>
                   </label>
                 `).join("");
               })()}
@@ -650,45 +821,44 @@ if (STATE.isFinished && STATE.lastResult) {
           `;
         }
 
-// CHECKBOX ITEMS (each row = one yes/no item)
-const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
-for (const it of groups) {
-  const checked = checkedSet.has(it.key) ? "checked" : "";
+        // CHECKBOX ITEMS (each row = one yes/no item)
+        const checkedSet = STATE.checkboxAnswers["_items"] || new Set();
+        for (const it of items) {
+          const checked = checkedSet.has(it.key) ? "checked" : "";
 
-  html += `
-    <div class="card question" data-checkbox-key="${escapeHtml(it.key)}">
-      <div class="q-title">${escapeHtml(it.title)}</div>
+          html += `
+            <div class="card question" data-checkbox-key="${escapeHtml(it.key)}">
+              <div class="q-title">${escapeHtml(it.title)}</div>
 
-      ${(it.description || it.photo) ? `
-        <div class="q-desc">
-          <div class="descRow">
-            <div>${it.description ? escapeHtml(it.description) : ""}</div>
-            ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
-          </div>
-          ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
-        </div>
-      ` : ""}
+              ${(it.description || it.photo) ? `
+                <div class="q-desc">
+                  <div class="descRow">
+                    <div>${it.description ? escapeHtml(it.description) : ""}</div>
+                    ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
+                  </div>
+                  ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
+                </div>
+              ` : ""}
 
-      <label class="opt">
-        <input type="checkbox" data-checkbox-key="${escapeHtml(it.key)}" ${checked}/>
-        <div style="flex:1"><div>Есть</div></div>
-      </label>
-      ${(() => {
-        const isOk = checkedSet.has(it.key);
-        if (isOk) return "";
-        const open = !!STATE.noteOpen[it.key] || !!(STATE.issueNotes[it.key]?.text) || !!(STATE.issueNotes[it.key]?.photo);
-        return `
-          <button type="button" class="btnSecondary" data-note-toggle="${escapeHtml(it.key)}" style="margin-top:10px">Комментарий/фото</button>
-          ${noteBlockHtml(it.key, open)}
-        `;
-      })()}
-    </div>
-  `;
-}
+              <label class="opt">
+                <input type="checkbox" data-checkbox-key="${escapeHtml(it.key)}" ${checked}/>
+                <div style="flex:1"><div>Есть</div></div>
+              </label>
 
-        if (!html) {
-          html = `<div class="card muted">В этом разделе пока нет вопросов.</div>`;
+              ${(() => {
+                const isOk = checkedSet.has(it.key);
+                if (isOk) return "";
+                const open = !!STATE.noteOpen[it.key] || !!(STATE.issueNotes[it.key]?.text) || !!(STATE.issueNotes[it.key]?.photos?.length) || !!(STATE.issueNotes[it.key]?.photo);
+                return `
+                  <button type="button" class="btnSecondary" data-note-toggle="${escapeHtml(it.key)}" style="margin-top:10px">Комментарий/фото</button>
+                  ${noteBlockHtml(it.key, open)}
+                `;
+              })()}
+            </div>
+          `;
         }
+
+        if (!html) html = `<div class="card muted">В этом разделе пока нет вопросов.</div>`;
         return html;
       }
 
@@ -709,18 +879,18 @@ for (const it of groups) {
 
         <div id="content">${renderActiveSectionContent()}</div>
 
-<div class="card">
-  <button id="finish" disabled>Завершить</button>
-  <button id="resetDraft" class="btnSecondary" style="margin-top:8px">Сбросить черновик этого филиала</button>
-  <button id="back" class="btnSecondary" style="margin-top:8px">К выбору филиала</button>
-  <div class="muted" style="margin-top:10px;font-size:12px">Автосейв ✅ (черновик хранится 5 часов)</div>
-</div>
+        <div class="card">
+          <button id="finish" disabled>Завершить</button>
+          <button id="resetDraft" class="btnSecondary" style="margin-top:8px">Сбросить черновик этого филиала</button>
+          <button id="back" class="btnSecondary" style="margin-top:8px">К выбору филиала</button>
+          <div class="muted" style="margin-top:10px;font-size:12px">Автосейв ✅ (черновик хранится 5 часов)</div>
+        </div>
       `);
 
       const contentEl = document.getElementById("content");
       const finishBtn = document.getElementById("finish");
 
-      function updateProgressAndFinishState() {
+      function updateFinishState() {
         const v = validateAll(singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
         finishBtn.disabled = !v.ok;
       }
@@ -730,50 +900,20 @@ for (const it of groups) {
       }
 
       function paintErrors(v) {
-        // singles
         for (const key of v.missingSingles) {
           const el = document.querySelector(`[data-single-key="${CSS.escape(key)}"]`);
           if (el) el.classList.add("error");
         }
       }
 
-      function ensureNote(key) {
-        STATE.issueNotes[key] ??= { text: "", photo: "" };
-        return STATE.issueNotes[key];
-      }
-
-      function noteBlockHtml(key, show) {
-        const n = ensureNote(key);
-        const hidden = show ? "" : "display:none";
-        const hasPhoto = !!n.photo;
-
-        return `
-        <div class="noteBlock" data-note-block="${escapeHtml(key)}" style="margin-top:10px;${hidden}">
-          <label>Комментарий</label>
-          <textarea data-note-text="${escapeHtml(key)}" placeholder="Комментарий" style="width:100%;min-height:74px;padding:12px;border-radius:12px;border:1px solid #ddd;font-size:14px;resize:vertical">${escapeHtml(n.text || "")}</textarea>
-
-          <div style="margin-top:10px">
-            <label>Фото</label>
-            <input type="file" accept="image/*" data-note-file="${escapeHtml(key)}" style="width:100%" />
-          </div>
-
-          ${hasPhoto ? `
-            <div style="margin-top:10px">
-              <img src="${escapeHtml(n.photo)}" alt="" style="width:100%;border-radius:12px;display:block"/>
-              <button type="button" class="btnSecondary" data-note-remove="${escapeHtml(key)}" style="margin-top:8px">Удалить фото</button>
-            </div>
-          ` : ""}
-        </div>
-      `;
-      }
-
-      function readImageAsDataURL(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ""));
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+      function centerIntoView(el) {
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        } catch {
+          const rect = el.getBoundingClientRect();
+          const y = (window.pageYOffset || document.documentElement.scrollTop || 0) + rect.top - (window.innerHeight / 2) + (rect.height / 2);
+          window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+        }
       }
 
       function bindHandlers() {
@@ -789,110 +929,90 @@ for (const it of groups) {
             el.classList.add("active");
 
             contentEl.innerHTML = renderActiveSectionContent();
-            bindHandlers(); // rebind for new content
-            updateProgressAndFinishState();
+            bindHandlers();
+            updateFinishState();
           });
         });
 
         // single radios
         document.querySelectorAll('input[type="radio"]').forEach(inp => {
           inp.addEventListener("change", () => {
-            const name = inp.name; // s_<key>
-            const key = name.replace(/^s_/, "");
+            const key = inp.name.replace(/^s_/, "");
             STATE.singleAnswers[key] = inp.value;
             saveDraft();
-            // re-render current section so note block appears/disappears immediately
             contentEl.innerHTML = renderActiveSectionContent();
             bindHandlers();
-            updateProgressAndFinishState();
+            updateFinishState();
           });
         });
 
         // checkbox items
-// checkbox items (per-row yes/no)
-document.querySelectorAll('input[type="checkbox"][data-checkbox-key]').forEach(inp => {
-  inp.addEventListener("change", () => {
-    const key = inp.getAttribute("data-checkbox-key");
-    STATE.checkboxAnswers["_items"] ??= new Set();
+        document.querySelectorAll('input[type="checkbox"][data-checkbox-key]').forEach(inp => {
+          inp.addEventListener("change", () => {
+            const key = inp.getAttribute("data-checkbox-key");
+            STATE.checkboxAnswers["_items"] ??= new Set();
 
-    if (inp.checked) STATE.checkboxAnswers["_items"].add(key);
-    else STATE.checkboxAnswers["_items"].delete(key);
+            if (inp.checked) STATE.checkboxAnswers["_items"].add(key);
+            else STATE.checkboxAnswers["_items"].delete(key);
 
-    saveDraft();
-    contentEl.innerHTML = renderActiveSectionContent();
-    bindHandlers();
-    updateProgressAndFinishState();
-  });
-});
-
-// photo toggle (+) for both single + checkbox cards
-// When opening, smoothly scroll the image into the center of the screen
-function centerIntoView(el) {
-  try {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-  } catch {
-    const rect = el.getBoundingClientRect();
-    const y = (window.pageYOffset || document.documentElement.scrollTop || 0) + rect.top - (window.innerHeight / 2) + (rect.height / 2);
-    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-  }
-}
-
-document.querySelectorAll('[data-photo-toggle]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const k = btn.getAttribute('data-photo-toggle');
-    const wrap = document.querySelector(`[data-photo-wrap="${CSS.escape(k)}"]`);
-    if (!wrap) return;
-
-    const willOpen = !wrap.classList.contains('open');
-
-    if (willOpen) {
-      wrap.classList.add('open');
-      btn.textContent = '−';
-
-      const img = wrap.querySelector('img');
-      const target = img || wrap;
-
-      const doCenter = () => {
-        // wait for layout after display change
-        requestAnimationFrame(() => {
-          // small delay improves first-open centering on mobile/desktop
-          setTimeout(() => centerIntoView(target), 40);
+            saveDraft();
+            contentEl.innerHTML = renderActiveSectionContent();
+            bindHandlers();
+            updateFinishState();
+          });
         });
-      };
 
-      // If image hasn't loaded yet, center after it loads
-      if (img && !img.complete) {
-        img.addEventListener('load', doCenter, { once: true });
-        img.addEventListener('error', doCenter, { once: true });
-      }
+        // photo toggle (+) (question hint images)
+        document.querySelectorAll('[data-photo-toggle]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const k = btn.getAttribute('data-photo-toggle');
+            const wrap = document.querySelector(`[data-photo-wrap="${CSS.escape(k)}"]`);
+            if (!wrap) return;
 
-      // Also center immediately (covers cached images)
-      doCenter();
-    } else {
-      wrap.classList.remove('open');
-      btn.textContent = '+';
-    }
-  });
-});
+            const willOpen = !wrap.classList.contains('open');
 
-// image error handler (Drive permissions / broken links)
-document.querySelectorAll('.photoWrap img').forEach(img => {
-  img.addEventListener('error', () => {
-    // prevent duplicate messages
-    const wrap = img.closest('.photoWrap');
-    if (!wrap) return;
-    if (wrap.querySelector('[data-img-error]')) return;
+            if (willOpen) {
+              wrap.classList.add('open');
+              btn.textContent = '−';
 
-    img.style.display = 'none';
-    const msg = document.createElement('div');
-    msg.setAttribute('data-img-error', '1');
-    msg.className = 'muted';
-    msg.style.fontSize = '12px';
-    msg.style.marginTop = '8px';
-    msg.textContent = 'Фото недоступно — проверь доступ по ссылке (Drive: «Все у кого есть ссылка»).';
-    wrap.appendChild(msg);
-  }, { once: true });
-});
+              const img = wrap.querySelector('img');
+              const target = img || wrap;
+
+              const doCenter = () => {
+                requestAnimationFrame(() => {
+                  setTimeout(() => centerIntoView(target), 40);
+                });
+              };
+
+              if (img && !img.complete) {
+                img.addEventListener('load', doCenter, { once: true });
+                img.addEventListener('error', doCenter, { once: true });
+              }
+              doCenter();
+            } else {
+              wrap.classList.remove('open');
+              btn.textContent = '+';
+            }
+          });
+        });
+
+        // image error handler (Drive permissions / broken links)
+        document.querySelectorAll('.photoWrap img').forEach(img => {
+          img.addEventListener('error', () => {
+            const wrap = img.closest('.photoWrap');
+            if (!wrap) return;
+            if (wrap.querySelector('[data-img-error]')) return;
+
+            img.style.display = 'none';
+            const msg = document.createElement('div');
+            msg.setAttribute('data-img-error', '1');
+            msg.className = 'muted';
+            msg.style.fontSize = '12px';
+            msg.style.marginTop = '8px';
+            msg.textContent = 'Фото недоступно — проверь доступ по ссылке (Drive: «Все у кого есть ссылка»).';
+            wrap.appendChild(msg);
+          }, { once: true });
+        });
 
         // notes: toggle
         document.querySelectorAll('[data-note-toggle]').forEach(btn => {
@@ -916,52 +1036,74 @@ document.querySelectorAll('.photoWrap img').forEach(img => {
           });
         });
 
-        // notes: file upload
+        // notes: file upload (multiple)
         document.querySelectorAll('input[type="file"][data-note-file]').forEach(inp => {
           inp.addEventListener('change', async () => {
             const key = inp.getAttribute('data-note-file');
-            const file = inp.files && inp.files[0];
-            if (!key || !file) return;
+            const files = inp.files ? Array.from(inp.files) : [];
+            if (!key || !files.length) return;
 
-            if (file.size > 4 * 1024 * 1024) {
-              alert('Фото слишком большое. Выбери файл до 4 МБ.');
-              inp.value = '';
-              return;
+            const MAX_FILES = 5;
+            const MAX_SIZE = 4 * 1024 * 1024;
+
+            const n = ensureNote(key);
+            const remaining = Math.max(0, MAX_FILES - (n.photos?.length || 0));
+            const take = files.slice(0, remaining);
+
+            for (const file of take) {
+              if (file.size > MAX_SIZE) {
+                alert('Одно из фото слишком большое. Выбери файл до 4 МБ.');
+                continue;
+              }
+              try {
+                const dataUrl = await readImageAsDataURL(file);
+                n.photos.push(dataUrl);
+              } catch (e) {
+                alert('Не удалось прочитать одно из фото');
+              }
             }
 
-            try {
-              ensureNote(key).photo = await readImageAsDataURL(file);
-              STATE.noteOpen[key] = true;
-              saveDraft();
-              contentEl.innerHTML = renderActiveSectionContent();
-              bindHandlers();
-            } catch (e) {
-              alert('Не удалось прочитать фото');
-            }
-          });
-        });
-
-        // notes: remove photo
-        document.querySelectorAll('[data-note-remove]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const key = btn.getAttribute('data-note-remove');
-            if (!key) return;
-            ensureNote(key).photo = '';
+            inp.value = '';
+            STATE.noteOpen[key] = true;
             saveDraft();
             contentEl.innerHTML = renderActiveSectionContent();
             bindHandlers();
           });
         });
+
+        // notes: remove one photo
+        document.querySelectorAll('[data-note-remove-one]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-note-remove-one');
+            const idx = Number(btn.getAttribute('data-idx') || 0);
+            if (!key) return;
+            const n = ensureNote(key);
+            if (Array.isArray(n.photos) && idx >= 0 && idx < n.photos.length) n.photos.splice(idx, 1);
+            saveDraft();
+            contentEl.innerHTML = renderActiveSectionContent();
+            bindHandlers();
+          });
+        });
+
+        // notes: open modal from thumbnails
+        document.querySelectorAll('img.thumb[data-note-thumb]').forEach(img => {
+          img.addEventListener('click', () => {
+            const key = img.getAttribute('data-note-thumb');
+            const idx = Number(img.getAttribute('data-idx') || 0);
+            if (!key) return;
+            openImageModal(notePhotos(key), idx);
+          });
+        });
       }
 
       bindHandlers();
-      updateProgressAndFinishState();
+      updateFinishState();
 
       document.getElementById("back").onclick = () => renderStart();
-document.getElementById("resetDraft").onclick = () => {
-  clearDraftForBranch(STATE.branchId);
-  renderStart();
-};
+      document.getElementById("resetDraft").onclick = () => {
+        clearDraftForBranch(STATE.branchId);
+        renderStart();
+      };
 
       finishBtn.onclick = () => {
         clearErrors();
@@ -969,24 +1111,22 @@ document.getElementById("resetDraft").onclick = () => {
         if (!v.ok) {
           paintErrors(v);
           alert("Не заполнены ответы в разделах: " + v.missingSectionTitles.join(", "));
-          updateProgressAndFinishState();
+          updateFinishState();
           return;
         }
-const result = computeResult(rows, singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
-STATE.isFinished = true;
-STATE.lastResult = result;
-saveDraft();
-renderResultScreen(result, branch);
+
+        const result = computeResult(rows, singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
+        STATE.isFinished = true;
+        STATE.lastResult = result;
+        saveDraft();
+        renderResultScreen(result, branch);
       };
     }
 
     // ====== BOOT ======
     (async function boot() {
       try {
-        // Telegram ready
         if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready();
-
-        // Show start UI immediately while data loads
         renderStart(true);
 
         const res = await fetch(DATA_URL);
