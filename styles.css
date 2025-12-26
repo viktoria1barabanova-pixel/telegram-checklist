@@ -359,3 +359,66 @@ button:disabled {
   h1 { font-size: 34px; }
   .tab { padding: 9px 12px; }
 }
+
+/* ============================
+   Segmented answers (SINGLE)
+   ============================ */
+.segmented{
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:1fr;
+  gap:10px;
+  margin-top:10px;
+}
+
+.segInput{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+
+.segBtn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:12px 10px;
+  border-radius:16px;
+  border:1px solid rgba(17,24,39,.12);
+  background:rgba(255,255,255,.94);
+  font-weight:900;
+  cursor:pointer;
+  user-select:none;
+  min-height:44px;
+  box-shadow:0 10px 22px rgba(17,24,39,.06);
+  transition:transform .06s ease, box-shadow .15s ease, filter .15s ease, background .15s ease;
+}
+
+.segBtn:active{ transform:scale(.985); }
+
+/* soft colored borders */
+.segBtn.answer--bad{ border-color:rgba(214,69,69,.45); }
+.segBtn.answer--ok{ border-color:rgba(242,201,76,.55); }
+.segBtn.answer--good{ border-color:rgba(46,196,166,.45); }
+
+/* selected */
+.segBtn.is-active{
+  box-shadow:0 16px 42px rgba(17,24,39,.12);
+}
+
+.segBtn.answer--bad.is-active{
+  background:linear-gradient(135deg, rgba(214,69,69,.22), rgba(255,255,255,.94));
+}
+
+.segBtn.answer--ok.is-active{
+  background:linear-gradient(135deg, rgba(242,201,76,.26), rgba(255,255,255,.94));
+}
+
+.segBtn.answer--good.is-active{
+  background:linear-gradient(135deg, rgba(46,196,166,.20), rgba(255,255,255,.94));
+}
+
+@media (max-width: 420px){
+  .segmented{ gap:8px; }
+  .segBtn{ font-size:14px; padding:11px 8px; }
+}
