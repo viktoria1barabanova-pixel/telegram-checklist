@@ -254,7 +254,9 @@
           }
 
           const note = safeEnsureNote(key);
-          const photos = notePhotos(key);
+          const localPhotos = notePhotos(key);
+          const photosCount = localPhotos.length;
+          const photos = []; // IMPORTANT: do not send base64 photos to Apps Script (payload becomes too large)
           const comment = norm(note.text);
 
           out.push({
@@ -271,6 +273,7 @@
             score_earned,
             score_max,
             comment,
+            photos_count: photosCount,
             photos
           });
         }
@@ -301,6 +304,16 @@
         }
       } catch {}
 
+      // IMPORTANT: do not send base64 photos in issue_notes to avoid huge payloads.
+      const issueNotesLite = {};
+      try {
+        for (const [k, n] of Object.entries(STATE.issueNotes || {})) {
+          const nn = n || {};
+          const txt = typeof nn.text === 'string' ? nn.text : (nn.text ?? '').toString();
+          const cnt = Array.isArray(nn.photos) ? nn.photos.filter(Boolean).length : (nn.photo ? 1 : 0);
+          issueNotesLite[k] = { text: txt, photos_count: cnt };
+        }
+      } catch {}
       return {
         submission_id: uuid4(),
         submitted_at: nowIso,
@@ -316,7 +329,7 @@
         active_section: norm(STATE.activeSection),
         single_answers: { ...(STATE.singleAnswers || {}) },
         checkbox_answers: serialCheckbox,
-        issue_notes: { ...(STATE.issueNotes || {}) },
+        issue_notes: issueNotesLite,
         issues_by_section: result.issuesBySection || {},
         answers_flat: buildFlatAnswers(),
         meta: {
@@ -1037,7 +1050,7 @@
           <textarea data-note-text="${escapeHtml(key)}" placeholder="Комментарий" style="width:100%;min-height:74px;padding:12px;border-radius:12px;border:1px solid #ddd;font-size:14px;resize:vertical">${escapeHtml(n.text || "")}</textarea>
 
           <div style="margin-top:10px">
-            <label>Фото (можно несколько, до 5)</label>
+            <label>Фото (можно несколько, до 5) — сохраняются в черновике, в таблицу пока не выгружаются</label>
             <input type="file" accept="image/*" multiple data-note-file="${escapeHtml(key)}" style="width:100%" />
           </div>
 
