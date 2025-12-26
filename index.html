@@ -385,6 +385,53 @@
 
     function render(html) { appEl.innerHTML = html; }
 
+    // ====== JSONP loader (bypasses CORS for Apps Script) ======
+    function buildUrlWithParams(baseUrl, params) {
+      const u = new URL(baseUrl, window.location.origin);
+      Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, String(v)));
+      return u.toString();
+    }
+
+    function loadJsonp(url, { timeoutMs = 20000 } = {}) {
+      return new Promise((resolve, reject) => {
+        const cbName = `__cb_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+        const script = document.createElement('script');
+        let done = false;
+
+        const cleanup = () => {
+          if (script && script.parentNode) script.parentNode.removeChild(script);
+          try { delete window[cbName]; } catch {}
+        };
+
+        const timer = setTimeout(() => {
+          if (done) return;
+          done = true;
+          cleanup();
+          reject(new Error('JSONP timeout'));
+        }, timeoutMs);
+
+        window[cbName] = (data) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          cleanup();
+          resolve(data);
+        };
+
+        script.onerror = () => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          cleanup();
+          reject(new Error('JSONP load error'));
+        };
+
+        const finalUrl = buildUrlWithParams(url, { callback: cbName });
+        script.src = finalUrl;
+        document.body.appendChild(script);
+      });
+    }
+
     // ====== IMAGE MODAL (global, null-guards) ======
     const modalEl = document.getElementById('imgModal');
     const modalImg = document.getElementById('imgModalEl');
@@ -1399,9 +1446,8 @@
         if (window.Telegram && Telegram.WebApp) Telegram.WebApp.ready();
         renderStart(true);
 
-        const res = await fetch(DATA_URL);
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        DATA = await res.json();
+        // Use JSONP to bypass CORS on GitHub Pages
+        DATA = await loadJsonp(buildUrlWithParams(DATA_URL, { action: 'all' }));
 
         renderStart(false);
       } catch (e) {
