@@ -1044,16 +1044,33 @@
               }
               const selectedNow = STATE.singleAnswers[q.key] || "";
 
-              return opts
-                .map(
-                  (opt) => `
-                <label class="opt">
-                  <input type="radio" name="s_${escapeHtml(q.key)}" value="${escapeHtml(opt.value)}" ${selectedNow === opt.value ? "checked" : ""}/>
-                  <div style="flex:1"><div>${escapeHtml(opt.text)}</div></div>
-                </label>
-              `
-                )
-                .join("");
+              const classByValue = {
+                bad: "answer--bad",
+                acceptable: "answer--ok",
+                ideal: "answer--good",
+              };
+
+              return `
+                <div class="segmented" data-seg="${escapeHtml(q.key)}">
+                  ${opts.map((opt) => {
+                    const safeKey = q.key.replace(/[^a-zA-Z0-9_|-]/g, "_");
+                    const id = `r_${safeKey}_${opt.value}`;
+                    const active = selectedNow === opt.value ? "is-active" : "";
+                    const cls = classByValue[opt.value] || "";
+                    return `
+                      <input
+                        class="segInput"
+                        type="radio"
+                        id="${escapeHtml(id)}"
+                        name="s_${escapeHtml(q.key)}"
+                        value="${escapeHtml(opt.value)}"
+                        ${selectedNow === opt.value ? "checked" : ""}
+                      />
+                      <label class="segBtn ${cls} ${active}" for="${escapeHtml(id)}">${escapeHtml(opt.text)}</label>
+                    `;
+                  }).join("")}
+                </div>
+              `;
             })()}
             ${(() => {
               const selNow = STATE.singleAnswers[q.key] || "";
@@ -1201,6 +1218,17 @@
           const key = inp.name.replace(/^s_/, "");
           STATE.singleAnswers[key] = inp.value;
           saveDraft();
+
+          // highlight selected segment instantly
+          try {
+            const wrap = document.querySelector(`.segmented[data-seg="${CSS.escape(key)}"]`);
+            if (wrap) {
+              wrap.querySelectorAll('.segBtn').forEach((b) => b.classList.remove('is-active'));
+              const lbl = wrap.querySelector(`label[for="${CSS.escape(inp.id)}"]`);
+              if (lbl) lbl.classList.add('is-active');
+            }
+          } catch {}
+
           contentEl.innerHTML = renderActiveSectionContent();
           bindHandlers();
           updateFinishState();
