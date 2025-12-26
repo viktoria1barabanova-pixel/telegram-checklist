@@ -386,11 +386,6 @@
         .filter(r => toBool(r.active) && norm(r.section_code) && norm(r.question_id) && norm(r.question_type));
     }
 
-    function enabledSectionsFromBranch(branch) {
-      const raw = norm(branch.enabled_sections_default);
-      if (!raw) return [];
-      return raw.split(",").map(s => s.trim()).filter(Boolean);
-    }
 
     // SINGLE questions: one row per question
     function buildSingles(rows, enabledSections) {
