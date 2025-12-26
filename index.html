@@ -105,10 +105,13 @@
   </form>
 
   <script>
-    // ====== 1) ПОДСТАВЬ СВОЙ URL (googleusercontent) ======
-    const DATA_URL = "https://script.google.com/macros/s/AKfycbx-yZVSUsNaNKqNv_bJ8IFHgJ49vgJ3hK4qT4OI7nDKkyjXun1R1npEwxHbbs5M0UawSQ/exec";
-    // ====== 1b) URL для отправки ответов (тот же Apps Script WebApp) ======
-    const SUBMIT_URL = DATA_URL; // можно заменить на другой /exec при необходимости
+    // ====== URLs ======
+    // DATA_JSONP_URL: для чтения данных с GitHub Pages (JSONP, без CORS). 
+    // ВАЖНО: сюда ставим googleusercontent-URL (он лучше грузится как <script> в браузерах).
+    const DATA_JSONP_URL = "https://script.google.com/macros/s/AKfycbzUa5g1O9bvZPIJteHK0KAOXwq0QZkHuvwoODZIN8BWBzSXu7hbRFoGRi2kh5Y6ukp0Pg/exec";
+
+    // SUBMIT_URL: для отправки ответов (POST). Здесь оставляем /exec WebApp.
+    const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbx-yZVSUsNaNKqNv_bJ8IFHgJ49vgJ3hK4qT4OI7nDKkyjXun1R1npEwxHbbs5M0UawSQ/exec";
 
     // ====== ZONE THRESHOLDS (percent) ======
     const ZONE_RED_MAX = 70;    // 0..70 => red
@@ -1449,7 +1452,7 @@
         renderStart(true);
 
         // Use JSONP to bypass CORS on GitHub Pages
-        DATA = await loadJsonp(buildUrlWithParams(DATA_URL, { action: 'all' }));
+        DATA = await loadJsonp(buildUrlWithParams(DATA_JSONP_URL, { action: 'all' }));
 
         renderStart(false);
       } catch (e) {
