@@ -97,9 +97,18 @@
     </div>
   </div>
 
+  <!-- Hidden form submit (bypasses CORS) -->
+  <iframe name="submitFrame" id="submitFrame" style="display:none"></iframe>
+  <form id="submitForm" method="POST" target="submitFrame" style="display:none">
+    <input type="hidden" name="action" value="submit" />
+    <input type="hidden" name="payload" id="submitPayload" value="" />
+  </form>
+
   <script>
     // ====== 1) ПОДСТАВЬ СВОЙ URL (googleusercontent) ======
     const DATA_URL = "https://script.google.com/macros/s/AKfycbx-yZVSUsNaNKqNv_bJ8IFHgJ49vgJ3hK4qT4OI7nDKkyjXun1R1npEwxHbbs5M0UawSQ/exec";
+    // ====== 1b) URL для отправки ответов (тот же Apps Script WebApp) ======
+    const SUBMIT_URL = DATA_URL; // можно заменить на другой /exec при необходимости
 
     // ====== ZONE THRESHOLDS (percent) ======
     const ZONE_RED_MAX = 70;    // 0..70 => red
@@ -143,6 +152,202 @@
       });
 
       return s;
+    }
+
+    // ====== SUBMIT (form POST to Apps Script; works without CORS) ======
+    function uuid4() {
+      // lightweight uuid
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    function buildSubmitPayload(result) {
+      const nowIso = new Date().toISOString();
+
+      // Build flat answers (one row per question) for dashboards
+      function buildFlatAnswers() {
+        const out = [];
+
+        const sections = (DATA?.sections || []).filter(s => toBool(s.active) && norm(s.section_code));
+        const secTitleByCode = new Map(sections.map(s => [norm(s.section_code), norm(s.title) || norm(s.section_code)]));
+
+        const checklist = (DATA?.checklist || [])
+          .filter(r => toBool(r.active) && norm(r.section_code) && norm(r.question_id) && norm(r.question_type));
+
+        // Map question key -> raw row (helps to get texts)
+        const rowByKey = new Map();
+        for (const r of checklist) {
+          const key = `${norm(r.section_code)}|${norm(r.question_id)}`;
+          if (!rowByKey.has(key)) rowByKey.set(key, r);
+        }
+
+        const checked = new Set((() => {
+          const x = STATE.checkboxAnswers && STATE.checkboxAnswers["_items"];
+          if (!x) return [];
+          return Array.isArray(x) ? x : [...x];
+        })().map(String));
+
+        const allKeys = [];
+        for (const r of checklist) {
+          const key = `${norm(r.section_code)}|${norm(r.question_id)}`;
+          allKeys.push(key);
+        }
+
+        for (const key of allKeys) {
+          const r = rowByKey.get(key);
+          if (!r) continue;
+
+          const section_code = norm(r.section_code);
+          const section_title = secTitleByCode.get(section_code) || section_code;
+          const question_id = norm(r.question_id);
+          const question_type = norm(r.question_type).toLowerCase();
+
+          const question_text = norm(r.question_text) || question_id;
+          const severity = norm(r.severity);
+          const score_max = Number(r.score || 0);
+
+          let answer_key = "";
+          let answer_text = "";
+          let score_earned = 0;
+          let is_issue = false;
+
+          if (question_type === 'single' || question_type === 'radio') {
+            answer_key = norm(STATE.singleAnswers?.[key]);
+            const ideal = norm(r.ideal_answer);
+            const ok = norm(r.acceptable_answer);
+            const bad = norm(r.bad_answer);
+
+            if (answer_key === 'ideal') {
+              answer_text = ideal;
+              score_earned = score_max;
+              is_issue = false;
+            } else if (answer_key === 'acceptable') {
+              answer_text = ok;
+              score_earned = score_max / 2;
+              is_issue = true;
+            } else if (answer_key === 'bad') {
+              answer_text = bad;
+              score_earned = 0;
+              is_issue = true;
+            } else {
+              // unanswered (should not happen after validation)
+              answer_text = '';
+              score_earned = 0;
+              is_issue = true;
+            }
+          } else if (question_type === 'checkbox') {
+            const isChecked = checked.has(key);
+            answer_key = isChecked ? 'checked' : 'unchecked';
+            answer_text = isChecked ? 'Есть' : 'Нет';
+            score_earned = isChecked ? score_max : 0;
+            is_issue = !isChecked;
+          } else {
+            // unknown type
+            continue;
+          }
+
+          const note = safeEnsureNote(key);
+          const photos = notePhotos(key);
+          const comment = norm(note.text);
+
+          out.push({
+            key,
+            section_code,
+            section_title,
+            question_id,
+            question_type,
+            question_text,
+            severity,
+            answer_key,
+            answer_text,
+            is_issue,
+            score_earned,
+            score_max,
+            comment,
+            photos
+          });
+        }
+
+        return out;
+      }
+
+      // Serialize checkbox Sets
+      const serialCheckbox = {};
+      for (const [k, set] of Object.entries(STATE.checkboxAnswers || {})) {
+        serialCheckbox[k] = Array.isArray(set) ? set : [...(set || [])];
+      }
+
+      const branch = (DATA?.branches || []).find(b => norm(b.branch_id) === norm(STATE.branchId)) || null;
+
+      let tg = null;
+      try {
+        if (IS_TG && Telegram?.WebApp) {
+          const u = Telegram.WebApp?.initDataUnsafe?.user;
+          tg = {
+            is_tg: true,
+            init_data: Telegram.WebApp?.initData || '',
+            user_id: u?.id ?? null,
+            username: u?.username ?? null,
+            first_name: u?.first_name ?? null,
+            last_name: u?.last_name ?? null
+          };
+        }
+      } catch {}
+
+      return {
+        submission_id: uuid4(),
+        submitted_at: nowIso,
+        fio: norm(STATE.fio),
+        city: norm(STATE.city),
+        branch_id: norm(STATE.branchId),
+        branch_name: norm(branch?.branch_name || ''),
+        zone: result.zone,
+        percent: result.percent,
+        earned: result.earned,
+        max_score: result.maxScore,
+        enabled_sections: (STATE.enabledSections || []).slice(),
+        active_section: norm(STATE.activeSection),
+        single_answers: { ...(STATE.singleAnswers || {}) },
+        checkbox_answers: serialCheckbox,
+        issue_notes: { ...(STATE.issueNotes || {}) },
+        issues_by_section: result.issuesBySection || {},
+        answers_flat: buildFlatAnswers(),
+        meta: {
+          app_version: 'v2',
+          user_agent: navigator.userAgent,
+          tz_offset_min: new Date().getTimezoneOffset()
+        },
+        tg
+      };
+    }
+
+    function submitToSheet(payloadObj) {
+      return new Promise((resolve, reject) => {
+        try {
+          const form = document.getElementById('submitForm');
+          const payloadInput = document.getElementById('submitPayload');
+          const frame = document.getElementById('submitFrame');
+          if (!form || !payloadInput || !frame) throw new Error('Submit form not found');
+
+          form.action = SUBMIT_URL;
+          payloadInput.value = JSON.stringify(payloadObj);
+
+          // We can't reliably read the response from iframe across domains.
+          // So we treat "load" as success. Apps Script will still receive the payload.
+          const onLoad = () => {
+            frame.removeEventListener('load', onLoad);
+            resolve(true);
+          };
+          frame.addEventListener('load', onLoad);
+
+          form.submit();
+        } catch (e) {
+          reject(e);
+        }
+      });
     }
 
     const IS_TG = !!(window.Telegram && Telegram.WebApp);
@@ -921,6 +1126,7 @@
 
         <div class="card">
           <button id="finish" disabled>Завершить</button>
+          <div id="submitStatus" class="muted" style="margin-top:8px;font-size:12px"></div>
           <button id="resetDraft" class="btnSecondary" style="margin-top:8px">Сбросить черновик этого филиала</button>
           <button id="back" class="btnSecondary" style="margin-top:8px">К выбору филиала</button>
           <div class="muted" style="margin-top:10px;font-size:12px">Автосейв ✅ (черновик хранится 5 часов)</div>
@@ -929,6 +1135,11 @@
 
       const contentEl = document.getElementById("content");
       const finishBtn = document.getElementById("finish");
+      const submitStatusEl = document.getElementById('submitStatus');
+      function setSubmitStatus(msg) {
+        if (!submitStatusEl) return;
+        submitStatusEl.textContent = msg || '';
+      }
 
       function updateFinishState() {
         const v = validateAll(singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
@@ -1145,7 +1356,7 @@
         renderStart();
       };
 
-      finishBtn.onclick = () => {
+      finishBtn.onclick = async () => {
         clearErrors();
         const v = validateAll(singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
         if (!v.ok) {
@@ -1155,11 +1366,30 @@
           return;
         }
 
+        // Compute and lock result
         const result = computeResult(rows, singlesBySec, checkboxGroupsBySec, STATE.enabledSections);
-        STATE.isFinished = true;
-        STATE.lastResult = result;
-        saveDraft();
-        renderResultScreen(result, branch);
+
+        // Submit to Sheets
+        try {
+          finishBtn.disabled = true;
+          setSubmitStatus('Отправляю результаты…');
+
+          const payload = buildSubmitPayload(result);
+          await submitToSheet(payload);
+
+          setSubmitStatus('Готово ✅');
+
+          STATE.isFinished = true;
+          STATE.lastResult = result;
+          saveDraft();
+          renderResultScreen(result, branch);
+        } catch (e) {
+          // If submission fails, keep user on the form and allow retry
+          finishBtn.disabled = false;
+          setSubmitStatus('Не удалось отправить. Проверь интернет и попробуй ещё раз.');
+          console.error(e);
+          alert('Не удалось отправить результаты в таблицу. Попробуй ещё раз.');
+        }
       };
     }
 
