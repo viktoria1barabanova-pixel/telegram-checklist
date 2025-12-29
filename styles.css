@@ -132,8 +132,6 @@ textarea:focus {
   box-shadow: 0 0 0 4px rgba(232, 90, 138, 0.12);
 }
 
-textarea { min-height: 92px; resize: vertical; }
-
 /* Make selects look “app-like” */
 select {
   -webkit-appearance: none;
@@ -142,8 +140,8 @@ select {
     linear-gradient(45deg, transparent 50%, rgba(18, 19, 26, 0.55) 50%),
     linear-gradient(135deg, rgba(18, 19, 26, 0.55) 50%, transparent 50%);
   background-position:
-    calc(100% - 18px) calc(50% - 3px),
-    calc(100% - 12px) calc(50% - 3px);
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
 }
@@ -202,8 +200,24 @@ select {
 
 /* When we use the new header layout (.qHead), tighten spacing
    so the photo + button sits nicely to the right */
-.qHead .q-title { margin-bottom: 4px; }
-.qHead .q-desc  { margin-bottom: 0; }
+.qHead{
+  display:flex;
+  align-items:flex-start;
+  gap: 12px;
+}
+
+.qHeadMain{
+  flex: 1;
+  min-width: 0; /* чтобы перенос текста работал корректно */
+}
+
+.qHeadAside{
+  flex: 0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  padding-top: 2px;
+}
 
 .q-desc a {
   color: var(--accent);
@@ -269,17 +283,19 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  border: 1px solid rgba(232, 90, 138, 0.30);
-  background: linear-gradient(135deg, rgba(232, 90, 138, 0.92), rgba(232, 90, 138, 0.70));
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: none;
+
+  background: linear-gradient(135deg, rgba(232, 90, 138, 0.96), rgba(232, 90, 138, 0.72));
   color: #fff;
   font-weight: 1000;
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
+
+  box-shadow: 0 14px 36px rgba(232, 90, 138, 0.26);
   cursor: pointer;
-  box-shadow: 0 14px 36px rgba(232, 90, 138, 0.22);
   transition: transform .06s ease, filter .15s ease;
   flex: 0 0 auto;
 }
@@ -288,7 +304,7 @@ button:disabled {
 .photoToggle:active { transform: scale(.97); }
 
 /* If button has no visible text, force a plus icon */
-.photoToggle:empty::before {
+.photoToggle::before {
   content: "+";
 }
 
@@ -367,6 +383,13 @@ button:disabled {
 
 .modalOverlay.open { display: flex; }
 
+/* Hide modal buttons when overlay is closed */
+.modalOverlay:not(.open) #imgClose,
+.modalOverlay:not(.open) #imgPrev,
+.modalOverlay:not(.open) #imgNext {
+  display: none;
+}
+
 .modalBox {
   max-width: 920px;
   width: 100%;
@@ -431,128 +454,6 @@ button:disabled {
 .segBtn.answer--ok{ border-color:rgba(242,201,76,.55); }
 .segBtn.answer--good{ border-color:rgba(46,196,166,.45); }
 
-/* selected */
-.segBtn.is-active{
-  transform: translateY(-1px);
-  box-shadow: 0 20px 50px rgba(17,24,39,.16);
-  border-width: 2px;
-}
-
-.segBtn.is-active::after{
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: 18px;
-  pointer-events: none;
-  box-shadow: 0 0 0 4px rgba(18,19,26,.04);
-}
-
-.segBtn.answer--bad.is-active{
-  background: linear-gradient(135deg, rgba(214,69,69,.32), rgba(255,255,255,.96));
-  border-color: rgba(214,69,69,.70);
-  color: #3A0B0B;
-}
-
-.segBtn.answer--ok.is-active{
-  background: linear-gradient(135deg, rgba(242,201,76,.36), rgba(255,255,255,.96));
-  border-color: rgba(242,201,76,.82);
-  color: #2E2200;
-}
-
-.segBtn.answer--good.is-active{
-  background: linear-gradient(135deg, rgba(46,196,166,.30), rgba(255,255,255,.96));
-  border-color: rgba(46,196,166,.72);
-  color: #05302A;
-}
-
-@media (max-width: 420px){
-  .segmented{ gap:8px; }
-  .segBtn{ font-size:14px; padding:11px 8px; }
-}
-
-/* ============================
-   Question header layout (title/desc + photo toggle on the right)
-   ============================ */
-.qHead{
-  display:flex;
-  align-items:flex-start;
-  gap: 10px;
-}
-
-.qHeadMain{
-  flex: 1;
-  min-width: 0; /* чтобы перенос текста работал корректно */
-  padding-right: 6px;
-}
-
-.qHeadAside{
-  flex: 0 0 auto;
-  display:flex;
-  align-items:flex-start;
-  justify-content: flex-end;
-  padding-top: 2px;
-}
-
-/* ============================
-   Compact photo hint label
-   ============================ */
-.photoHint{
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--muted);
-  margin-top: 6px;
-}
-
-/* ============================
-   Comment field (auto-grow, compact)
-   ============================ */
-.commentWrap{
-  margin-top: 10px;
-}
-
-.commentLabel{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  font-size:12px;
-  font-weight:800;
-  color: var(--muted);
-  margin: 8px 2px 6px;
-}
-
-textarea.comment{
-  width: 100%;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.92);
-  padding: 10px 12px;
-
-  /* компактно по умолчанию (≈1 строка), но можно писать больше */
-  min-height: 42px;
-
-  /* максимум около 3 строк, дальше появляется скролл */
-  max-height: 96px;
-  overflow-y: auto;
-
-  resize: none;
-  font-size: 15px;
-  line-height: 1.25;
-}
-
-textarea.comment::-webkit-scrollbar{
-  width: 8px;
-}
-textarea.comment::-webkit-scrollbar-thumb{
-  background: rgba(17, 24, 39, 0.18);
-  border-radius: 999px;
-}
-
-/* Optional: make placeholder less heavy */
-textarea.comment::placeholder{
-  color: rgba(107, 114, 128, 0.75);
-}
-
 /* ============================
    Stronger selected state for segmented answers
    ============================ */
@@ -584,4 +485,59 @@ textarea.comment::placeholder{
 .segBtn.answer--good.is-active{
   background: linear-gradient(135deg, rgba(46,196,166,.42), rgba(255,255,255,.98));
   border-color: rgba(46,196,166,.86);
+}
+
+@media (max-width: 420px){
+  .segmented{ gap:8px; }
+  .segBtn{ font-size:14px; padding:11px 8px; }
+}
+
+/* ============================
+   Comment field (auto-grow, compact)
+   ============================ */
+.commentWrap{
+  margin-top: 10px;
+}
+
+.commentLabel{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:12px;
+  font-weight:800;
+  color: var(--muted);
+  margin: 8px 2px 6px;
+}
+
+textarea.comment{
+  width: 100%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+
+  /* компактно по умолчанию (≈1 строка) */
+  min-height: 40px;
+
+  /* максимум примерно 2 строки, дальше появляется скролл */
+  max-height: 72px;
+  overflow-y: auto;
+
+  resize: none;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+textarea.comment::-webkit-scrollbar{
+  width: 8px;
+}
+textarea.comment::-webkit-scrollbar-thumb{
+  background: rgba(17, 24, 39, 0.18);
+  border-radius: 999px;
+}
+
+/* Optional: make placeholder less heavy */
+textarea.comment::placeholder{
+  color: rgba(107, 114, 128, 0.75);
 }
