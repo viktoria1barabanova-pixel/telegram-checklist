@@ -122,6 +122,9 @@ textarea {
   background: rgba(255, 255, 255, 0.92);
 }
 
+/* Default textarea (used редко). Комментарии к вопросам настраиваем отдельным классом `.comment` ниже */
+textarea { min-height: 92px; resize: vertical; }
+
 select:focus,
 input[type="text"]:focus,
 textarea:focus {
@@ -261,9 +264,9 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
   border: 1px solid rgba(232, 90, 138, 0.28);
   background: linear-gradient(135deg, rgba(232, 90, 138, 0.92), rgba(232, 90, 138, 0.70));
   color: #fff;
@@ -459,4 +462,114 @@ button:disabled {
 @media (max-width: 420px){
   .segmented{ gap:8px; }
   .segBtn{ font-size:14px; padding:11px 8px; }
+}
+
+/* ============================
+   Question header layout (title/desc + photo toggle on the right)
+   ============================ */
+.qHead{
+  display:flex;
+  align-items:flex-start;
+  gap: 10px;
+}
+
+.qHeadMain{
+  flex: 1;
+  min-width: 0; /* чтобы перенос текста работал корректно */
+  padding-right: 6px;
+}
+
+.qHeadAside{
+  flex: 0 0 auto;
+  display:flex;
+  align-items:flex-start;
+  padding-top: 2px;
+}
+
+/* ============================
+   Compact photo hint label
+   ============================ */
+.photoHint{
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* ============================
+   Comment field (auto-grow, compact)
+   ============================ */
+.commentWrap{
+  margin-top: 10px;
+}
+
+.commentLabel{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:12px;
+  font-weight:800;
+  color: var(--muted);
+  margin: 8px 2px 6px;
+}
+
+textarea.comment{
+  width: 100%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+
+  /* 1 строка по умолчанию */
+  min-height: 44px;
+
+  /* максимум ~3 строки, дальше скролл */
+  max-height: 92px;
+  overflow-y: auto;
+
+  resize: none;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+textarea.comment::-webkit-scrollbar{
+  width: 8px;
+}
+textarea.comment::-webkit-scrollbar-thumb{
+  background: rgba(17, 24, 39, 0.18);
+  border-radius: 999px;
+}
+
+/* ============================
+   Stronger selected state for segmented answers
+   ============================ */
+.segBtn.is-active{
+  transform: translateY(-1px);
+  box-shadow: 0 22px 60px rgba(17,24,39,.22);
+  border-width: 2px;
+}
+
+.segBtn.is-active::after{
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 20px;
+  pointer-events: none;
+  box-shadow: 0 0 0 5px rgba(18,19,26,.05);
+}
+
+.segBtn.answer--bad.is-active{
+  background: linear-gradient(135deg, rgba(214,69,69,.44), rgba(255,255,255,.98));
+  border-color: rgba(214,69,69,.86);
+}
+
+.segBtn.answer--ok.is-active{
+  background: linear-gradient(135deg, rgba(242,201,76,.48), rgba(255,255,255,.98));
+  border-color: rgba(242,201,76,.92);
+}
+
+.segBtn.answer--good.is-active{
+  background: linear-gradient(135deg, rgba(46,196,166,.42), rgba(255,255,255,.98));
+  border-color: rgba(46,196,166,.86);
 }
