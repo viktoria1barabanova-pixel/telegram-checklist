@@ -946,16 +946,15 @@
       const n = ensureNote(key);
       const hidden = show ? "" : "display:none";
       const photos = notePhotos(key);
-
       return `
       <div class="noteBlock" data-note-block="${escapeHtml(key)}" style="margin-top:10px;${hidden}">
-        <label>Комментарий</label>
-        <textarea data-note-text="${escapeHtml(key)}" placeholder="Комментарий" style="width:100%;min-height:74px;padding:12px;border-radius:12px;border:1px solid #ddd;font-size:14px;resize:vertical">${escapeHtml(
-          n.text || ""
-        )}</textarea>
+        <div class="commentWrap">
+          <div class="commentLabel"><span>Комментарий</span></div>
+          <textarea class="comment" data-note-text="${escapeHtml(key)}" placeholder="Коротко: что не так?">${escapeHtml(n.text || "")}</textarea>
+        </div>
 
         <div style="margin-top:10px">
-          <label>Фото (можно несколько, до ${MAX_PHOTOS_PER_ISSUE || 5}) — сохраняются в черновике, в таблицу пока не выгружаются</label>
+          <div class="photoHint">Фото (можно несколько, до ${MAX_PHOTOS_PER_ISSUE || 5})</div>
           <input type="file" accept="image/*" multiple data-note-file="${escapeHtml(key)}" style="width:100%" />
         </div>
 
@@ -1016,20 +1015,16 @@
         const selected = STATE.singleAnswers[q.key] || "";
         html += `
           <div class="card question" data-single-key="${escapeHtml(q.key)}">
-            <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
-            ${
-              q.question_description || q.photo
-                ? `
-              <div class="q-desc">
-                <div class="descRow">
-                  <div>${q.question_description ? richTextHtml(q.question_description) : ""}</div>
-                  ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
-                </div>
-                ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
+            <div class="qHead">
+              <div class="qHeadMain">
+                <div class="q-title">${escapeHtml(q.question_text || q.question_id)}</div>
+                ${q.question_description ? `<div class="q-desc">${richTextHtml(q.question_description)}</div>` : ""}
               </div>
-            `
-                : ""
-            }
+              <div class="qHeadAside">
+                ${q.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(q.key)}">+</button>` : ""}
+              </div>
+            </div>
+            ${q.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(q.key)}"><img src="${escapeHtml(q.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
             ${(() => {
               const opts = [
                 { value: "ideal", text: norm(q.ideal_answer) },
@@ -1087,21 +1082,16 @@
         const checked = checkedSet.has(it.key) ? "checked" : "";
         html += `
           <div class="card question" data-checkbox-key="${escapeHtml(it.key)}">
-            <div class="q-title">${escapeHtml(it.title)}</div>
-
-            ${
-              it.description || it.photo
-                ? `
-              <div class="q-desc">
-                <div class="descRow">
-                  <div>${it.description ? richTextHtml(it.description) : ""}</div>
-                  ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
-                </div>
-                ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
+            <div class="qHead">
+              <div class="qHeadMain">
+                <div class="q-title">${escapeHtml(it.title)}</div>
+                ${it.description ? `<div class="q-desc">${richTextHtml(it.description)}</div>` : ""}
               </div>
-            `
-                : ""
-            }
+              <div class="qHeadAside">
+                ${it.photo ? `<button type="button" class="photoToggle" data-photo-toggle="${escapeHtml(it.key)}">+</button>` : ""}
+              </div>
+            </div>
+            ${it.photo ? `<div class="photoWrap" data-photo-wrap="${escapeHtml(it.key)}"><img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer"/></div>` : ""}
 
             <label class="opt">
               <input type="checkbox" data-checkbox-key="${escapeHtml(it.key)}" ${checked}/>
@@ -1296,11 +1286,26 @@
 
       // note text
       document.querySelectorAll("textarea[data-note-text]").forEach((el) => {
+        const autoSize = () => {
+          try {
+            // reset then grow
+            el.style.height = "auto";
+            const maxH = parseInt(getComputedStyle(el).maxHeight || "92", 10) || 92;
+            const next = Math.min(el.scrollHeight, maxH);
+            el.style.height = next + "px";
+            el.style.overflowY = el.scrollHeight > maxH ? "auto" : "hidden";
+          } catch {}
+        };
+
+        // initial size for existing draft text
+        autoSize();
+
         el.addEventListener("input", () => {
           const key = el.getAttribute("data-note-text");
           if (!key) return;
           ensureNote(key).text = el.value;
           saveDraft();
+          autoSize();
         });
       });
 
