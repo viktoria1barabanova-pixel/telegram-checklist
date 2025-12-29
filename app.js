@@ -151,16 +151,37 @@
   function submitToSheet(payloadObj) {
     return new Promise((resolve, reject) => {
       try {
-        const form = document.getElementById("submitForm");
-        const payloadInput = document.getElementById("submitPayload");
-        const frame = document.getElementById("submitFrame");
-        if (!form || !payloadInput || !frame) throw new Error("Submit form not found");
+        // Some deployments may miss the hidden <form>/<iframe> in index.html.
+        // Create them on the fly to prevent "Submit form not found".
+        let frame = document.getElementById("submitFrame");
+        if (!frame) {
+          frame = document.createElement("iframe");
+          frame.id = "submitFrame";
+          frame.name = "submitFrame";
+          frame.style.display = "none";
+          document.body.appendChild(frame);
+        }
 
-        // Apps Script doPost() expects action=submit (either as query param or form field)
-        const actionUrl = buildUrlWithParams(SUBMIT_URL, { action: "submit" });
-        form.action = actionUrl;
+        let form = document.getElementById("submitForm");
+        if (!form) {
+          form = document.createElement("form");
+          form.id = "submitForm";
+          form.method = "POST";
+          form.target = "submitFrame";
+          form.style.display = "none";
+          document.body.appendChild(form);
+        } else {
+          form.method = "POST";
+          form.target = "submitFrame";
+        }
 
-        // Ensure payload field has a name (so it is sent as a form field)
+        let payloadInput = document.getElementById("submitPayload");
+        if (!payloadInput) {
+          payloadInput = document.createElement("input");
+          payloadInput.type = "hidden";
+          payloadInput.id = "submitPayload";
+          form.appendChild(payloadInput);
+        }
         if (!payloadInput.getAttribute("name")) payloadInput.setAttribute("name", "payload");
         payloadInput.value = JSON.stringify(payloadObj);
 
@@ -175,24 +196,31 @@
         }
         actionInput.value = "submit";
 
+        // Apps Script doPost() expects action=submit (either as query param or form field)
+        const actionUrl = buildUrlWithParams(SUBMIT_URL, { action: "submit" });
+        form.action = actionUrl;
+
+        let finished = false;
+        const cleanup = () => {
+          try { frame.removeEventListener("load", onLoad); } catch {}
+          try { clearTimeout(timer); } catch {}
+        };
+
         const onLoad = () => {
-          frame.removeEventListener("load", onLoad);
+          if (finished) return;
+          finished = true;
+          cleanup();
           resolve(true);
         };
+
         frame.addEventListener("load", onLoad);
 
-        // Failsafe: if Apps Script blocks/doesn't respond, show a clearer error
-        const t = setTimeout(() => {
-          try { frame.removeEventListener("load", onLoad); } catch {}
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          cleanup();
           reject(new Error("Submit timeout (iframe did not load)"));
         }, 20000);
-
-        const onLoad2 = () => {
-          clearTimeout(t);
-          onLoad();
-        };
-        frame.removeEventListener("load", onLoad);
-        frame.addEventListener("load", onLoad2);
 
         form.submit();
       } catch (e) {
