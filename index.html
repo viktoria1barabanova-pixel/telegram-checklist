@@ -1,20 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Checklist</title>
 
+  <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- 🔥 Подключаем стили -->
-  <link rel="stylesheet" href="./styles.css">
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
-  <div id="app"></div>
 
-  <!-- modal, iframe, form — как у тебя -->
+  <!-- ===== App root ===== -->
+  <div id="app" class="muted"></div>
 
-  <!-- 🔥 Подключаем JS -->
-  <script defer src="./config.js"></script>
-  <script defer src="./app.js"></script>
+  <!-- ===== Image modal ===== -->
+  <div id="imgModal" class="imgModal">
+    <div class="imgModalInner">
+      <button id="imgClose" class="imgModalClose">×</button>
+
+      <div class="imgModalHeader">
+        <button id="imgPrev" class="imgNav">‹</button>
+        <div id="imgModalTitle" class="imgModalTitle"></div>
+        <button id="imgNext" class="imgNav">›</button>
+      </div>
+
+      <img id="imgModalEl" class="imgModalImg" src="" alt="" />
+    </div>
+  </div>
+
+  <!-- ===== Hidden submit (POST to Apps Script) ===== -->
+  <iframe
+    name="submitFrame"
+    id="submitFrame"
+    style="display:none"
+  ></iframe>
+
+  <form
+    id="submitForm"
+    method="POST"
+    target="submitFrame"
+    action=""
+    style="display:none"
+  >
+    <input type="hidden" name="action" value="submit" />
+    <input type="hidden" name="payload" id="submitPayload" />
+  </form>
+
+  <!-- ===== Scripts ===== -->
+  <script src="config.js" defer></script>
+  <script src="app.js" defer></script>
+
 </body>
+</html>
