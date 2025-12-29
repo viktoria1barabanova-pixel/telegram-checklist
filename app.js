@@ -156,14 +156,43 @@
         const frame = document.getElementById("submitFrame");
         if (!form || !payloadInput || !frame) throw new Error("Submit form not found");
 
-        form.action = SUBMIT_URL;
+        // Apps Script doPost() expects action=submit (either as query param or form field)
+        const actionUrl = buildUrlWithParams(SUBMIT_URL, { action: "submit" });
+        form.action = actionUrl;
+
+        // Ensure payload field has a name (so it is sent as a form field)
+        if (!payloadInput.getAttribute("name")) payloadInput.setAttribute("name", "payload");
         payloadInput.value = JSON.stringify(payloadObj);
+
+        // Also add hidden action field for robustness
+        let actionInput = document.getElementById("submitAction");
+        if (!actionInput) {
+          actionInput = document.createElement("input");
+          actionInput.type = "hidden";
+          actionInput.id = "submitAction";
+          actionInput.name = "action";
+          form.appendChild(actionInput);
+        }
+        actionInput.value = "submit";
 
         const onLoad = () => {
           frame.removeEventListener("load", onLoad);
           resolve(true);
         };
         frame.addEventListener("load", onLoad);
+
+        // Failsafe: if Apps Script blocks/doesn't respond, show a clearer error
+        const t = setTimeout(() => {
+          try { frame.removeEventListener("load", onLoad); } catch {}
+          reject(new Error("Submit timeout (iframe did not load)"));
+        }, 20000);
+
+        const onLoad2 = () => {
+          clearTimeout(t);
+          onLoad();
+        };
+        frame.removeEventListener("load", onLoad);
+        frame.addEventListener("load", onLoad2);
 
         form.submit();
       } catch (e) {
