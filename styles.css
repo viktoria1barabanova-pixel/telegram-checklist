@@ -1,12 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
 
 /* ============================
-   SUSHI CHECKLIST UI — STYLES (v2)
+   SUSHI CHECKLIST UI — STYLES
    Direction: “Soft glass + modern iOS”
    ============================ */
 
 :root {
-  /* Accent palette (soft, not acidic) */
+  /* Accent palette */
   --accent: #E85A8A;           /* pink */
   --accent-2: #2EC4A6;         /* teal */
   --accent-warm: #F2C94C;      /* yellow */
@@ -15,7 +15,6 @@
   --bg: #F7F4F6;
   --bg-2: #FBFAFB;
   --card: rgba(255, 255, 255, 0.86);
-  --card-solid: #FFFFFF;
   --text: #12131A;
   --muted: #6B7280;
   --border: rgba(17, 24, 39, 0.10);
@@ -31,7 +30,6 @@
   --sh-md: 0 16px 42px rgba(17, 24, 39, 0.12);
 
   /* Buttons */
-  --btn: #12131A;
   --btnText: #FFFFFF;
 
   /* Status */
@@ -55,7 +53,7 @@ body {
 }
 
 .container {
-  max-width: 560px; /* mobile-first */
+  max-width: 560px;
   margin: 0 auto;
 }
 
@@ -80,20 +78,6 @@ h2 {
   line-height: 1.35;
 }
 
-/* Small info chips */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(10px);
-  font-size: 13px;
-  font-weight: 800;
-}
-
 /* Cards */
 .card {
   background: var(--card);
@@ -115,7 +99,7 @@ select,
 input[type="text"],
 textarea {
   width: 100%;
-  padding: 12px 12px;
+  padding: 12px 44px 12px 12px; /* right padding for arrow */
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   font-size: 16px; /* iOS zoom fix */
@@ -124,7 +108,6 @@ textarea {
   background: rgba(255, 255, 255, 0.92);
 }
 
-/* Default textarea (used редко). Комментарии к вопросам настраиваем отдельным классом `.comment` ниже */
 textarea { min-height: 92px; resize: vertical; }
 
 select:focus,
@@ -134,10 +117,11 @@ textarea:focus {
   box-shadow: 0 0 0 4px rgba(232, 90, 138, 0.12);
 }
 
-/* Make selects look “app-like” */
+/* Make selects look “app-like” + center arrow vertically */
 select {
   -webkit-appearance: none;
   appearance: none;
+  line-height: 1.2;
   background-image:
     linear-gradient(45deg, transparent 50%, rgba(18, 19, 26, 0.55) 50%),
     linear-gradient(135deg, rgba(18, 19, 26, 0.55) 50%, transparent 50%);
@@ -148,7 +132,7 @@ select {
   background-repeat: no-repeat;
 }
 
-/* Tabs — fixed, nice blur */
+/* Tabs — fixed */
 .tabs {
   position: sticky;
   top: 0;
@@ -185,7 +169,27 @@ select {
     rgba(255, 255, 255, 0.96);
 }
 
-/* Question */
+/* Question header layout */
+.qHead{
+  display:flex;
+  align-items:flex-start;
+  gap: 12px;
+}
+
+.qHeadMain{
+  flex: 1;
+  min-width: 0;
+}
+
+.qHeadAside{
+  flex: 0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  margin-left: auto;
+  padding-top: 2px;
+}
+
 .q-title {
   font-weight: 900;
   margin-bottom: 6px;
@@ -200,50 +204,10 @@ select {
   line-height: 1.45;
 }
 
-/* When we use the new header layout (.qHead), tighten spacing
-   so the photo + button sits nicely to the right */
-.qHead{
-  display:flex;
-  align-items:flex-start;
-  gap: 12px;
-}
-
-.qHeadMain{
-  flex: 1;
-  min-width: 0; /* чтобы перенос текста работал корректно */
-}
-
-.qHeadAside{
-  flex: 0 0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  padding-top: 2px;
-}
-
 .q-desc a {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-/* Options */
-.opt {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 12px;
-  border-radius: var(--r-lg);
-  border: 1px solid rgba(17, 24, 39, 0.09);
-  margin-top: 10px;
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.opt input[type="radio"],
-.opt input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--accent);
 }
 
 /* Primary + Secondary buttons */
@@ -263,11 +227,7 @@ button {
 
 button:hover { filter: brightness(1.03); }
 button:active { transform: scale(.985); }
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  box-shadow: none;
-}
+button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 .btnSecondary {
   background: rgba(255, 255, 255, 0.92);
@@ -276,165 +236,104 @@ button:disabled {
   box-shadow: var(--sh-sm);
 }
 
-.btnDanger {
-  background: linear-gradient(135deg, #7C2C2C, #C44747);
-}
+.btnDanger { background: linear-gradient(135deg, #7C2C2C, #C44747); }
 
-/* Photo toggle + photo */
+/* Ensure breathing room between selects and the primary button */
+.row > button{ margin-top: 12px; }
+.card select{ margin-bottom: 10px; }
+#startBtn, .startBtn{ margin-top: 12px; }
+
+/* Photo toggle */
 .photoToggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 14px;
   border: none;
-
   background: linear-gradient(135deg, rgba(232, 90, 138, 0.96), rgba(232, 90, 138, 0.72));
   color: #fff;
   font-weight: 1000;
   font-size: 22px;
   line-height: 1;
-
   box-shadow: 0 14px 36px rgba(232, 90, 138, 0.26);
   cursor: pointer;
   transition: transform .06s ease, filter .15s ease;
   flex: 0 0 auto;
 }
 
+.photoToggle::before { content: "+"; }
 .photoToggle:hover { filter: brightness(1.02); }
 .photoToggle:active { transform: scale(.97); }
 
-/* If button has no visible text, force a plus icon */
-.photoToggle::before {
-  content: "+";
-}
-
-.photoWrap {
-  display: none;
-  margin-top: 12px;
-  scroll-margin-top: 90px; /* better UX when opening in long pages */
-}
-
+.photoWrap { display: none; margin-top: 12px; scroll-margin-top: 90px; }
 .photoWrap.open { display: block; }
+.photoWrap img { width: 100%; border-radius: var(--r-lg); box-shadow: var(--sh-sm); }
 
-.photoWrap img {
-  width: 100%;
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-sm);
-}
-
-.thumbGrid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
-}
-
+/* Thumbs */
+.thumbGrid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 .thumb {
-  width: 78px;
-  height: 78px;
-  border-radius: 16px;
-  object-fit: cover;
+  width: 78px; height: 78px; border-radius: 16px; object-fit: cover;
   border: 1px solid var(--border);
   cursor: pointer;
   box-shadow: 0 10px 22px rgba(17, 24, 39, 0.10);
 }
 
-/* Zone banner */
+/* Zone banner with % circle */
 .zoneBanner {
   position: relative;
-  padding: 14px 70px 14px 18px; /* extra right space for % pill */
+  padding: 14px 70px 14px 18px;
   border-radius: var(--r-xl);
   font-weight: 1000;
   text-align: center;
   letter-spacing: 0.02em;
   box-shadow: var(--sh-md);
-
-  /* layout */
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 54px;
 }
 
-/* title centered */
 .zoneTitle{
   text-transform: uppercase;
   font-size: 18px;
   line-height: 1.1;
 }
 
-/* percent in a circle on the right */
 .zonePct{
   position: absolute;
   right: 14px;
   top: 50%;
   transform: translateY(-50%);
-
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: 999px;
-
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
   font-size: 12px;
   font-weight: 1000;
   letter-spacing: 0.01em;
-
   background: rgba(255,255,255,.22);
   border: 1px solid rgba(255,255,255,.35);
   backdrop-filter: blur(10px);
   color: inherit;
 }
 
-/* meta line below banner */
-.zoneMeta{
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
+.zoneMeta{ margin-top: 8px; font-size: 13px; color: var(--muted); }
 
-.zoneBanner.green {
-  background: linear-gradient(135deg, #1E7D6A, #2EC4A6);
-  color: #FFFFFF;
-}
+.zoneBanner.green { background: linear-gradient(135deg, #1E7D6A, #2EC4A6); color: #FFFFFF; }
+.zoneBanner.yellow { background: linear-gradient(135deg, #D8B44A, #F29B64); color: #241A00; }
+.zoneBanner.red { background: linear-gradient(135deg, #6F2A2A, #B94B4B); color: #FFFFFF; }
+.zoneBanner.gray { background: linear-gradient(135deg, #2F2F35, #8C8C94); color: #FFFFFF; }
 
-.zoneBanner.yellow {
-  background: linear-gradient(135deg, #D8B44A, #F29B64);
-  color: #241A00;
-}
+.zoneBanner.yellow .zonePct{ background: rgba(255,255,255,.36); border-color: rgba(255,255,255,.42); }
+.zoneBanner.gray .zonePct,
+.zoneBanner.red .zonePct{ background: rgba(0,0,0,.18); border-color: rgba(255,255,255,.22); }
+.zoneBanner.green .zonePct{ background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.30); }
 
-.zoneBanner.red {
-  background: linear-gradient(135deg, #6F2A2A, #B94B4B);
-  color: #FFFFFF;
-}
-
-.zoneBanner.gray {
-  background: linear-gradient(135deg, #2F2F35, #8C8C94);
-  color: #FFFFFF;
-}
-
-.zoneBanner.yellow .zonePct{
-  background: rgba(255,255,255,.36);
-  border-color: rgba(255,255,255,.42);
-}
-.zoneBanner.gray .zonePct{
-  background: rgba(0,0,0,.18);
-  border-color: rgba(255,255,255,.22);
-}
-.zoneBanner.red .zonePct{
-  background: rgba(0,0,0,.18);
-  border-color: rgba(255,255,255,.22);
-}
-.zoneBanner.green .zonePct{
-  background: rgba(255,255,255,.20);
-  border-color: rgba(255,255,255,.30);
-}
-
-/* Image modal */
+/* Image modal (hide everything unless open) */
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -445,10 +344,8 @@ button:disabled {
   z-index: 9999;
   padding: 18px;
 }
-
 .modalOverlay.open { display: flex; }
 
-/* Image modal box */
 .modalBox {
   max-width: 920px;
   width: 100%;
@@ -465,30 +362,28 @@ button:disabled {
   display: block;
 }
 
+/* Hard-hide any stray modal nav controls (the “страшные кнопки снизу”) */
+#imgClose, #imgPrev, #imgNext,
+.modalNav, .modal-nav, .modalControls, .modal-controls,
+.modalButtons, .modal-buttons,
+.imgNav, .img-nav,
+.modalBtn, .modal-btn,
+.imageNav, .image-nav{
+  display: none !important;
+}
+
+/* Show controls ONLY inside an opened overlay (if they exist in your markup) */
+.modalOverlay.open #imgClose,
+.modalOverlay.open #imgPrev,
+.modalOverlay.open #imgNext{
+  display: inline-flex !important;
+}
+
 @media (max-width: 480px) {
   body { padding: 12px; }
   h1 { font-size: 34px; }
   .tab { padding: 9px 12px; }
 }
-
-/* Hide modal buttons when overlay is closed */
-.modalOverlay:not(.open) #imgClose,
-.modalOverlay:not(.open) #imgPrev,
-.modalOverlay:not(.open) #imgNext {
-  display: none;
-}
-
-/* Ensure enough breathing room between selects and the primary button */
-.row > button{
-  margin-top: 10px;
-}
-
-/* Fallback spacing if markup doesn’t use .row */
-.card select{ margin-bottom: 10px; }
-.card select + select{ margin-top: 0; }
-
-/* Explicit start button spacing (in case it has an id/class) */
-#startBtn, .startBtn{ margin-top: 10px; }
 
 /* ============================
    Segmented answers (SINGLE)
@@ -501,11 +396,7 @@ button:disabled {
   margin-top:10px;
 }
 
-.segInput{
-  position:absolute;
-  opacity:0;
-  pointer-events:none;
-}
+.segInput{ position:absolute; opacity:0; pointer-events:none; }
 
 .segBtn{
   display:flex;
@@ -527,14 +418,11 @@ button:disabled {
 
 .segBtn:active{ transform:scale(.985); }
 
-/* soft colored borders */
 .segBtn.answer--bad{ border-color:rgba(214,69,69,.45); }
 .segBtn.answer--ok{ border-color:rgba(242,201,76,.55); }
 .segBtn.answer--good{ border-color:rgba(46,196,166,.45); }
 
-/* ============================
-   Stronger selected state for segmented answers
-   ============================ */
+/* Stronger selected state */
 .segBtn.is-active{
   transform: translateY(-1px);
   box-shadow: 0 22px 60px rgba(17,24,39,.22);
@@ -571,11 +459,9 @@ button:disabled {
 }
 
 /* ============================
-   Comment field (auto-grow, compact)
+   Comment field (compact)
    ============================ */
-.commentWrap{
-  margin-top: 10px;
-}
+.commentWrap{ margin-top: 10px; }
 
 .commentLabel{
   display:flex;
@@ -594,57 +480,18 @@ textarea.comment{
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.92);
   padding: 10px 12px;
-
-  /* компактно по умолчанию (≈1 строка) */
-  min-height: 40px;
-
-  /* максимум примерно 2 строки, дальше появляется скролл */
-  max-height: 72px;
+  min-height: 40px;     /* ~1 line */
+  max-height: 72px;     /* ~2 lines */
   overflow-y: auto;
-
   resize: none;
   font-size: 15px;
   line-height: 1.25;
 }
 
-textarea.comment::-webkit-scrollbar{
-  width: 8px;
-}
+textarea.comment::-webkit-scrollbar{ width: 8px; }
 textarea.comment::-webkit-scrollbar-thumb{
   background: rgba(17, 24, 39, 0.18);
   border-radius: 999px;
 }
 
-/* Optional: make placeholder less heavy */
-textarea.comment::placeholder{
-  color: rgba(107, 114, 128, 0.75);
-}
-
-/* Safety: hide image viewer controls unless the image modal is open */
-#imgClose, #imgPrev, #imgNext,
-.modalNav, .modal-nav, .modalControls, .modal-controls,
-.modalButtons, .modal-buttons,
-.imgNav, .img-nav,
-.modalBtn, .modal-btn,
-.imageNav, .image-nav{
-  display: none !important;
-}
-
-/* Show controls only when overlay is open */
-.modalOverlay.open #imgClose,
-.modalOverlay.open #imgPrev,
-.modalOverlay.open #imgNext,
-.modalOverlay.open .modalNav,
-.modalOverlay.open .modal-nav,
-.modalOverlay.open .modalControls,
-.modalOverlay.open .modal-controls,
-.modalOverlay.open .modalButtons,
-.modalOverlay.open .modal-buttons,
-.modalOverlay.open .imgNav,
-.modalOverlay.open .img-nav,
-.modalOverlay.open .modalBtn,
-.modalOverlay.open .modal-btn,
-.modalOverlay.open .imageNav,
-.modalOverlay.open .image-nav{
-  display: inline-flex !important;
-}
+textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
