@@ -383,13 +383,7 @@ button:disabled {
 
 .modalOverlay.open { display: flex; }
 
-/* Hide modal buttons when overlay is closed */
-.modalOverlay:not(.open) #imgClose,
-.modalOverlay:not(.open) #imgPrev,
-.modalOverlay:not(.open) #imgNext {
-  display: none;
-}
-
+/* Image modal box */
 .modalBox {
   max-width: 920px;
   width: 100%;
@@ -411,6 +405,25 @@ button:disabled {
   h1 { font-size: 34px; }
   .tab { padding: 9px 12px; }
 }
+
+/* Hide modal buttons when overlay is closed */
+.modalOverlay:not(.open) #imgClose,
+.modalOverlay:not(.open) #imgPrev,
+.modalOverlay:not(.open) #imgNext {
+  display: none;
+}
+
+/* Ensure enough breathing room between selects and the primary button */
+.row > button{
+  margin-top: 10px;
+}
+
+/* Fallback spacing if markup doesn’t use .row */
+.card select{ margin-bottom: 10px; }
+.card select + select{ margin-top: 0; }
+
+/* Explicit start button spacing (in case it has an id/class) */
+#startBtn, .startBtn{ margin-top: 10px; }
 
 /* ============================
    Segmented answers (SINGLE)
@@ -540,4 +553,33 @@ textarea.comment::-webkit-scrollbar-thumb{
 /* Optional: make placeholder less heavy */
 textarea.comment::placeholder{
   color: rgba(107, 114, 128, 0.75);
+}
+
+/* Safety: hide image viewer controls unless the image modal is open */
+#imgClose, #imgPrev, #imgNext,
+.modalNav, .modal-nav, .modalControls, .modal-controls,
+.modalButtons, .modal-buttons,
+.imgNav, .img-nav,
+.modalBtn, .modal-btn,
+.imageNav, .image-nav{
+  display: none !important;
+}
+
+/* Show controls only when overlay is open */
+.modalOverlay.open #imgClose,
+.modalOverlay.open #imgPrev,
+.modalOverlay.open #imgNext,
+.modalOverlay.open .modalNav,
+.modalOverlay.open .modal-nav,
+.modalOverlay.open .modalControls,
+.modalOverlay.open .modal-controls,
+.modalOverlay.open .modalButtons,
+.modalOverlay.open .modal-buttons,
+.modalOverlay.open .imgNav,
+.modalOverlay.open .img-nav,
+.modalOverlay.open .modalBtn,
+.modalOverlay.open .modal-btn,
+.modalOverlay.open .imageNav,
+.modalOverlay.open .image-nav{
+  display: inline-flex !important;
 }
