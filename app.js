@@ -846,12 +846,20 @@
       </div>
 
       <div class="card" style="border:none;padding:0">
-        <div class="zoneBanner ${escapeHtml(result.zone)}">${escapeHtml(zoneLabel(result.zone))}</div>
-        <div class="resultPercent">${escapeHtml(result.percent)}%</div>
+        ${(() => {
+          const pct = Number(result.percent);
+          const pctText = Number.isFinite(pct) ? (Math.round(pct * 10) / 10).toFixed((Math.round(pct * 10) % 10 === 0) ? 0 : 1) : "0";
+          return `
+            <div class="zoneBanner ${escapeHtml(result.zone)}">
+              <div class="zoneTitle">${escapeHtml(zoneLabel(result.zone))}</div>
+              <div class="zonePct">${escapeHtml(pctText)}%</div>
+            </div>
+          `;
+        })()}
         ${(() => {
           const lc = getLastCheck(STATE.branchId);
           return lc?.ts
-            ? `<div class="muted" style="margin-top:8px">Последняя проверка: <b>${escapeHtml(formatRuDateTime(lc.ts))}</b></div>`
+            ? `<div class="zoneMeta">Последняя проверка: <b>${escapeHtml(formatRuDateTime(lc.ts))}</b></div>`
             : "";
         })()}
       </div>
