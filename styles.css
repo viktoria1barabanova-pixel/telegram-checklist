@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
+
 /* ============================
    SUSHI CHECKLIST UI — STYLES (v2)
    Direction: “Soft glass + modern iOS”
@@ -43,7 +45,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   padding: 16px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Montserrat", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
   color: var(--text);
   background:
     radial-gradient(900px 520px at 8% -10%, rgba(232, 90, 138, 0.14), transparent 60%),
@@ -341,12 +343,58 @@ button:disabled {
 
 /* Zone banner */
 .zoneBanner {
-  padding: 16px;
+  position: relative;
+  padding: 14px 70px 14px 18px; /* extra right space for % pill */
   border-radius: var(--r-xl);
   font-weight: 1000;
   text-align: center;
   letter-spacing: 0.02em;
   box-shadow: var(--sh-md);
+
+  /* layout */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+}
+
+/* title centered */
+.zoneTitle{
+  text-transform: uppercase;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+/* percent in a circle on the right */
+.zonePct{
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.01em;
+
+  background: rgba(255,255,255,.22);
+  border: 1px solid rgba(255,255,255,.35);
+  backdrop-filter: blur(10px);
+  color: inherit;
+}
+
+/* meta line below banner */
+.zoneMeta{
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .zoneBanner.green {
@@ -367,6 +415,23 @@ button:disabled {
 .zoneBanner.gray {
   background: linear-gradient(135deg, #2F2F35, #8C8C94);
   color: #FFFFFF;
+}
+
+.zoneBanner.yellow .zonePct{
+  background: rgba(255,255,255,.36);
+  border-color: rgba(255,255,255,.42);
+}
+.zoneBanner.gray .zonePct{
+  background: rgba(0,0,0,.18);
+  border-color: rgba(255,255,255,.22);
+}
+.zoneBanner.red .zonePct{
+  background: rgba(0,0,0,.18);
+  border-color: rgba(255,255,255,.22);
+}
+.zoneBanner.green .zonePct{
+  background: rgba(255,255,255,.20);
+  border-color: rgba(255,255,255,.30);
 }
 
 /* Image modal */
