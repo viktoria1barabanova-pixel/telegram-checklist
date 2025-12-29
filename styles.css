@@ -200,6 +200,11 @@ select {
   line-height: 1.45;
 }
 
+/* When we use the new header layout (.qHead), tighten spacing
+   so the photo + button sits nicely to the right */
+.qHead .q-title { margin-bottom: 4px; }
+.qHead .q-desc  { margin-bottom: 0; }
+
 .q-desc a {
   color: var(--accent);
   text-decoration: underline;
@@ -264,18 +269,19 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  border: 1px solid rgba(232, 90, 138, 0.28);
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 90, 138, 0.30);
   background: linear-gradient(135deg, rgba(232, 90, 138, 0.92), rgba(232, 90, 138, 0.70));
   color: #fff;
   font-weight: 1000;
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 14px 36px rgba(232, 90, 138, 0.22);
   transition: transform .06s ease, filter .15s ease;
+  flex: 0 0 auto;
 }
 
 .photoToggle:hover { filter: brightness(1.02); }
@@ -483,6 +489,7 @@ button:disabled {
   flex: 0 0 auto;
   display:flex;
   align-items:flex-start;
+  justify-content: flex-end;
   padding-top: 2px;
 }
 
@@ -521,11 +528,11 @@ textarea.comment{
   background: rgba(255, 255, 255, 0.92);
   padding: 10px 12px;
 
-  /* 1 строка по умолчанию */
-  min-height: 44px;
+  /* компактно по умолчанию (≈1 строка), но можно писать больше */
+  min-height: 42px;
 
-  /* максимум ~3 строки, дальше скролл */
-  max-height: 92px;
+  /* максимум около 3 строк, дальше появляется скролл */
+  max-height: 96px;
   overflow-y: auto;
 
   resize: none;
@@ -539,6 +546,11 @@ textarea.comment::-webkit-scrollbar{
 textarea.comment::-webkit-scrollbar-thumb{
   background: rgba(17, 24, 39, 0.18);
   border-radius: 999px;
+}
+
+/* Optional: make placeholder less heavy */
+textarea.comment::placeholder{
+  color: rgba(107, 114, 128, 0.75);
 }
 
 /* ============================
