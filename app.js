@@ -348,6 +348,51 @@
     return `draft_v2_${STATE.branchId || "no_branch"}`;
   }
 
+  // ====== Last check meta (per branch) ======
+  function lastCheckKey(branchId) {
+    return `lastcheck_v2_${branchId || "no_branch"}`;
+  }
+
+  function setLastCheck(branchId, meta) {
+    try {
+      localStorage.setItem(
+        lastCheckKey(branchId),
+        JSON.stringify({ ts: new Date().toISOString(), ...(meta || {}) })
+      );
+    } catch {}
+  }
+
+  function getLastCheck(branchId) {
+    try {
+      const raw = localStorage.getItem(lastCheckKey(branchId));
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  function formatRuDateTime(iso) {
+    try {
+      const d = new Date(iso);
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${dd}.${mm}.${yyyy} ${hh}:${mi}`;
+    } catch {
+      return "";
+    }
+  }
+
+  function clearDraftStorageOnly(branchId) {
+    try {
+      if (!branchId) return;
+      localStorage.removeItem(`draft_v2_${branchId}`);
+    } catch {}
+  }
+
   function saveDraft() {
     try {
       const serialCheckbox = {};
@@ -420,6 +465,17 @@
     STATE.isFinished = false;
     STATE.lastResult = null;
     STATE.fio = "";
+    STATE.issueNotes = {};
+    STATE.noteOpen = {};
+  }
+
+  // Reset current check data but keep branch/city/fio (use for "Новая проверка")
+  function resetCheckKeepMeta() {
+    STATE.singleAnswers = {};
+    STATE.checkboxAnswers = {};
+    STATE.activeSection = "";
+    STATE.isFinished = false;
+    STATE.lastResult = null;
     STATE.issueNotes = {};
     STATE.noteOpen = {};
   }
@@ -792,6 +848,12 @@
       <div class="card" style="border:none;padding:0">
         <div class="zoneBanner ${escapeHtml(result.zone)}">${escapeHtml(zoneLabel(result.zone))}</div>
         <div class="resultPercent">${escapeHtml(result.percent)}%</div>
+        ${(() => {
+          const lc = getLastCheck(STATE.branchId);
+          return lc?.ts
+            ? `<div class="muted" style="margin-top:8px">Последняя проверка: <b>${escapeHtml(formatRuDateTime(lc.ts))}</b></div>`
+            : "";
+        })()}
       </div>
 
       <div class="card">
@@ -841,16 +903,24 @@
       </div>
 
       <div class="card">
-        <button id="resetDraftResult" class="btnSecondary">Сбросить черновик этого филиала</button>
-        <button id="backToStart" class="btnSecondary" style="margin-top:8px">Новая проверка</button>
+        <button id="newCheck" class="btnSecondary">Новая проверка</button>
       </div>
     `);
 
-    document.getElementById("resetDraftResult").onclick = () => {
-      clearDraftForBranch(STATE.branchId);
-      renderStart();
-    };
-    document.getElementById("backToStart").onclick = () => renderStart();
+    const newBtn = document.getElementById("newCheck");
+    if (newBtn)
+      newBtn.onclick = () => {
+        // start a fresh check for the same branch (no old answers), keep fio/city
+        resetCheckKeepMeta();
+        clearDraftStorageOnly(STATE.branchId);
+
+        if (!STATE.activeSection || !STATE.enabledSections.includes(STATE.activeSection)) {
+          STATE.activeSection = STATE.enabledSections[0];
+        }
+
+        saveDraft();
+        renderSurvey();
+      };
 
     document.querySelectorAll('img.thumb[data-res-thumb]').forEach((img) => {
       img.addEventListener("click", () => {
@@ -947,7 +1017,13 @@
       STATE.enabledSections = sortSectionCodesByOrder(allSections);
 
       const d = loadDraft(STATE.branchId);
-      if (d) {
+      if (d && d.isFinished && d.lastResult) {
+        // Не открываем прошлый результат как текущую проверку.
+        // Храним историю отдельно (lastCheck), а черновик после завершения удаляем.
+        resetCheckKeepMeta();
+        clearDraftStorageOnly(STATE.branchId);
+        migrateAllNotes();
+      } else if (d) {
         STATE.enabledSections = sortSectionCodesByOrder(STATE.enabledSections);
         STATE.activeSection = d.activeSection || "";
         STATE.singleAnswers = d.singleAnswers || {};
@@ -1468,7 +1544,12 @@
 
         STATE.isFinished = true;
         STATE.lastResult = result;
-        saveDraft();
+
+        // save last-check info and remove the draft so next run is fresh
+        setLastCheck(STATE.branchId, { zone: result.zone, percent: result.percent });
+        clearDraftStorageOnly(STATE.branchId);
+
+        // IMPORTANT: do not saveDraft() here, иначе снова сохраним finished+result
         renderResultScreen(result, branch);
       } catch (e) {
         finishBtn.disabled = false;
