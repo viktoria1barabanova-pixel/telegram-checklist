@@ -243,6 +243,33 @@ button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 .card select{ margin-bottom: 10px; }
 #startBtn, .startBtn{ margin-top: 12px; }
 
+/* Better form stacking (works even if markup is slightly different) */
+.row{
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+}
+
+.card .row select,
+.card .row input[type="text"],
+.card .row textarea{
+  margin: 0;
+}
+
+/* If your start screen is not using .row, this still helps */
+.card select + select{ margin-top: 10px; }
+.card select + button,
+.card select + .btn,
+.card select + #startBtn{ margin-top: 12px; }
+
+label{
+  display:block;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  margin: 2px 2px 6px;
+}
+
 /* Photo toggle */
 .photoToggle {
   display: inline-flex;
@@ -362,17 +389,60 @@ button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
   display: block;
 }
 
-/* Hard-hide any stray modal nav controls (the “страшные кнопки снизу”) */
-#imgClose, #imgPrev, #imgNext,
-.modalNav, .modal-nav, .modalControls, .modal-controls,
-.modalButtons, .modal-buttons,
-.imgNav, .img-nav,
-.modalBtn, .modal-btn,
-.imageNav, .image-nav{
+/* Modal controls — prevent global button styles from breaking them */
+#imgClose, #imgPrev, #imgNext{
+  all: unset;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+
+  background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.22);
+  color: rgba(255,255,255,.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 38px rgba(0,0,0,.35);
+}
+
+#imgClose{ position: absolute; top: 14px; right: 14px; }
+#imgPrev{ position: absolute; top: 50%; left: 14px; transform: translateY(-50%); }
+#imgNext{ position: absolute; top: 50%; right: 14px; transform: translateY(-50%); }
+
+#imgClose:hover, #imgPrev:hover, #imgNext:hover{ filter: brightness(1.05); }
+#imgClose:active, #imgPrev:active, #imgNext:active{ transform: translateY(-50%) scale(.98); }
+#imgClose:active{ transform: scale(.98); }
+
+/* Hide modal controls when overlay is CLOSED */
+.modalOverlay:not(.open) #imgClose,
+.modalOverlay:not(.open) #imgPrev,
+.modalOverlay:not(.open) #imgNext,
+.modalOverlay:not(.open) .modalNav,
+.modalOverlay:not(.open) .modal-nav,
+.modalOverlay:not(.open) .modalControls,
+.modalOverlay:not(.open) .modal-controls,
+.modalOverlay:not(.open) .modalButtons,
+.modalOverlay:not(.open) .modal-buttons,
+.modalOverlay:not(.open) .imgNav,
+.modalOverlay:not(.open) .img-nav,
+.modalOverlay:not(.open) .modalBtn,
+.modalOverlay:not(.open) .modal-btn,
+.modalOverlay:not(.open) .imageNav,
+.modalOverlay:not(.open) .image-nav{
   display: none !important;
 }
 
-/* Show controls ONLY inside an opened overlay (if they exist in your markup) */
+/* Show the 3 core controls only when overlay is OPEN */
 .modalOverlay.open #imgClose,
 .modalOverlay.open #imgPrev,
 .modalOverlay.open #imgNext{
@@ -414,6 +484,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
   box-shadow:0 10px 22px rgba(17,24,39,.06);
   transition:transform .06s ease, box-shadow .15s ease, filter .15s ease, background .15s ease;
   position: relative;
+  white-space: normal;
 }
 
 .segBtn:active{ transform:scale(.985); }
