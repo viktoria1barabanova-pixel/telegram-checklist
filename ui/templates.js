@@ -259,7 +259,7 @@
       ], "");
       if (listStr) {
         labels = String(listStr)
-          .split(/\s*[;|\n]\s*/)
+          .split(/\s*[;|\n]+\s*/)
           .map(s => norm(s))
           .filter(Boolean);
       }
@@ -313,15 +313,23 @@
     // Supported: JSON array in items_json / checklist_items_json, OR semicolon list in items / checklist_items
     let items = [];
     try {
-      const jsonStr = getAny(q, ["items_json", "checklist_items_json", "itemsJson", "варианты_json", "чекбоксы_json"], "");
+      const jsonStr = getAny(q, [
+        "items_json", "checklist_items_json", "itemsJson",
+        "checkbox_items_json", "check_items_json", "cb_items_json",
+        "чекбоксы_json", "чекбокс_варианты_json", "галочки_json"
+      ], "");
       if (jsonStr) items = JSON.parse(String(jsonStr));
     } catch {}
 
     if (!items.length) {
-      const listStr = getAny(q, ["items", "checklist_items", "варианты", "чекбоксы"], "");
+      const listStr = getAny(q, [
+        "items", "checklist_items",
+        "checkbox_items", "check_items", "cb_items",
+        "чекбоксы", "чекбоксы_список", "галочки", "галочки_список"
+      ], "");
       if (listStr) {
         items = String(listStr)
-          .split(";")
+          .split(/\s*[;|\n]+\s*/)
           .map(s => s.trim())
           .filter(Boolean)
           .map((t, i) => ({ id: `${q.id}_${i + 1}`, text: t }));
