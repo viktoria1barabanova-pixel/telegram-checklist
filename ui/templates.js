@@ -152,14 +152,15 @@
     opts = opts || {};
     const sections = opts.sections || [];
     const active = opts.active || "";
-
     return `
       <div class="stickyTabs">
-        <div class="tabs">
-          ${sections.map(s => {
-            const isA = String(s.id) === String(active);
-            return `<button class="tab ${isA ? "active" : ""}" data-section="${h(s.id)}">${h(s.title)}</button>`;
-          }).join("")}
+        <div class="card tabsCard">
+          <div class="tabs">
+            ${sections.map(s => {
+              const isA = String(s.id) === String(active);
+              return `<button class="tab ${isA ? "active" : ""}" data-section="${h(s.id)}">${h(s.title)}</button>`;
+            }).join("")}
+          </div>
         </div>
       </div>
     `;
@@ -170,6 +171,19 @@
   // type: "single" | "checkbox"
   window.tplQuestionCard = function tplQuestionCard(q, opts) {
     opts = opts || {};
+    // Защита от «шапки» таблицы, которая иногда прилетает как первая строка (ID вопроса / текст вопроса и т.п.)
+    const maybeHeaderId = String((q && (q.id || q.question_id || q.questionId)) || "").trim();
+    const maybeHeaderTitle = String((q && (q.title || q.question_text || q.question || q.name)) || "").trim().toLowerCase();
+    if (
+      !q ||
+      maybeHeaderId === "" ||
+      /^id\s*вопроса$/i.test(maybeHeaderId) ||
+      maybeHeaderId === "question_id" ||
+      maybeHeaderTitle === "текст вопроса" ||
+      maybeHeaderTitle === "question_text"
+    ) {
+      return "";
+    }
     const answerState = (opts.answerState === undefined) ? null : opts.answerState;
     const showRightToggle = (opts.showRightToggle === undefined) ? true : !!opts.showRightToggle;
     const showNotes = !!opts.showNotes;
@@ -226,7 +240,7 @@
     const notesHtml = showNotes ? tplIssueNotesBlock(q) : "";
 
     return `
-      <div class="qCard" data-qid="${h(q.id)}">
+      <div class="card qCard" data-qid="${h(q.id)}">
         <div class="qHeader">
           <div class="qHeaderLeft">
             ${sectionTitle ? `<div class="qSection">${h(sectionTitle)}</div>` : ``}
@@ -306,7 +320,7 @@
     }
 
     // final fallback (ONLY if still empty)
-    if (!labels.length) labels = ["Эталон", "Норм", "Плохо"];
+    if (!labels.length) labels = ["Идеал", "Норм", "Стрем"];
 
     const cur = answerState ? norm(answerState) : "";
 
