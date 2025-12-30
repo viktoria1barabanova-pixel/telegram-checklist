@@ -47,6 +47,15 @@
   }
 
   // ---------- normalize branches (адреса) & sections ----------
+  function getBranches() {
+    return (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
+  }
+
+  function findBranchById(branchId) {
+    const bid = norm(branchId);
+    const rows = getBranches();
+    return rows.find(b => norm(getBranchId(b)) === bid) || null;
+  }
   function getOblast(b) {
     // Prefer `region` (sheet column) first
     return t(getAny(b, ["region", "oblast", "area", "область", "регион", "край", "Region", "REGION"], ""));
@@ -65,7 +74,13 @@
   }
 
   function activeAddressRows(branches) {
-    return (branches || []).filter(b => toBool(getAny(b, ["active", "is_active", "активно", "активный"], true)) !== false);
+    return (branches || []).filter(b => {
+      const v = getAny(b, ["active", "is_active", "активно", "активный", "Active", "ACTIVE"], "");
+      const s = String(v ?? "").trim().toLowerCase();
+      if (!s) return true; // empty => active
+      if (s === "false" || s === "0" || s === "no" || s === "нет") return false;
+      return true;
+    });
   }
 
   function listOblasts(branches) {
@@ -265,7 +280,7 @@
     DATA = data;
 
     // Поддержка старого ключа branches и нового ключа addresses
-    const BRANCHES = (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
+    const BRANCHES = getBranches();
 
     const oblasts = listOblasts(BRANCHES);
     mount(tplStartScreen({ oblasts }));
@@ -451,15 +466,32 @@
     const secs = activeSections(DATA.sections);
     if (!STATE.activeSection) STATE.activeSection = secs[0]?.id || "";
 
+    const BRANCHES = getBranches();
+    const branchRow = findBranchById(STATE.branchId);
+    const city = norm(STATE.city || getCity(branchRow || {}));
+    const addr = norm(getAddressLabel(branchRow || {}));
+    const fio = norm(STATE.fio || "");
+
+    const ctxLine = [fio, city, addr].filter(Boolean).join(" • ");
+    const activeTitle = secs.find(s => s.id === STATE.activeSection)?.title || "";
+
     // base layout
     mount(`
       <div class="container">
+        <div class="card" style="margin-bottom:12px;">
+          <div class="cardHeader">
+            <div class="title">Проверка</div>
+            <div class="subTitle" id="ctxLine">${escapeHtml(ctxLine || "")}</div>
+            <div class="subTitle" id="sectionLine">${activeTitle ? `Раздел: ${escapeHtml(activeTitle)}` : ``}</div>
+          </div>
+        </div>
+
         ${tplSectionTabs({ sections: secs, active: STATE.activeSection })}
         <div id="qList"></div>
 
         <div class="bottomBar">
           <div id="missingHint" class="missingHint"></div>
-          <button id="finishBtn" class="btn primary">Завершить</button>
+          <button id="finishBtn" class="btn primary" type="button">Завершить</button>
         </div>
       </div>
     `);
@@ -507,7 +539,7 @@
     });
 
     // wire single options
-    document.querySelectorAll(".qCard .optRow.single").forEach(row => {
+    document.querySelectorAll(".qCard .optRow.single, .qCard .optRow.optRow3, .qCard .optRow.three").forEach(row => {
       const card = row.closest(".qCard");
       const qid = card.getAttribute("data-qid");
 
