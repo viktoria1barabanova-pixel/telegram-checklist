@@ -639,3 +639,88 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   color:var(--muted);
   line-height:1.45;
 }
+
+/* ============================
+   HOTFIX: keep answer options horizontal + prevent .btn styles leaking
+   ============================ */
+
+/* Force 2–3 options to render as a row (mobile + desktop) */
+.optRow{
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* If the question has only 2 options, allow it to be 2 columns */
+.optRow.two{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* If some markup uses a single-row layout */
+.optRow.single{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Make option buttons look like chips (even if they accidentally have .btn class) */
+.optRow .optBtn,
+.optRow button.optBtn,
+.optRow .btn.optBtn,
+.optRow button.btn.optBtn,
+.segmented .btn,
+.segmented button.btn{
+  width: 100% !important;
+  background: rgba(255,255,255,0.94) !important;
+  color: var(--text) !important;
+  border: 1px solid rgba(17,24,39,.12) !important;
+  box-shadow: 0 10px 22px rgba(17,24,39,.06) !important;
+  border-radius: 16px !important;
+  padding: 12px 10px !important;
+  min-height: 44px !important;
+  font-weight: 900 !important;
+}
+
+/* Strong selected state (compat with different class names) */
+.optRow .optBtn.selected,
+.optRow .optBtn.is-active,
+.segmented .segBtn.is-active{
+  transform: translateY(-1px) !important;
+  box-shadow: 0 22px 60px rgba(17,24,39,.22) !important;
+  border-width: 2px !important;
+}
+
+/* Color states for selected */
+.optRow .optBtn.bad.selected,
+.optRow .optBtn.bad.is-active{
+  background: linear-gradient(135deg, rgba(214,69,69,.44), rgba(255,255,255,.98)) !important;
+  border-color: rgba(214,69,69,.86) !important;
+}
+.optRow .optBtn.ok.selected,
+.optRow .optBtn.ok.is-active{
+  background: linear-gradient(135deg, rgba(242,201,76,.48), rgba(255,255,255,.98)) !important;
+  border-color: rgba(242,201,76,.92) !important;
+}
+.optRow .optBtn.good.selected,
+.optRow .optBtn.good.is-active{
+  background: linear-gradient(135deg, rgba(46,196,166,.42), rgba(255,255,255,.98)) !important;
+  border-color: rgba(46,196,166,.86) !important;
+}
+
+/* Mobile: keep buttons readable and prevent wrapping into a vertical list */
+@media (max-width: 420px){
+  .optRow{ gap: 8px; }
+  .optRow .optBtn,
+  .optRow .btn.optBtn{
+    font-size: 14px !important;
+    padding: 11px 8px !important;
+  }
+}
+
+/* Extra safety: hide any stray modal nav buttons unless overlay is open */
+.modalOverlay:not(.open) button,
+.modalOverlay:not(.open) .btn,
+.modalOverlay:not(.open) #imgClose,
+.modalOverlay:not(.open) #imgPrev,
+.modalOverlay:not(.open) #imgNext{
+  pointer-events: none;
+}
