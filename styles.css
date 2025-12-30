@@ -583,13 +583,21 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 
 /* Added styles for optBtn and optRow */
 .optRow{
-  display:flex;
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap:10px;
+  align-items: stretch;
 }
 
-.optRow.single .optBtn{
-  flex:1;
-  width:auto;
+.optRow.two{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* single-choice questions with 3 answers */
+.optRow.single,
+.optRow.optRow3,
+.optRow.three{
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .optBtn{
@@ -647,19 +655,21 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 /* Force 2–3 options to render as a row (mobile + desktop) */
 .optRow{
   display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap: 10px;
   align-items: stretch;
 }
 
 /* If the question has only 2 options, allow it to be 2 columns */
 .optRow.two{
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 
-/* If some markup uses a single-row layout */
-.optRow.single{
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* single-choice questions with 3 answers */
+.optRow.single,
+.optRow.optRow3,
+.optRow.three{
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
 /* Make option buttons look like chips (even if they accidentally have .btn class) */
