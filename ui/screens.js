@@ -47,6 +47,22 @@
   }
 
   // ---------- normalize branches (адреса) & sections ----------
+  // ---------- question type normalization ----------
+  function normalizeQuestionType(raw) {
+    const t0 = String(raw ?? "single").trim();
+    const t = t0.toLowerCase();
+    const isCb = (
+      t.includes("checkbox") || t.includes("check") ||
+      t.includes("bool") || t.includes("boolean") ||
+      t.includes("multi") || t.includes("multiple") ||
+      t.includes("галоч") || t.includes("чек")
+    );
+    return isCb ? "checkbox" : "single";
+  }
+
+  function isCheckboxQuestion(q) {
+    return normalizeQuestionType(q?.type ?? q?.answer_type ?? q?.kind ?? q?.тип ?? q?.тип_ответа) === "checkbox";
+  }
   function getBranches() {
     return (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
   }
@@ -143,10 +159,10 @@
           "вопрос_id", "вопрос", "id_вопроса"
         ], ""));
 
-        const qType = (norm(getAny(q, [
+        const qType = normalizeQuestionType(getAny(q, [
           "type", "answer_type", "kind",
           "тип", "тип_ответа"
-        ], "single")) || "single").toLowerCase();
+        ], "single"));
 
         const sev = (norm(getAny(q, [
           "severity", "criticality", "error_type",
@@ -196,7 +212,7 @@
     const sections = activeSections(DATA.sections);
     const allQs = sections.flatMap(s => questionsForSection(DATA.checklist, s.id));
 
-    const singleQs = allQs.filter(q => q.type !== "checkbox");
+    const singleQs = allQs.filter(q => !isCheckboxQuestion(q));
     const maxScore = singleQs.length;
 
     let score = 0;
@@ -206,9 +222,13 @@
 
     for (const q of allQs) {
       const qid = q.id;
-      const sectionTitle = sections.find(s => s.id === norm(q.section_id || q.section))?.title || "";
+      const qSectionId = norm(getAny(q, [
+        "section_id", "section", "sectionId",
+        "секция_id", "секция", "раздел_id", "раздел"
+      ], ""));
+      const sectionTitle = sections.find(s => s.id === qSectionId)?.title || "";
 
-      if (q.type === "checkbox") {
+      if (isCheckboxQuestion(q)) {
         const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set();
         if (set.size > 0) {
           // considered error(s)
@@ -256,7 +276,7 @@
 
   // ---------- required validation ----------
   function isAnswered(q) {
-    if (q.type === "checkbox") {
+    if (isCheckboxQuestion(q)) {
       // Always “answered”: if nothing checked, it's still a valid state
       return true;
     }
@@ -269,7 +289,7 @@
     const missing = [];
     for (const s of sections) {
       const qs = questionsForSection(DATA.checklist, s.id);
-      const miss = qs.filter(q => q.type !== "checkbox").filter(q => !isAnswered(q));
+      const miss = qs.filter(q => !isCheckboxQuestion(q)).filter(q => !isAnswered(q));
       if (miss.length) missing.push({ sectionId: s.id, title: s.title, count: miss.length });
     }
     return missing;
@@ -523,7 +543,7 @@
 
     const qList = document.getElementById("qList");
     qList.innerHTML = qs.map(q => {
-      const state = (q.type === "checkbox")
+      const state = isCheckboxQuestion(q)
         ? (STATE.checkboxAnswers[q.id] instanceof Set ? STATE.checkboxAnswers[q.id] : new Set())
         : norm(STATE.singleAnswers[q.id]);
       return tplQuestionCard(q, { answerState: state, showRightToggle: true, showNotes: true });
@@ -708,7 +728,7 @@
     const secs = activeSections(DATA.sections);
 
     for (const s of secs) {
-      const qs = questionsForSection(DATA.checklist, s.id).filter(q => q.type !== "checkbox");
+      const qs = questionsForSection(DATA.checklist, s.id).filter(q => !isCheckboxQuestion(q));
       for (const q of qs) {
         if (isAnswered(q)) continue;
         const card = document.querySelector(`.qCard[data-qid="${CSS.escape(q.id)}"]`);
