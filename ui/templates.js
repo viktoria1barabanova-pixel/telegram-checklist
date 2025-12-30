@@ -6,7 +6,7 @@
   const _escapeHtml = (typeof window !== "undefined" && window.escapeHtml)
     ? window.escapeHtml
     : function escapeHtmlFallback(str) {
-        return String(str ?? "")
+        return String(str == null ? "" : str)
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;")
@@ -17,7 +17,7 @@
   const norm = (typeof window !== "undefined" && window.norm)
     ? window.norm
     : function normFallback(v) {
-        const s = String(v ?? "").replace(/\s+/g, " ").trim();
+        const s = String(v == null ? "" : v).replace(/\s+/g, " ").trim();
         return s;
       };
 
@@ -25,17 +25,17 @@
     ? window.richTextHtml
     : function richTextHtmlFallback(v) {
         // минимально безопасно: без разметки, просто текст
-        return _escapeHtml(String(v ?? "")).replace(/\n/g, "<br>");
+        return _escapeHtml(String(v == null ? "" : v)).replace(/\n/g, "<br>");
       };
 
   const driveToDirect = (typeof window !== "undefined" && window.driveToDirect)
     ? window.driveToDirect
-    : function driveToDirectFallback(u) { return String(u ?? ""); };
+    : function driveToDirectFallback(u) { return String(u == null ? "" : u); };
 
   const zoneLabel = (typeof window !== "undefined" && window.zoneLabel)
     ? window.zoneLabel
     : function zoneLabelFallback(z) {
-        const v = String(z ?? "").toLowerCase();
+        const v = String(z == null ? "" : z).toLowerCase();
         if (v === "green") return "ЗЕЛЁНАЯ ЗОНА";
         if (v === "yellow") return "ЖЁЛТАЯ ЗОНА";
         if (v === "red") return "КРАСНАЯ ЗОНА";
@@ -47,15 +47,15 @@
     : function formatRuDateTimeFallback(ts) {
         try {
           const d = new Date(ts);
-          if (Number.isNaN(d.getTime())) return String(ts ?? "");
+          if (Number.isNaN(d.getTime())) return String(ts == null ? "" : ts);
           const pad = (n) => String(n).padStart(2, "0");
           return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        } catch {
-          return String(ts ?? "");
+        } catch (e) {
+          return String(ts == null ? "" : ts);
         }
       };
 
-  function h(s) { return _escapeHtml(s ?? ""); }
+  function h(s) { return _escapeHtml(s == null ? "" : s); }
 
   // Robust field getter: поддерживает разные названия колонок (ENG/RU), регистры, пробелы/дефисы
   function keyNorm(k) {
@@ -67,20 +67,23 @@
       .trim();
   }
 
-  function getAny(obj, candidates, fallback = "") {
+  function getAny(obj, candidates, fallback) {
+    if (fallback === undefined) fallback = "";
     if (!obj) return fallback;
 
     // 1) direct hit
-    for (const c of candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
       if (obj[c] !== undefined && obj[c] !== null && String(obj[c]).trim() !== "") return obj[c];
     }
 
     // 2) normalized key hit
     const map = {};
-    for (const k of Object.keys(obj)) map[keyNorm(k)] = k;
+    const keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) map[keyNorm(keys[i])] = keys[i];
 
-    for (const c of candidates) {
-      const nk = keyNorm(c);
+    for (let i = 0; i < candidates.length; i++) {
+      const nk = keyNorm(candidates[i]);
       const real = map[nk];
       if (real && obj[real] !== undefined && obj[real] !== null && String(obj[real]).trim() !== "") return obj[real];
     }
@@ -90,14 +93,20 @@
 
   // ---------- start screen ----------
   // 3 шага: область → город → адрес
-  window.tplStartScreen = function tplStartScreen({ oblasts = [] } = {}) {
+  window.tplStartScreen = function tplStartScreen(opts) {
+    opts = opts || {};
+    const oblasts = opts.oblasts || [];
+
+    const startText = (typeof UI_TEXT !== "undefined" && UI_TEXT && UI_TEXT.startButton)
+      ? UI_TEXT.startButton
+      : "Начать";
+
     return `
       <div class="container">
         <div class="card">
           <div class="cardHeader">
             <div class="title">Проверки филиалов СушиSELL</div>
             <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
-            <!-- ФИО/Город/Адрес для экрана проверки рендерятся в ui/screens.js (верхняя шапка), не внутри карточки вопроса -->
           </div>
 
           <div class="formRow">
@@ -129,7 +138,7 @@
           </div>
 
           <div class="actions">
-            <button id="startBtn" class="btn primary" disabled>${h(UI_TEXT?.startButton || "Начать")}</button>
+            <button id="startBtn" class="btn primary" disabled>${h(startText)}</button>
           </div>
 
           <div id="startHint" class="hint"></div>
@@ -139,7 +148,11 @@
   };
 
   // ---------- sticky sections header ----------
-  window.tplSectionTabs = function tplSectionTabs({ sections = [], active = "" } = {}) {
+  window.tplSectionTabs = function tplSectionTabs(opts) {
+    opts = opts || {};
+    const sections = opts.sections || [];
+    const active = opts.active || "";
+
     return `
       <div class="stickyTabs">
         <div class="tabs">
@@ -155,7 +168,11 @@
   // ---------- question card ----------
   // question: { id, section_id, title, description, hint_photo_url, type, ... }
   // type: "single" | "checkbox"
-  window.tplQuestionCard = function tplQuestionCard(q, { answerState = null, showRightToggle = true, showNotes = false } = {}) {
+  window.tplQuestionCard = function tplQuestionCard(q, opts) {
+    opts = opts || {};
+    const answerState = (opts.answerState === undefined) ? null : opts.answerState;
+    const showRightToggle = (opts.showRightToggle === undefined) ? true : !!opts.showRightToggle;
+    const showNotes = !!opts.showNotes;
     const sectionTitle = norm(getAny(q, [
       // EN
       "section_title", "section", "section_name", "block", "block_title", "group", "group_title",
@@ -196,11 +213,12 @@
     const qType = rawType.toLowerCase();
 
     const isCheckboxType = (
-      qType.includes("checkbox") || qType.includes("check") ||
-      qType.includes("bool") || qType.includes("boolean") ||
-      qType.includes("multi") || qType.includes("multiple") ||
-      qType.includes("галоч") || qType.includes("чек")
+      qType.indexOf("checkbox") >= 0 || qType.indexOf("check") >= 0 ||
+      qType.indexOf("bool") >= 0 || qType.indexOf("boolean") >= 0 ||
+      qType.indexOf("multi") >= 0 || qType.indexOf("multiple") >= 0 ||
+      qType.indexOf("галоч") >= 0 || qType.indexOf("чек") >= 0
     );
+
     const optionsHtml = isCheckboxType
       ? tplCheckboxOptions(q, answerState)
       : tplSingleOptions(q, answerState);
@@ -235,7 +253,7 @@
     // Supported:
     // 1) options_json: ["A","B","C"]
     // 2) options: "A;B;C" or "A|B|C" (also supports newlines)
-    // 3) explicit columns: option_bad / option_ok / option_good
+    // 3) explicit columns: bad_answer / acceptable_answer / ideal_answer
 
     let labels = [];
 
@@ -249,7 +267,7 @@
         const arr = JSON.parse(String(jsonStr));
         if (Array.isArray(arr)) labels = arr.map(x => norm(x)).filter(Boolean);
       }
-    } catch {}
+    } catch (e) {}
 
     // 2) delimited list
     if (!labels.length) {
@@ -265,44 +283,54 @@
       }
     }
 
-    // 3) explicit columns
+    // 3) columns from your sheet (current payload uses these)
     if (!labels.length) {
-      const badText = norm(getAny(q, [
-        "option_bad", "bad_option", "bad_label", "bad_text", "bad",
-        "плохо", "плохой", "плохой_вариант", "вариант_плохо", "лейбл_плохо"
-      ], ""));
-      const okText = norm(getAny(q, [
-        "option_ok", "ok_option", "ok_label", "ok_text", "ok", "medium", "mid",
-        "норм", "норма", "средне", "средний", "вариант_норм", "лейбл_норм"
-      ], ""));
       const goodText = norm(getAny(q, [
-        "option_good", "good_option", "good_label", "good_text", "good", "ideal", "best",
-        "эталон", "идеал", "хорошо", "правильно", "вариант_эталон", "лейбл_эталон"
+        "ideal_answer", "good", "good_text", "option_good",
+        "идеал", "эталон", "хорошо"
       ], ""));
-      labels = [badText, okText, goodText].map(norm).filter(Boolean);
+
+      const okText = norm(getAny(q, [
+        "acceptable_answer", "ok", "ok_text", "option_ok",
+        "норм", "норма", "средний"
+      ], ""));
+
+      const badText = norm(getAny(q, [
+        "bad_answer", "bad", "bad_text", "option_bad",
+        "плохо", "плохой", "стрем"
+      ], ""));
+
+      // ВАЖНО: порядок на экране: хороший (зелёный) → средний (жёлтый) → плохой (красный)
+      // Но внутренняя логика значений сохраняется (good/ok/bad)
+      labels = [goodText, okText, badText].map(norm).filter(Boolean);
     }
 
     // final fallback (ONLY if still empty)
-    if (!labels.length) labels = ["Плохо", "Норм", "Эталон"]; 
-
-    // Keep internal values for scoring: bad/ok/good
-    // If only 2 labels → map to bad/good
-    const vals = labels.length === 2 ? ["bad", "good"] : ["bad", "ok", "good"];
-    const clss = labels.length === 2 ? ["bad", "good"] : ["bad", "ok", "good"];
+    if (!labels.length) labels = ["Эталон", "Норм", "Плохо"];
 
     const cur = answerState ? norm(answerState) : "";
 
-    const btn = (val, text, cls) => {
-      if (!text) return "";
-      const active = cur === val ? "selected" : "";
-      return `<button type=\"button\" class=\"optBtn ${cls} ${active}\" data-val=\"${val}\">${h(text)}</button>`;
-    };
+    // mapping по количеству вариантов
+    // 2 варианта: good/bad
+    // 3 варианта: good/ok/bad
+    let vals, clss;
+    if (labels.length === 2) {
+      vals = ["good", "bad"]; clss = ["good", "bad"]; // good слева
+    } else {
+      vals = ["good", "ok", "bad"]; clss = ["good", "ok", "bad"]; // good → ok → bad
+    }
 
-    const rowCls = labels.length === 2 ? "two" : "optRow3";
+    function btn(val, text, cls) {
+      if (!text) return "";
+      const active = (cur === val) ? "selected" : "";
+      return `<button type="button" class="optBtn ${cls} ${active}" data-val="${val}">${h(text)}</button>`;
+    }
+
+    const rowCls = (labels.length === 2) ? "two" : "optRow3";
 
     return `
-      <div class=\"optRow single ${rowCls}\" data-kind=\"single\">
-        ${labels.map((t, i) => btn(vals[i] || "ok", t, clss[i] || "ok")).join(\"\")}
+      <div class="optRow single ${rowCls}" data-kind="single">
+        ${labels.map((t, i) => btn(vals[i] || "ok", t, clss[i] || "ok")).join("")}
       </div>
     `;
   }
@@ -319,7 +347,7 @@
         "чекбоксы_json", "чекбокс_варианты_json", "галочки_json"
       ], "");
       if (jsonStr) items = JSON.parse(String(jsonStr));
-    } catch {}
+    } catch (e) {}
 
     if (!items.length) {
       const listStr = getAny(q, [
@@ -342,7 +370,6 @@
     } else if (Array.isArray(answerSet)) {
       set = new Set(answerSet);
     } else if (typeof answerSet === "string") {
-      // allow "a;b;c" or "a|b|c"
       const parts = answerSet.split(/\s*[;|,]\s*/).map(s => norm(s)).filter(Boolean);
       set = new Set(parts);
     } else if (typeof answerSet === "boolean") {
@@ -354,9 +381,9 @@
     }
 
     // If no explicit checkbox items are defined for this question, treat it as a single boolean checkbox.
-    // UX: one big toggle row (галочка/нет), not the 3-level scale.
+    // UX: одна большая галка (есть/нет), НЕ 3-уровневая шкала.
     if (!items.length) {
-      const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да") || set.has(String(q.id))) ? "checked" : "";
+      const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да")) ? "checked" : "";
       const yesLabel = norm(getAny(q, [
         "yes_label", "yes_text", "true_label", "true_text", "checkbox_yes",
         "да", "есть", "галочка", "выполнено"
@@ -395,6 +422,8 @@
   // ---------- issue notes (comment + photos) ----------
   function tplIssueNotesBlock(q) {
     // This block is shown/hidden by logic depending on answer != good
+    const maxPhotos = (typeof MAX_PHOTOS_PER_ISSUE !== "undefined") ? MAX_PHOTOS_PER_ISSUE : 5;
+
     return `
       <div class="noteBlock" data-note-for="${h(q.id)}" style="display:none">
         <div class="noteRow">
@@ -406,7 +435,7 @@
             <input class="noteFile" type="file" accept="image/*" multiple />
             <span class="fileBtnText">+ Фото</span>
           </label>
-          <div class="noteHint">Можно добавить до ${typeof MAX_PHOTOS_PER_ISSUE !== "undefined" ? MAX_PHOTOS_PER_ISSUE : 5} фото</div>
+          <div class="noteHint">Можно добавить до ${maxPhotos} фото</div>
         </div>
 
         <div class="thumbRow"></div>
@@ -415,8 +444,13 @@
   }
 
   // ---------- results header card ----------
-  window.tplResultHeader = function tplResultHeader({ zone, percent, lastTs } = {}) {
-    const pct = Number.isFinite(Number(percent)) ? Math.round(Number(percent)) : null;
+  window.tplResultHeader = function tplResultHeader(opts) {
+    opts = opts || {};
+    const zone = opts.zone;
+    const percent = opts.percent;
+    const lastTs = opts.lastTs;
+    const pctNum = Number(percent);
+    const pct = Number.isFinite(pctNum) ? Math.round(pctNum) : null;
 
     return `
       <div class="resultHeader zone-${h(zone || "gray")}">
@@ -432,17 +466,29 @@
   };
 
   // ---------- result buttons ----------
-  window.tplResultActions = function tplResultActions({ showShare = true } = {}) {
+  window.tplResultActions = function tplResultActions(opts) {
+    opts = opts || {};
+    const showShare = (opts.showShare === undefined) ? true : !!opts.showShare;
+
+    const shareEnabled = (typeof FEATURE_SHARE_LINK !== "undefined") ? !!FEATURE_SHARE_LINK : false;
+
     return `
       <div class="resultActions">
-        ${showShare && FEATURE_SHARE_LINK ? `<button id="copyResultLinkBtn" class="btn ghost">Скопировать ссылку</button>` : ``}
+        ${showShare && shareEnabled ? `<button id="copyResultLinkBtn" class="btn ghost">Скопировать ссылку</button>` : ``}
         <button id="newCheckBtn" class="btn primary">Новая проверка</button>
       </div>
     `;
   };
 
   // ---------- error list item ----------
-  window.tplIssueItem = function tplIssueItem({ title, sectionTitle, severity, photos = [], comment = "" } = {}) {
+  window.tplIssueItem = function tplIssueItem(opts) {
+    opts = opts || {};
+    const title = opts.title;
+    const sectionTitle = opts.sectionTitle;
+    const severity = opts.severity;
+    const photos = opts.photos || [];
+    const comment = opts.comment || "";
+
     const sevLabel = severity === "critical" ? "Критическая" : "Некритическая";
     const thumbs = (photos || []).map((p, i) => {
       const src = driveToDirect(p);
