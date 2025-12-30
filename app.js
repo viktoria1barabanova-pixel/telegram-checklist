@@ -1,6 +1,9 @@
 /* app.js — bootstrap + routing (small & stable) */
 
 (async function () {
+  if (window.__APP_BOOTED__) return;
+  window.__APP_BOOTED__ = true;
+
   function qs(name) {
     try {
       return new URLSearchParams(location.search).get(name);
@@ -14,14 +17,14 @@
     root.innerHTML = `
       <div class="container">
         <div class="card">
-          <div class="hint">${escapeHtml(text || UI_TEXT?.loading || "Загружаю…")}</div>
+          <div class="hint">${richTextHtml(String(text || UI_TEXT?.loading || "Загружаю…").replace(/\n/g, "<br>"))}</div>
         </div>
       </div>
     `;
   }
 
   async function boot() {
-    setLoading(UI_TEXT?.loading || "Загружаю данные…");
+    setLoading((UI_TEXT?.loading || "Загружаю данные…") + (typeof APP_VERSION !== "undefined" ? ` (v${APP_VERSION})` : ""));
 
     let data;
     try {
