@@ -3,6 +3,35 @@
 (function () {
   let DATA = null;
 
+  // ---------- robust field getter (ENG/RU headers, разные регистры/пробелы) ----------
+  function keyNorm(k) {
+    return String(k || "")
+      .toLowerCase()
+      .replace(/[\s\-]+/g, "_")
+      .replace(/[^a-zа-я0-9_]/g, "")
+      .replace(/_+/g, "_")
+      .trim();
+  }
+
+  function getAny(obj, candidates, fallback = "") {
+    if (!obj) return fallback;
+
+    for (const c of candidates) {
+      if (obj[c] !== undefined && obj[c] !== null && String(obj[c]).trim() !== "") return obj[c];
+    }
+
+    const map = {};
+    for (const k of Object.keys(obj)) map[keyNorm(k)] = k;
+
+    for (const c of candidates) {
+      const nk = keyNorm(c);
+      const real = map[nk];
+      if (real && obj[real] !== undefined && obj[real] !== null && String(obj[real]).trim() !== "") return obj[real];
+    }
+
+    return fallback;
+  }
+
   // ---------- mount ----------
   function mount(html) {
     const root = document.getElementById("app") || document.body;
@@ -25,9 +54,18 @@
     return (sections || [])
       .filter(s => toBool(s.active) !== false)
       .map(s => ({
-        id: norm(s.section_id || s.id),
-        title: norm(s.title || s.name || s.section_title),
-        sort: Number(s.sort_order ?? 9999),
+        id: norm(getAny(s, [
+          "section_id", "id", "section", "sectionId",
+          "секция_id", "секция", "раздел_id", "раздел"
+        ], "")),
+        title: norm(getAny(s, [
+          "title", "name", "section_title",
+          "название", "заголовок", "раздел", "секция"
+        ], "")),
+        sort: Number(getAny(s, [
+          "sort_order", "sort", "order",
+          "порядок", "sort_order_", "sortorder"
+        ], 9999)),
       }))
       .sort((a, b) => (a.sort - b.sort) || a.title.localeCompare(b.title, "ru"))
       .filter(s => s.id && s.title);
@@ -36,14 +74,43 @@
   function questionsForSection(checklist, sectionId) {
     const sid = norm(sectionId);
     return (checklist || [])
-      .filter(q => toBool(q.active) !== false)
-      .filter(q => norm(q.section_id || q.section) === sid)
-      .map(q => ({
-        ...q,
-        id: norm(q.question_id || q.id),
-        type: (norm(q.type || q.answer_type) || "single").toLowerCase(), // single / checkbox
-        severity: norm(q.severity || q.criticality || q.error_type || "noncritical").toLowerCase(), // critical/noncritical
-      }))
+      .filter(q => toBool(getAny(q, ["active", "is_active", "активно", "активный"], true)) !== false)
+      .filter(q => {
+        const qSid = norm(getAny(q, [
+          "section_id", "section", "sectionId",
+          "секция_id", "секция", "раздел_id", "раздел"
+        ], ""));
+        return qSid === sid;
+      })
+      .map((q, idx) => {
+        const qid = norm(getAny(q, [
+          "question_id", "id", "questionId", "qid",
+          "вопрос_id", "вопрос", "id_вопроса"
+        ], ""));
+
+        const qType = (norm(getAny(q, [
+          "type", "answer_type", "kind",
+          "тип", "тип_ответа"
+        ], "single")) || "single").toLowerCase();
+
+        const sev = (norm(getAny(q, [
+          "severity", "criticality", "error_type",
+          "критичность", "тип_ошибки"
+        ], "noncritical")) || "noncritical").toLowerCase();
+
+        const titleText = norm(getAny(q, [
+          "title", "question", "name", "question_text", "question_title",
+          "вопрос", "вопрос_текст", "текст_вопроса", "заголовок", "название"
+        ], ""));
+
+        return {
+          ...q,
+          id: qid || `row_${idx + 1}`,
+          type: qType,
+          severity: sev,
+          title_text: titleText,
+        };
+      })
       .filter(q => q.id);
   }
 
@@ -96,7 +163,7 @@
           const note = safeEnsureNote(qid);
           issues.push({
             qid,
-            title: norm(q.title || q.question || q.name),
+            title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity,
             comment: norm(note.text),
@@ -116,7 +183,7 @@
           const note = safeEnsureNote(qid);
           issues.push({
             qid,
-            title: norm(q.title || q.question || q.name),
+            title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity,
             comment: norm(note.text),
@@ -291,7 +358,19 @@
     });
 
     // render questions for active section
-    const qs = questionsForSection(DATA.checklist, STATE.activeSection);
+    let qs = questionsForSection(DATA.checklist, STATE.activeSection);
+
+    // защита от дублей id: если в таблице два вопроса с одинаковым question_id,
+    // DOM-селекторы/обработчики начинают вести себя странно.
+    const seen = new Map();
+    qs = qs.map(q => {
+      const id = String(q.id);
+      const n = (seen.get(id) || 0) + 1;
+      seen.set(id, n);
+      if (n === 1) return q;
+      return { ...q, id: `${id}__dup${n}` };
+    });
+
     const qList = document.getElementById("qList");
     qList.innerHTML = qs.map(q => {
       const state = (q.type === "checkbox")
