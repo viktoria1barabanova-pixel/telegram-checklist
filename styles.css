@@ -50,6 +50,13 @@ body {
     radial-gradient(820px 520px at 110% 0%, rgba(46, 196, 166, 0.12), transparent 62%),
     radial-gradient(820px 520px at 50% 120%, rgba(242, 201, 76, 0.12), transparent 62%),
     linear-gradient(180deg, var(--bg), var(--bg-2));
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/* iOS Safari: fixed background can look glitchy; fall back to scroll */
+@supports (-webkit-touch-callout: none) {
+  body { background-attachment: scroll; }
 }
 
 .container {
@@ -219,7 +226,7 @@ button {
 }
 
 .btn{
-  width: 100%;
+  width: auto;
   padding: 14px 16px;
   border-radius: 18px;
   font-size: 16px;
@@ -229,6 +236,16 @@ button {
   background: linear-gradient(135deg, #0F1117, #1B1D26);
   box-shadow: var(--sh-md);
   transition: transform .06s ease, filter .15s ease, opacity .15s ease;
+}
+
+/* Only primary actions should be full-width */
+#startBtn, .startBtn,
+#finishBtn, .finishBtn,
+#newCheckBtn, .newCheckBtn,
+#resetDraftBtn, .resetDraftBtn,
+#copyResultLinkBtn, .copyResultLinkBtn,
+.btnPrimary {
+  width: 100%;
 }
 
 .btn:hover { filter: brightness(1.03); }
@@ -676,9 +693,7 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 .optRow .optBtn,
 .optRow button.optBtn,
 .optRow .btn.optBtn,
-.optRow button.btn.optBtn,
-.segmented .btn,
-.segmented button.btn{
+.optRow button.btn.optBtn{
   width: 100% !important;
   background: rgba(255,255,255,0.94) !important;
   color: var(--text) !important;
