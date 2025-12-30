@@ -36,25 +36,34 @@
   }
 
   // ---------- start screen ----------
-  window.tplStartScreen = function tplStartScreen({ cities = [], branches = [] } = {}) {
+  // 3 шага: область → город → адрес
+  window.tplStartScreen = function tplStartScreen({ oblasts = [] } = {}) {
     return `
       <div class="container">
         <div class="card">
           <div class="cardHeader">
-            <div class="title">${h(UI_TEXT?.startTitle || "Проверка филиала")}</div>
+            <div class="title">Проверки филиалов СушиSELL</div>
+            <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
           </div>
 
           <div class="formRow">
-            <label class="label">Город</label>
-            <select id="citySelect" class="select">
-              <option value="">Выбери город</option>
-              ${cities.map(c => `<option value="${h(c)}">${h(c)}</option>`).join("")}
+            <label class="label">Область</label>
+            <select id="oblastSelect" class="select">
+              <option value="">Выбери область</option>
+              ${oblasts.map(o => `<option value="${h(o)}">${h(o)}</option>`).join("")}
             </select>
           </div>
 
           <div class="formRow">
-            <label class="label">Филиал</label>
-            <select id="branchSelect" class="select" disabled>
+            <label class="label">Город</label>
+            <select id="citySelect" class="select" disabled>
+              <option value="">Сначала выбери область</option>
+            </select>
+          </div>
+
+          <div class="formRow">
+            <label class="label">Адрес</label>
+            <select id="addressSelect" class="select" disabled>
               <option value="">Сначала выбери город</option>
             </select>
           </div>
@@ -121,7 +130,8 @@
 
     const descHtml = desc ? `<div class="qDesc">${richTextHtml(desc)}</div>` : "";
 
-    const optionsHtml = (String(q.type || q.answer_type || "").toLowerCase() === "checkbox")
+    const qType = String(getAny(q, ["type", "answer_type", "kind", "тип", "тип_ответа"], "single")).toLowerCase();
+    const optionsHtml = (qType === "checkbox")
       ? tplCheckboxOptions(q, answerState)
       : tplSingleOptions(q, answerState);
 
