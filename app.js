@@ -36,6 +36,18 @@
     `);
   }
 
+  // ====== GLOBAL ERROR GUARDS (prevent white screen) ======
+  window.addEventListener("error", (e) => {
+    try {
+      renderError("Ошибка в приложении", e?.error || e?.message || e);
+    } catch {}
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    try {
+      renderError("Ошибка в приложении", e?.reason || e);
+    } catch {}
+  });
+
   // Convert plain text to HTML with safe clickable links.
   // Supports:
   //  - Markdown links: [text](https://example.com)
@@ -151,8 +163,6 @@
   function submitToSheet(payloadObj) {
     return new Promise((resolve, reject) => {
       try {
-        // Some deployments may miss the hidden <form>/<iframe> in index.html.
-        // Create them on the fly to prevent "Submit form not found".
         let frame = document.getElementById("submitFrame");
         if (!frame) {
           frame = document.createElement("iframe");
@@ -185,7 +195,6 @@
         if (!payloadInput.getAttribute("name")) payloadInput.setAttribute("name", "payload");
         payloadInput.value = JSON.stringify(payloadObj);
 
-        // Also add hidden action field for robustness
         let actionInput = document.getElementById("submitAction");
         if (!actionInput) {
           actionInput = document.createElement("input");
@@ -196,7 +205,6 @@
         }
         actionInput.value = "submit";
 
-        // Apps Script doPost() expects action=submit (either as query param or form field)
         const actionUrl = buildUrlWithParams(SUBMIT_URL, { action: "submit" });
         form.action = actionUrl;
 
@@ -249,6 +257,21 @@
   const btnNext = document.getElementById("imgNext");
   const btnClose = document.getElementById("imgClose");
 
+  // Hard-hide modal UI when it's not open (prevents stray arrows/close button on other screens)
+  function syncModalVisibility() {
+    if (!modalEl) return;
+    const isOpen = modalEl.classList.contains("open");
+
+    modalEl.style.display = isOpen ? "flex" : "none";
+    modalEl.setAttribute("aria-hidden", isOpen ? "false" : "true");
+
+    const d = isOpen ? "inline-flex" : "none";
+    if (btnPrev) btnPrev.style.display = d;
+    if (btnNext) btnNext.style.display = d;
+    if (btnClose) btnClose.style.display = d;
+  }
+  try { syncModalVisibility(); } catch {}
+
   let MODAL_IMAGES = [];
   let MODAL_INDEX = 0;
 
@@ -267,12 +290,14 @@
     MODAL_INDEX = Math.max(0, Math.min(index, MODAL_IMAGES.length - 1));
     if (!MODAL_IMAGES.length) return;
     modalEl.classList.add("open");
+    syncModalVisibility();
     modalRender();
   }
 
   function closeImageModal() {
     if (!modalEl) return;
     modalEl.classList.remove("open");
+    syncModalVisibility();
     if (modalImg) modalImg.src = "";
     MODAL_IMAGES = [];
     MODAL_INDEX = 0;
@@ -315,6 +340,7 @@
     checkboxAnswers: {}, // "_items" -> Set(keys)
     isFinished: false,
     lastResult: null,
+    lastResultId: null, // share id (submission_id)
     issueNotes: {}, // key -> { text, photos[] (dataURL) }
     noteOpen: {}, // key -> bool
   };
@@ -386,6 +412,11 @@
     }
   }
 
+  function buildResultShareUrl(resultId) {
+    const base = `${location.origin}${location.pathname}`;
+    return `${base}?result=${encodeURIComponent(String(resultId || "").trim())}`;
+  }
+
   function clearDraftStorageOnly(branchId) {
     try {
       if (!branchId) return;
@@ -411,6 +442,7 @@
           savedAt: Date.now(),
           isFinished: STATE.isFinished,
           lastResult: STATE.lastResult,
+          lastResultId: STATE.lastResultId,
           issueNotes: STATE.issueNotes,
           noteOpen: STATE.noteOpen,
         })
@@ -430,12 +462,10 @@
         return null;
       }
 
-      // restore Sets
       const restored = {};
       for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
       d.checkboxAnswers = restored;
 
-      // migrate notes
       d.issueNotes = d.issueNotes || {};
       for (const k of Object.keys(d.issueNotes)) {
         const n = d.issueNotes[k] || {};
@@ -464,6 +494,7 @@
     STATE.activeSection = "";
     STATE.isFinished = false;
     STATE.lastResult = null;
+    STATE.lastResultId = null;
     STATE.fio = "";
     STATE.issueNotes = {};
     STATE.noteOpen = {};
@@ -476,6 +507,7 @@
     STATE.activeSection = "";
     STATE.isFinished = false;
     STATE.lastResult = null;
+    STATE.lastResultId = null;
     STATE.issueNotes = {};
     STATE.noteOpen = {};
   }
@@ -502,7 +534,6 @@
       .filter((r) => toBool(r.active) && norm(r.section_code) && norm(r.question_id) && norm(r.question_type));
   }
 
-  // SINGLE questions: one row per question
   function buildSingles(rows, enabledSections) {
     const m = {};
     for (const r of rows) {
@@ -535,7 +566,6 @@
     return m;
   }
 
-  // CHECKBOX items: each row is a separate yes/no checkbox
   function buildCheckboxGroups(rows, enabledSections) {
     const m = {};
     for (const r of rows) {
@@ -911,14 +941,14 @@
       </div>
 
       <div class="card">
-        <button id="newCheck" class="btnSecondary">Новая проверка</button>
+        ${STATE.lastResultId ? `<button id="copyResultLink" class="btnSecondary">Скопировать ссылку на результат</button>` : ``}
+        <button id="newCheck" class="btnSecondary" style="margin-top:${STATE.lastResultId ? "8px" : "0"}">Новая проверка</button>
       </div>
     `);
 
     const newBtn = document.getElementById("newCheck");
     if (newBtn)
       newBtn.onclick = () => {
-        // start a fresh check for the same branch (no old answers), keep fio/city
         resetCheckKeepMeta();
         clearDraftStorageOnly(STATE.branchId);
 
@@ -929,6 +959,22 @@
         saveDraft();
         renderSurvey();
       };
+
+    const copyBtn = document.getElementById("copyResultLink");
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        if (!STATE.lastResultId) return;
+        const url = buildResultShareUrl(STATE.lastResultId);
+        try {
+          await navigator.clipboard.writeText(url);
+          const old = copyBtn.textContent;
+          copyBtn.textContent = "Ссылка скопирована ✅";
+          setTimeout(() => (copyBtn.textContent = old), 1400);
+        } catch {
+          prompt("Скопируй ссылку:", url);
+        }
+      };
+    }
 
     document.querySelectorAll('img.thumb[data-res-thumb]').forEach((img) => {
       img.addEventListener("click", () => {
@@ -1026,8 +1072,6 @@
 
       const d = loadDraft(STATE.branchId);
       if (d && d.isFinished && d.lastResult) {
-        // Не открываем прошлый результат как текущую проверку.
-        // Храним историю отдельно (lastCheck), а черновик после завершения удаляем.
         resetCheckKeepMeta();
         clearDraftStorageOnly(STATE.branchId);
         migrateAllNotes();
@@ -1038,6 +1082,7 @@
         STATE.checkboxAnswers = d.checkboxAnswers || {};
         STATE.isFinished = !!d.isFinished;
         STATE.lastResult = d.lastResult || null;
+        STATE.lastResultId = d.lastResultId || null;
         STATE.fio = d.fio || STATE.fio;
         STATE.issueNotes = d.issueNotes || {};
         STATE.noteOpen = d.noteOpen || {};
@@ -1350,7 +1395,6 @@
           STATE.singleAnswers[key] = inp.value;
           saveDraft();
 
-          // highlight selected segment instantly
           try {
             const wrap = document.querySelector(`.segmented[data-seg="${CSS.escape(key)}"]`);
             if (wrap) {
@@ -1425,11 +1469,10 @@
         });
       });
 
-      // note text
+      // note text autosize (2 lines -> grows -> scroll)
       document.querySelectorAll("textarea[data-note-text]").forEach((el) => {
         const autoSize = () => {
           try {
-            // reset then grow
             el.style.height = "auto";
             const maxH = parseInt(getComputedStyle(el).maxHeight || "92", 10) || 92;
             const next = Math.min(el.scrollHeight, maxH);
@@ -1438,7 +1481,6 @@
           } catch {}
         };
 
-        // initial size for existing draft text
         autoSize();
 
         el.addEventListener("input", () => {
@@ -1482,6 +1524,7 @@
           saveDraft();
           contentEl.innerHTML = renderActiveSectionContent();
           bindHandlers();
+          updateFinishState();
         });
       });
 
@@ -1496,6 +1539,7 @@
           saveDraft();
           contentEl.innerHTML = renderActiveSectionContent();
           bindHandlers();
+          updateFinishState();
         });
       });
 
@@ -1546,6 +1590,9 @@
         setSubmitStatus("Отправляю результаты…");
 
         const payload = buildSubmitPayload(result);
+        // Use submission_id as stable share id for now
+        STATE.lastResultId = payload?.submission_id || null;
+
         await submitToSheet(payload);
 
         setSubmitStatus("Готово ✅");
@@ -1553,11 +1600,9 @@
         STATE.isFinished = true;
         STATE.lastResult = result;
 
-        // save last-check info and remove the draft so next run is fresh
-        setLastCheck(STATE.branchId, { zone: result.zone, percent: result.percent });
+        setLastCheck(STATE.branchId, { zone: result.zone, percent: result.percent, result_id: STATE.lastResultId || null });
         clearDraftStorageOnly(STATE.branchId);
 
-        // IMPORTANT: do not saveDraft() here, иначе снова сохраним finished+result
         renderResultScreen(result, branch);
       } catch (e) {
         finishBtn.disabled = false;
@@ -1575,14 +1620,12 @@
 
       renderStart(true);
 
-      // ensure hidden submit form points to current submit URL
       try {
         const f = document.getElementById("submitForm");
         if (f) f.action = SUBMIT_URL;
         console.log("SUBMIT_URL (runtime)", SUBMIT_URL);
       } catch {}
 
-      // load all data
       DATA = await loadJsonp(buildUrlWithParams(DATA_JSONP_URL, { action: "all" }));
 
       renderStart(false);
