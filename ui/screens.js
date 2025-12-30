@@ -160,6 +160,7 @@
       .filter(s => toBool(s.active) !== false)
       .map(s => ({
         id: norm(getAny(s, [
+          "section_code", // основной ключ из таблицы
           "section_id", "id", "section", "sectionId",
           "секция_id", "секция", "раздел_id", "раздел"
         ], "")),
@@ -182,7 +183,13 @@
     return (checklist || [])
       .filter(q => toBool(getAny(q, ["active", "is_active", "активно", "активный"], true)) !== false)
       .filter(q => {
+        // Пропускаем строку-заголовок (часто приходит как первая строка из таблицы)
+        const headerQid = norm(getAny(q, ["question_id", "id", "qid"], ""));
+        const headerText = tkey(getAny(q, ["question_text", "question", "name", "title"], ""));
+        if (headerQid === "id_вопроса" || headerQid === "question_id") return false;
+        if (headerText === "текст вопроса" || headerText === "question_text") return false;
         const qSid = norm(getAny(q, [
+          "section_code", // основной ключ из таблицы
           "section_id", "section", "sectionId",
           "секция_id", "секция", "раздел_id", "раздел"
         ], ""));
@@ -195,9 +202,10 @@
         ], ""));
 
         const qType = normalizeQuestionType(getAny(q, [
-          "type", "answer_type", "kind",
-          "тип", "тип_ответа"
-        ], "single"));
+  "question_type", // ключ из таблицы
+  "type", "answer_type", "kind",
+  "тип", "тип_ответа"
+], "single"));
 
         const sev = (norm(getAny(q, [
           "severity", "criticality", "error_type",
@@ -264,6 +272,7 @@
     for (const q of allQs) {
       const qid = q.id;
       const qSectionId = norm(getAny(q, [
+        "section_code",
         "section_id", "section", "sectionId",
         "секция_id", "секция", "раздел_id", "раздел"
       ], ""));
@@ -478,6 +487,7 @@
 
         STATE.singleAnswers = d.singleAnswers || {};
         STATE.checkboxAnswers = d.checkboxAnswers || {};
+	STATE.singleAnswerLabels = d.singleAnswerLabels || {};
         STATE.isFinished = !!d.isFinished;
         STATE.lastResult = d.lastResult || null;
         STATE.lastResultId = d.lastResultId || null;
@@ -518,6 +528,7 @@
       STATE.isFinished = false;
       STATE.lastResult = null;
       STATE.lastResultId = null;
+      STATE.singleAnswerLabels = {};
 
       saveDraft();
       renderChecklist(DATA);
@@ -576,12 +587,13 @@
     let qs = questionsForSection(DATA.checklist, STATE.activeSection);
 
     const qList = document.getElementById("qList");
-    qList.innerHTML = qs.map(q => {
-      const state = isCheckboxQuestion(q)
-        ? (STATE.checkboxAnswers[q.id] instanceof Set ? STATE.checkboxAnswers[q.id] : new Set())
-        : norm(STATE.singleAnswers[q.id]);
-      return tplQuestionCard(q, { answerState: state, showRightToggle: true, showNotes: true });
-    }).join("");
+qList.innerHTML = qs.map(q => {
+  const qWithSection = { ...q, section_title: activeTitle };
+  const state = isCheckboxQuestion(qWithSection)
+    ? (STATE.checkboxAnswers[qWithSection.id] instanceof Set ? STATE.checkboxAnswers[qWithSection.id] : new Set())
+    : norm(STATE.singleAnswers[qWithSection.id]);
+  return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: true });
+}).join("");
 
     // wire photo toggle buttons
     document.querySelectorAll(".photoToggle").forEach(btn => {
@@ -598,9 +610,16 @@
       const qid = card.getAttribute("data-qid");
 
       row.querySelectorAll(".optBtn").forEach(btn => {
-        btn.onclick = () => {
-          const v = btn.getAttribute("data-val");
-          STATE.singleAnswers[qid] = v;
+btn.onclick = () => {
+  const v = btn.getAttribute("data-val");
+  const label = (btn.textContent || "").trim();
+
+  // canonical key for scoring/UI
+  STATE.singleAnswers[qid] = v;
+
+  // human label for dashboards
+  STATE.singleAnswerLabels ??= {};
+  STATE.singleAnswerLabels[qid] = label;
 
           // selected style
           row.querySelectorAll(".optBtn").forEach(x => x.classList.remove("selected"));
@@ -830,7 +849,8 @@
 
     // You can expand with more columns expected by Apps Script doPost.
     // Keep it self-contained: result + answers + notes.
-    const single = { ...STATE.singleAnswers };
+const single = { ...STATE.singleAnswers };
+const single_labels = { ...(STATE.singleAnswerLabels || {}) };
     const checkbox = {};
     for (const [k, set] of Object.entries(STATE.checkboxAnswers || {})) checkbox[k] = [...(set || [])];
 
@@ -852,7 +872,7 @@
 
       issues: result.issues, // already includes notes/photos
 
-      answers: { single, checkbox },
+answers: { single, single_labels, checkbox },
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
     };
   }
