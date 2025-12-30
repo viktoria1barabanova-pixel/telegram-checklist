@@ -45,8 +45,11 @@
     action=""
     style="display:none"
   >
-    <input type="hidden" name="action" value="submit" />
+    <!-- IDs are used by app.js; names are used by Apps Script -->
+    <input type="hidden" id="submitAction" name="action" value="submit" />
     <input type="hidden" name="payload" id="submitPayload" />
+    <!-- Optional: request postMessage response from Apps Script (used for result_id/share links) -->
+    <input type="hidden" id="submitReturn" name="return" value="" />
   </form>
 
   <!-- ===== Scripts ===== -->
