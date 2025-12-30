@@ -192,8 +192,16 @@
 
     const descHtml = desc ? `<div class="qDesc">${richTextHtml(desc)}</div>` : "";
 
-    const qType = String(getAny(q, ["type", "answer_type", "kind", "тип", "тип_ответа"], "single")).toLowerCase();
-    const optionsHtml = (qType === "checkbox")
+    const rawType = String(getAny(q, ["type", "answer_type", "kind", "тип", "тип_ответа"], "single"));
+    const qType = rawType.toLowerCase();
+
+    const isCheckboxType = (
+      qType.includes("checkbox") || qType.includes("check") ||
+      qType.includes("bool") || qType.includes("boolean") ||
+      qType.includes("multi") || qType.includes("multiple") ||
+      qType.includes("галоч") || qType.includes("чек")
+    );
+    const optionsHtml = isCheckboxType
       ? tplCheckboxOptions(q, answerState)
       : tplSingleOptions(q, answerState);
 
@@ -221,17 +229,15 @@
     `;
   };
 
-  // ---------- single options (3 columns, colored) ----------
+  // ---------- single options (2–3 columns, labels from sheet) ----------
   function tplSingleOptions(q, answerState) {
-    // Labels should come from the sheet.
-    // Supported ways:
-    // 1) options_json: ["Плохо","Норм","Эталон"] (order: bad, ok, good)
-    // 2) options: "Плохо;Норм;Эталон" (order: bad, ok, good)
-    // 3) explicit columns: option_bad/option_ok/option_good (and many aliases)
+    // Labels come from the sheet.
+    // Supported:
+    // 1) options_json: ["A","B","C"]
+    // 2) options: "A;B;C" or "A|B|C" (also supports newlines)
+    // 3) explicit columns: option_bad / option_ok / option_good
 
-    let badText = "";
-    let okText = "";
-    let goodText = "";
+    let labels = [];
 
     // 1) JSON
     try {
@@ -241,68 +247,62 @@
       ], "");
       if (jsonStr) {
         const arr = JSON.parse(String(jsonStr));
-        if (Array.isArray(arr)) {
-          badText = norm(arr[0] ?? "");
-          okText = norm(arr[1] ?? "");
-          goodText = norm(arr[2] ?? "");
-        }
+        if (Array.isArray(arr)) labels = arr.map(x => norm(x)).filter(Boolean);
       }
     } catch {}
 
     // 2) delimited list
-    if (!badText && !okText && !goodText) {
+    if (!labels.length) {
       const listStr = getAny(q, [
         "options", "answer_options", "variants", "choices",
         "варианты", "ответы", "вариантыответа"
       ], "");
       if (listStr) {
-        const parts = String(listStr).split(";").map(s => norm(s)).filter(Boolean);
-        badText = parts[0] ?? "";
-        okText = parts[1] ?? "";
-        goodText = parts[2] ?? "";
+        labels = String(listStr)
+          .split(/\s*[;|\n]\s*/)
+          .map(s => norm(s))
+          .filter(Boolean);
       }
     }
 
     // 3) explicit columns
-    if (!badText) {
-      badText = norm(getAny(q, [
+    if (!labels.length) {
+      const badText = norm(getAny(q, [
         "option_bad", "bad_option", "bad_label", "bad_text", "bad",
         "плохо", "плохой", "плохой_вариант", "вариант_плохо", "лейбл_плохо"
       ], ""));
-    }
-    if (!okText) {
-      okText = norm(getAny(q, [
+      const okText = norm(getAny(q, [
         "option_ok", "ok_option", "ok_label", "ok_text", "ok", "medium", "mid",
         "норм", "норма", "средне", "средний", "вариант_норм", "лейбл_норм"
       ], ""));
-    }
-    if (!goodText) {
-      goodText = norm(getAny(q, [
+      const goodText = norm(getAny(q, [
         "option_good", "good_option", "good_label", "good_text", "good", "ideal", "best",
         "эталон", "идеал", "хорошо", "правильно", "вариант_эталон", "лейбл_эталон"
       ], ""));
+      labels = [badText, okText, goodText].map(norm).filter(Boolean);
     }
 
     // final fallback (ONLY if still empty)
-    if (!badText && !okText && !goodText) {
-      badText = "Плохо";
-      okText = "Норм";
-      goodText = "Эталон";
-    }
+    if (!labels.length) labels = ["Плохо", "Норм", "Эталон"]; 
+
+    // Keep internal values for scoring: bad/ok/good
+    // If only 2 labels → map to bad/good
+    const vals = labels.length === 2 ? ["bad", "good"] : ["bad", "ok", "good"];
+    const clss = labels.length === 2 ? ["bad", "good"] : ["bad", "ok", "good"];
 
     const cur = answerState ? norm(answerState) : "";
 
     const btn = (val, text, cls) => {
       if (!text) return "";
       const active = cur === val ? "selected" : "";
-      return `<button type="button" class="optBtn ${cls} ${active}" data-val="${val}">${h(text)}</button>`;
+      return `<button type=\"button\" class=\"optBtn ${cls} ${active}\" data-val=\"${val}\">${h(text)}</button>`;
     };
 
+    const rowCls = labels.length === 2 ? "two" : "optRow3";
+
     return `
-      <div class="optRow single optRow3" data-kind="single">
-        ${btn("bad", badText, "bad")}
-        ${btn("ok", okText, "ok")}
-        ${btn("good", goodText, "good")}
+      <div class=\"optRow single ${rowCls}\" data-kind=\"single\">
+        ${labels.map((t, i) => btn(vals[i] || "ok", t, clss[i] || "ok")).join(\"\")}
       </div>
     `;
   }
@@ -328,12 +328,27 @@
       }
     }
 
-    const set = answerSet instanceof Set ? answerSet : new Set(answerSet || []);
+    let set;
+    if (answerSet instanceof Set) {
+      set = answerSet;
+    } else if (Array.isArray(answerSet)) {
+      set = new Set(answerSet);
+    } else if (typeof answerSet === "string") {
+      // allow "a;b;c" or "a|b|c"
+      const parts = answerSet.split(/\s*[;|,]\s*/).map(s => norm(s)).filter(Boolean);
+      set = new Set(parts);
+    } else if (typeof answerSet === "boolean") {
+      set = new Set(answerSet ? ["1"] : []);
+    } else if (answerSet === 1 || answerSet === 0) {
+      set = new Set(answerSet ? ["1"] : []);
+    } else {
+      set = new Set();
+    }
 
     // If no explicit checkbox items are defined for this question, treat it as a single boolean checkbox.
     // UX: one big toggle row (галочка/нет), not the 3-level scale.
     if (!items.length) {
-      const checked = set.has("1") || set.has("true") || set.has("yes") || set.has(String(q.id)) ? "checked" : "";
+      const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да") || set.has(String(q.id))) ? "checked" : "";
       const yesLabel = norm(getAny(q, [
         "yes_label", "yes_text", "true_label", "true_text", "checkbox_yes",
         "да", "есть", "галочка", "выполнено"
