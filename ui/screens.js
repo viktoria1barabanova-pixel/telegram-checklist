@@ -38,16 +38,47 @@
     root.innerHTML = html;
   }
 
-  // ---------- normalize branches & sections ----------
-  function listCities(branches) {
-    return uniq((branches || []).map(b => norm(b.city)).filter(Boolean)).sort((a, b) => a.localeCompare(b, "ru"));
+  // ---------- normalize branches (адреса) & sections ----------
+  function getOblast(b) {
+    return norm(getAny(b, ["oblast", "region", "area", "область", "регион", "край"], ""));
   }
 
-  function branchesByCity(branches, city) {
+  function getCity(b) {
+    return norm(getAny(b, ["city", "город"], ""));
+  }
+
+  function getAddressLabel(b) {
+    return norm(getAny(b, ["address", "addr", "адрес", "name", "branch_name", "title", "название"], ""));
+  }
+
+  function getBranchId(b) {
+    return norm(getAny(b, ["branch_id", "id", "branchId", "филиал_id", "id_филиала"], ""));
+  }
+
+  function activeAddressRows(branches) {
+    return (branches || []).filter(b => toBool(getAny(b, ["active", "is_active", "активно", "активный"], true)) !== false);
+  }
+
+  function listOblasts(branches) {
+    const rows = activeAddressRows(branches);
+    return uniq(rows.map(getOblast).filter(Boolean)).sort((a, b) => a.localeCompare(b, "ru"));
+  }
+
+  function citiesByOblast(branches, oblast) {
+    const o = norm(oblast);
+    const rows = activeAddressRows(branches).filter(b => getOblast(b) === o);
+    return uniq(rows.map(getCity).filter(Boolean)).sort((a, b) => a.localeCompare(b, "ru"));
+  }
+
+  function addressesByCity(branches, oblast, city) {
+    const o = norm(oblast);
     const c = norm(city);
-    return (branches || [])
-      .filter(b => norm(b.city) === c && toBool(b.active) !== false)
-      .sort((a, b) => norm(a.name || a.branch_name).localeCompare(norm(b.name || b.branch_name), "ru"));
+    const rows = activeAddressRows(branches).filter(b => getOblast(b) === o && getCity(b) === c);
+    const list = rows
+      .map(b => ({ id: getBranchId(b), label: getAddressLabel(b) }))
+      .filter(x => x.id && x.label);
+    list.sort((a, b) => a.label.localeCompare(b.label, "ru"));
+    return list;
   }
 
   function activeSections(sections) {
@@ -223,15 +254,18 @@
   // ---------- Start screen ----------
   window.renderStart = function renderStart(data) {
     DATA = data;
-    const cities = listCities(DATA.branches);
-    mount(tplStartScreen({ cities, branches: DATA.branches }));
 
+    const oblasts = listOblasts(DATA.branches);
+    mount(tplStartScreen({ oblasts }));
+
+    const oblastSelect = document.getElementById("oblastSelect");
     const citySelect = document.getElementById("citySelect");
-    const branchSelect = document.getElementById("branchSelect");
+    const addressSelect = document.getElementById("addressSelect");
     const startBtn = document.getElementById("startBtn");
     const hint = document.getElementById("startHint");
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
+    const userLine = document.getElementById("userNameLine");
 
     // TG vs non-TG
     if (IS_TG) {
@@ -242,52 +276,96 @@
       STATE.fio = "";
     }
 
-    function refreshBranches() {
-      const city = norm(citySelect.value);
-      STATE.city = city;
+    // show username line (only if known)
+    if (userLine) {
+      const uname = IS_TG ? norm(STATE.fio) : "";
+      if (uname) {
+        userLine.style.display = "";
+        userLine.textContent = uname;
+      } else {
+        userLine.style.display = "none";
+        userLine.textContent = "";
+      }
+    }
 
-      const list = branchesByCity(DATA.branches, city);
-      branchSelect.innerHTML = city
-        ? `<option value="">Выбери филиал</option>` + list.map(b => {
-            const id = norm(b.branch_id || b.id);
-            const nm = norm(b.name || b.branch_name || b.title);
-            return `<option value="${escapeHtml(id)}">${escapeHtml(nm)}</option>`;
-          }).join("")
-        : `<option value="">Сначала выбери город</option>`;
+    function resetCities() {
+      citySelect.innerHTML = `<option value="">Сначала выбери область</option>`;
+      citySelect.disabled = true;
+      resetAddresses();
+    }
 
-      branchSelect.disabled = !city;
+    function resetAddresses() {
+      addressSelect.innerHTML = `<option value="">Сначала выбери город</option>`;
+      addressSelect.disabled = true;
       startBtn.disabled = true;
-
-      hint.textContent = "";
     }
 
     function refreshStartReady() {
-      const branchId = norm(branchSelect.value);
-      const fio = IS_TG ? STATE.fio : norm(fioInput.value);
+      const oblast = norm(oblastSelect.value);
+      const city = norm(citySelect.value);
+      const branchId = norm(addressSelect.value);
 
+      STATE.oblast = oblast;
+      STATE.city = city;
       STATE.branchId = branchId;
-      STATE.fio = fio;
 
-      startBtn.disabled = !(STATE.city && STATE.branchId && (IS_TG || STATE.fio));
+      if (!IS_TG) STATE.fio = norm(fioInput.value);
 
-      // preload (optional): when branch selected, we can init sections etc.
+      startBtn.disabled = !(STATE.oblast && STATE.city && STATE.branchId && (IS_TG || STATE.fio));
     }
 
-    citySelect.onchange = () => {
-      refreshBranches();
+    function fillCities(oblast) {
+      const cities = citiesByOblast(DATA.branches, oblast);
+      citySelect.innerHTML = `<option value="">Выбери город</option>` +
+        cities.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      citySelect.disabled = !cities.length;
+      resetAddresses();
+    }
+
+    function fillAddresses(oblast, city) {
+      const list = addressesByCity(DATA.branches, oblast, city);
+      addressSelect.innerHTML = `<option value="">Выбери адрес</option>` +
+        list.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.label)}</option>`).join("");
+      addressSelect.disabled = !list.length;
+      startBtn.disabled = true;
+    }
+
+    oblastSelect.onchange = () => {
+      const oblast = norm(oblastSelect.value);
+      hint.textContent = "";
+      if (!oblast) {
+        resetCities();
+        refreshStartReady();
+        return;
+      }
+      fillCities(oblast);
       refreshStartReady();
     };
 
-    branchSelect.onchange = () => {
+    citySelect.onchange = () => {
+      const oblast = norm(oblastSelect.value);
+      const city = norm(citySelect.value);
+      hint.textContent = "";
+      if (!city) {
+        resetAddresses();
+        refreshStartReady();
+        return;
+      }
+      fillAddresses(oblast, city);
+      refreshStartReady();
+    };
+
+    addressSelect.onchange = () => {
       refreshStartReady();
 
-      // When branch selected, restore draft (if any)
-      const d = loadDraft(norm(branchSelect.value));
+      // restore draft for this address (branchId)
+      const bid = norm(addressSelect.value);
+      const d = loadDraft(bid);
       if (d) {
-        // restore minimal state
+        STATE.oblast = d.oblast || STATE.oblast;
         STATE.city = d.city || STATE.city;
         STATE.fio = d.fio || STATE.fio;
-        STATE.branchId = d.branchId || STATE.branchId;
+        STATE.branchId = d.branchId || bid;
 
         STATE.enabledSections = d.enabledSections || [];
         STATE.activeSection = d.activeSection || "";
@@ -302,21 +380,21 @@
         STATE.noteOpen = d.noteOpen || {};
         migrateAllNotes();
 
-        hint.innerHTML = `Есть черновик этого филиала (до ${formatRuDateTime(new Date(d.savedAt).toISOString())}).`;
+        hint.innerHTML = `Есть черновик этого адреса (до ${formatRuDateTime(new Date(d.savedAt).toISOString())}).`;
       }
     };
 
     if (!IS_TG) fioInput.oninput = refreshStartReady;
 
-    refreshBranches();
+    // initial state
+    resetCities();
+    refreshStartReady();
 
     startBtn.onclick = () => {
-      // init sections
       const secs = activeSections(DATA.sections);
       STATE.enabledSections = secs.map(s => s.id);
       STATE.activeSection = secs[0]?.id || "";
 
-      // clear finished state on new session start
       STATE.isFinished = false;
       STATE.lastResult = null;
       STATE.lastResultId = null;
@@ -635,6 +713,7 @@
       submission_id: submissionId,
       submitted_at: ts,
 
+      oblast: STATE.oblast || "",
       city: STATE.city,
       branch_id: STATE.branchId,
       fio: STATE.fio,
