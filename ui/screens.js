@@ -263,6 +263,7 @@
     const addressSelect = document.getElementById("addressSelect");
     const startBtn = document.getElementById("startBtn");
     const hint = document.getElementById("startHint");
+    const lastCheckHint = document.getElementById("lastCheckHint");
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
     const userLine = document.getElementById("userNameLine");
@@ -298,6 +299,7 @@
       addressSelect.innerHTML = `<option value="">Сначала выбери город</option>`;
       addressSelect.disabled = true;
       startBtn.disabled = true;
+      if (lastCheckHint) lastCheckHint.textContent = "";
     }
 
     function refreshStartReady() {
@@ -328,6 +330,7 @@
         list.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.label)}</option>`).join("");
       addressSelect.disabled = !list.length;
       startBtn.disabled = true;
+      if (lastCheckHint) lastCheckHint.textContent = "";
     }
 
     oblastSelect.onchange = () => {
@@ -358,6 +361,21 @@
     addressSelect.onchange = () => {
       refreshStartReady();
 
+      // show last check for this address (stored locally)
+      if (lastCheckHint) {
+        const bidNow = norm(addressSelect.value);
+        const last = getLastCheck(bidNow);
+        if (last && (last.ts || last.percent != null || last.zone)) {
+          const pct = (last.percent != null && isFinite(Number(last.percent))) ? `${Math.round(Number(last.percent))}%` : "";
+          const dt = last.ts ? formatRuDateTime(last.ts) : "";
+          const z = last.zone ? last.zone : "";
+          const bits = [pct, dt].filter(Boolean).join(" • ");
+          lastCheckHint.textContent = bits ? `Последняя проверка: ${bits}` : "";
+        } else {
+          lastCheckHint.textContent = "Последней проверки пока нет";
+        }
+      }
+
       // restore draft for this address (branchId)
       const bid = norm(addressSelect.value);
       const d = loadDraft(bid);
@@ -381,6 +399,16 @@
         migrateAllNotes();
 
         hint.innerHTML = `Есть черновик этого адреса (до ${formatRuDateTime(new Date(d.savedAt).toISOString())}).`;
+        // if draft exists, keep last-check hint in sync with current selection
+        if (lastCheckHint && !lastCheckHint.textContent) {
+          const last = getLastCheck(STATE.branchId);
+          if (last && (last.ts || last.percent != null)) {
+            const pct = (last.percent != null && isFinite(Number(last.percent))) ? `${Math.round(Number(last.percent))}%` : "";
+            const dt = last.ts ? formatRuDateTime(last.ts) : "";
+            const bits = [pct, dt].filter(Boolean).join(" • ");
+            lastCheckHint.textContent = bits ? `Последняя проверка: ${bits}` : "";
+          }
+        }
       }
     };
 
