@@ -255,7 +255,10 @@
   window.renderStart = function renderStart(data) {
     DATA = data;
 
-    const oblasts = listOblasts(DATA.branches);
+    // Поддержка старого ключа branches и нового ключа addresses
+    const BRANCHES = (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
+
+    const oblasts = listOblasts(BRANCHES);
     mount(tplStartScreen({ oblasts }));
 
     const oblastSelect = document.getElementById("oblastSelect");
@@ -317,7 +320,7 @@
     }
 
     function fillCities(oblast) {
-      const cities = citiesByOblast(DATA.branches, oblast);
+      const cities = citiesByOblast(BRANCHES, oblast);
       citySelect.innerHTML = `<option value="">Выбери город</option>` +
         cities.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
       citySelect.disabled = !cities.length;
@@ -325,7 +328,7 @@
     }
 
     function fillAddresses(oblast, city) {
-      const list = addressesByCity(DATA.branches, oblast, city);
+      const list = addressesByCity(BRANCHES, oblast, city);
       addressSelect.innerHTML = `<option value="">Выбери адрес</option>` +
         list.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.label)}</option>`).join("");
       addressSelect.disabled = !list.length;
