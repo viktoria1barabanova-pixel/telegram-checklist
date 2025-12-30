@@ -1,7 +1,41 @@
 /* ui/screens.js — экраны приложения (start / checklist / result / readonly result) */
 
+
 (function () {
   let DATA = null;
+
+  // ---------- safe fallbacks (in case core/utils was not loaded) ----------
+  const norm = (window.norm && typeof window.norm === "function")
+    ? window.norm
+    : (v) => String(v ?? "").trim();
+
+  const escapeHtml = (window.escapeHtml && typeof window.escapeHtml === "function")
+    ? window.escapeHtml
+    : (s) => String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+  const toBool = (window.toBool && typeof window.toBool === "function")
+    ? window.toBool
+    : (v) => {
+        const s = String(v ?? "").trim().toLowerCase();
+        if (!s) return true;
+        if (["false","0","no","нет"].includes(s)) return false;
+        return true;
+      };
+
+  const formatRuDateTime = (window.formatRuDateTime && typeof window.formatRuDateTime === "function")
+    ? window.formatRuDateTime
+    : (iso) => {
+        try {
+          const d = new Date(iso);
+          if (!isFinite(d.getTime())) return "";
+          return d.toLocaleString("ru-RU", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+        } catch { return ""; }
+      };
 
   // ---------- robust field getter (ENG/RU headers, разные регистры/пробелы) ----------
   function keyNorm(k) {
@@ -452,7 +486,11 @@
         STATE.noteOpen = d.noteOpen || {};
         migrateAllNotes();
 
-        hint.innerHTML = `Есть черновик этого адреса (до ${formatRuDateTime(new Date(d.savedAt).toISOString())}).`;
+        const untilIso = d.savedAt ? new Date(d.savedAt).toISOString() : "";
+        const untilTxt = untilIso ? formatRuDateTime(untilIso) : "";
+        hint.innerHTML = untilTxt
+          ? `Есть черновик этого адреса (до ${untilTxt}).`
+          : `Есть черновик этого адреса.`;
         // if draft exists, keep last-check hint in sync with current selection
         if (lastCheckHint && !lastCheckHint.textContent) {
           const last = getLastCheck(STATE.branchId);
@@ -530,7 +568,7 @@
         STATE.activeSection = sid;
         saveDraft();
         renderChecklist(DATA);
-        window.scrollTo({ top: 0, behavior: "instant" });
+        window.scrollTo({ top: 0, behavior: "auto" });
       };
     });
 
