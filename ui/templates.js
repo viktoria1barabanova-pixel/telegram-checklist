@@ -4,11 +4,35 @@
   // ---------- helpers ----------
   function h(s) { return escapeHtml(s ?? ""); }
 
-  function zoneLabel(zone) {
-    if (zone === "red") return "Красная зона";
-    if (zone === "yellow") return "Жёлтая зона";
-    if (zone === "green") return "Зелёная зона";
-    return "Серая зона";
+  // Robust field getter: поддерживает разные названия колонок (ENG/RU), регистры, пробелы/дефисы
+  function keyNorm(k) {
+    return String(k || "")
+      .toLowerCase()
+      .replace(/[\s\-]+/g, "_")
+      .replace(/[^a-zа-я0-9_]/g, "")
+      .replace(/_+/g, "_")
+      .trim();
+  }
+
+  function getAny(obj, candidates, fallback = "") {
+    if (!obj) return fallback;
+
+    // 1) direct hit
+    for (const c of candidates) {
+      if (obj[c] !== undefined && obj[c] !== null && String(obj[c]).trim() !== "") return obj[c];
+    }
+
+    // 2) normalized key hit
+    const map = {};
+    for (const k of Object.keys(obj)) map[keyNorm(k)] = k;
+
+    for (const c of candidates) {
+      const nk = keyNorm(c);
+      const real = map[nk];
+      if (real && obj[real] !== undefined && obj[real] !== null && String(obj[real]).trim() !== "") return obj[real];
+    }
+
+    return fallback;
   }
 
   // ---------- start screen ----------
@@ -68,9 +92,27 @@
   // question: { id, section_id, title, description, hint_photo_url, type, ... }
   // type: "single" | "checkbox"
   window.tplQuestionCard = function tplQuestionCard(q, { answerState = null, showRightToggle = true, showNotes = false } = {}) {
-    const title = norm(q.title || q.question || q.name);
-    const desc = norm(q.description || q.desc || "");
-    const hintPhoto = norm(q.hint_photo || q.photo || q.hint_photo_url || q.description_photo || "");
+    const title = norm(getAny(q, [
+      // EN
+      "title", "question", "name", "question_text", "question_title",
+      // RU
+      "вопрос", "вопрос_текст", "текст_вопроса", "заголовок", "название"
+    ], ""));
+
+    const desc = norm(getAny(q, [
+      // EN
+      "description", "desc", "help", "hint",
+      // RU
+      "описание", "подсказка", "пояснение"
+    ], ""));
+
+    const hintPhoto = norm(getAny(q, [
+      // EN
+      "hint_photo", "photo", "hint_photo_url", "description_photo", "hint_image", "image",
+      // RU
+      "фото", "картинка", "фото_подсказки", "картинка_подсказки", "фото_описания", "картинка_описания"
+    ], ""));
+
     const hasHint = !!hintPhoto;
 
     const headerRight = (showRightToggle && hasHint)
@@ -109,9 +151,26 @@
   // ---------- single options (3 columns, colored) ----------
   function tplSingleOptions(q, answerState) {
     // We expect 3 labels in the sheet (ideal/good, ok, bad). If any empty — hide it.
-    const goodText = norm(q.good_text || q.ideal_text || q.good || "Эталон");
-    const okText = norm(q.ok_text || q.ok || "Норм");
-    const badText = norm(q.bad_text || q.bad || "Плохо");
+    const goodText = norm(getAny(q, [
+      // EN
+      "good_text", "ideal_text", "good", "ideal", "best_text", "excellent_text",
+      // RU
+      "идеальный_ответ", "эталон", "эталонный_ответ", "хороший_ответ", "правильно", "все_верно"
+    ], "Эталон"));
+
+    const okText = norm(getAny(q, [
+      // EN
+      "ok_text", "ok", "acceptable_text", "medium_text", "avg_text",
+      // RU
+      "подходящий_ответ", "средний_ответ", "почти", "частично", "не_идеально"
+    ], "Норм"));
+
+    const badText = norm(getAny(q, [
+      // EN
+      "bad_text", "bad", "worst_text", "poor_text",
+      // RU
+      "худший_ответ", "плохо", "ошибка", "неверно"
+    ], "Плохо"));
 
     const cur = answerState ? norm(answerState) : "";
 
@@ -132,14 +191,23 @@
 
   // ---------- checkbox options ----------
   function tplCheckboxOptions(q, answerSet) {
-    // For checkbox we render list items stored in q.items or similar:
-    // Supported: q.items_json (JSON array) OR q.items (semicolon separated)
+    // For checkbox we render list items stored in sheet columns.
+    // Supported: JSON array in items_json / checklist_items_json, OR semicolon list in items / checklist_items
     let items = [];
     try {
-      if (q.items_json) items = JSON.parse(q.items_json);
+      const jsonStr = getAny(q, ["items_json", "checklist_items_json", "itemsJson", "варианты_json", "чекбоксы_json"], "");
+      if (jsonStr) items = JSON.parse(String(jsonStr));
     } catch {}
-    if (!items.length && q.items) {
-      items = String(q.items).split(";").map(s => s.trim()).filter(Boolean).map((t, i) => ({ id: `${q.id}_${i+1}`, text: t }));
+
+    if (!items.length) {
+      const listStr = getAny(q, ["items", "checklist_items", "варианты", "чекбоксы"], "");
+      if (listStr) {
+        items = String(listStr)
+          .split(";")
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map((t, i) => ({ id: `${q.id}_${i + 1}`, text: t }));
+      }
     }
 
     const set = answerSet instanceof Set ? answerSet : new Set(answerSet || []);
