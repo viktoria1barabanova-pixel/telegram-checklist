@@ -144,6 +144,7 @@
 
   function questionsForSection(checklist, sectionId) {
     const sid = norm(sectionId);
+    const seenIds = new Map();
     return (checklist || [])
       .filter(q => toBool(getAny(q, ["active", "is_active", "активно", "активный"], true)) !== false)
       .filter(q => {
@@ -174,9 +175,15 @@
           "вопрос", "вопрос_текст", "текст_вопроса", "заголовок", "название"
         ], ""));
 
+        // Ensure deterministic unique IDs (important for state + scoring + submission).
+        let finalId = qid || `row_${idx + 1}`;
+        const n = (seenIds.get(finalId) || 0) + 1;
+        seenIds.set(finalId, n);
+        if (n > 1) finalId = `${finalId}__dup${n}`;
+
         return {
           ...q,
-          id: qid || `row_${idx + 1}`,
+          id: finalId,
           type: qType,
           severity: sev,
           title_text: titleText,
@@ -529,17 +536,6 @@
 
     // render questions for active section
     let qs = questionsForSection(DATA.checklist, STATE.activeSection);
-
-    // защита от дублей id: если в таблице два вопроса с одинаковым question_id,
-    // DOM-селекторы/обработчики начинают вести себя странно.
-    const seen = new Map();
-    qs = qs.map(q => {
-      const id = String(q.id);
-      const n = (seen.get(id) || 0) + 1;
-      seen.set(id, n);
-      if (n === 1) return q;
-      return { ...q, id: `${id}__dup${n}` };
-    });
 
     const qList = document.getElementById("qList");
     qList.innerHTML = qs.map(q => {
