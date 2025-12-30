@@ -32,6 +32,14 @@
     return fallback;
   }
 
+  // ---------- text normalizers (keep Cyrillic for UI lists) ----------
+  function t(v) {
+    return String(v ?? "").trim().replace(/\s+/g, " ");
+  }
+  function tkey(v) {
+    return t(v).toLowerCase();
+  }
+
   // ---------- mount ----------
   function mount(html) {
     const root = document.getElementById("app") || document.body;
@@ -40,15 +48,16 @@
 
   // ---------- normalize branches (адреса) & sections ----------
   function getOblast(b) {
-    return norm(getAny(b, ["oblast", "region", "area", "область", "регион", "край"], ""));
+    // Prefer `region` (sheet column) first
+    return t(getAny(b, ["region", "oblast", "area", "область", "регион", "край", "Region", "REGION"], ""));
   }
 
   function getCity(b) {
-    return norm(getAny(b, ["city", "город"], ""));
+    return t(getAny(b, ["city", "город", "City", "CITY"], ""));
   }
 
   function getAddressLabel(b) {
-    return norm(getAny(b, ["address", "addr", "адрес", "name", "branch_name", "title", "название"], ""));
+    return t(getAny(b, ["branch_name", "address", "addr", "адрес", "name", "title", "название", "Branch_name", "BRANCH_NAME"], ""));
   }
 
   function getBranchId(b) {
@@ -65,15 +74,15 @@
   }
 
   function citiesByOblast(branches, oblast) {
-    const o = norm(oblast);
-    const rows = activeAddressRows(branches).filter(b => getOblast(b) === o);
+    const ok = tkey(oblast);
+    const rows = activeAddressRows(branches).filter(b => tkey(getOblast(b)) === ok);
     return uniq(rows.map(getCity).filter(Boolean)).sort((a, b) => a.localeCompare(b, "ru"));
   }
 
   function addressesByCity(branches, oblast, city) {
-    const o = norm(oblast);
-    const c = norm(city);
-    const rows = activeAddressRows(branches).filter(b => getOblast(b) === o && getCity(b) === c);
+    const ok = tkey(oblast);
+    const ck = tkey(city);
+    const rows = activeAddressRows(branches).filter(b => tkey(getOblast(b)) === ok && tkey(getCity(b)) === ck);
     const list = rows
       .map(b => ({ id: getBranchId(b), label: getAddressLabel(b) }))
       .filter(x => x.id && x.label);
