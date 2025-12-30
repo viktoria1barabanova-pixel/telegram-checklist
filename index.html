@@ -17,17 +17,17 @@
   <div id="app" class="muted"></div>
 
   <!-- ===== Image modal ===== -->
-  <div id="imgModal" class="imgModal">
+  <div id="imgModal" class="imgModal modalOverlay" aria-hidden="true">
     <div class="imgModalInner">
       <button id="imgClose" class="imgModalClose">×</button>
 
       <div class="imgModalHeader">
         <button id="imgPrev" class="imgNav">‹</button>
-        <div id="imgModalTitle" class="imgModalTitle"></div>
+        <div id="imgCaption" class="imgModalTitle"></div>
         <button id="imgNext" class="imgNav">›</button>
       </div>
 
-      <img id="imgModalEl" class="imgModalImg" src="" alt="" />
+      <img id="imgModalImg" class="imgModalImg" src="" alt="" />
     </div>
   </div>
 
