@@ -66,6 +66,7 @@
             <select id="addressSelect" class="select" disabled>
               <option value="">Сначала выбери город</option>
             </select>
+            <div id="lastCheckHint" class="hint" style="margin-top:8px;"></div>
           </div>
 
           <div id="fioRow" class="formRow" style="display:none">
