@@ -404,7 +404,6 @@ label{
 
   display: none;
 
-  display: inline-flex;
   align-items: center;
   justify-content: center;
 
@@ -424,7 +423,7 @@ label{
 #imgNext{ position: absolute; top: 50%; right: 14px; transform: translateY(-50%); }
 
 #imgClose:hover, #imgPrev:hover, #imgNext:hover{ filter: brightness(1.05); }
-#imgClose:active, #imgPrev:active, #imgNext:active{ transform: translateY(-50%) scale(.98); }
+#imgPrev:active, #imgNext:active{ transform: translateY(-50%) scale(.98); }
 #imgClose:active{ transform: scale(.98); }
 
 /* Hide modal controls when overlay is CLOSED */
