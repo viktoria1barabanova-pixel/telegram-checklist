@@ -42,7 +42,7 @@ const JSONP_TIMEOUT_MS = 20000; // 20 секунд на загрузку JSONP
 
 // ====== OPTIONAL UI TEXTS ======
 const UI_TEXT = {
-  startTitle: "Проверка филиала",
+  startTitle: "Проверка филиала СушиSELL",
   startButton: "Начать",
   loading: "Загружаю данные…",
   submitSending: "Отправляю результаты…",
