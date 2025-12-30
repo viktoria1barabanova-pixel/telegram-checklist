@@ -139,19 +139,29 @@ select {
   background-repeat: no-repeat;
 }
 
-/* Tabs — fixed */
-.tabs {
+/* Tabs — fixed (NEW MARKUP: stickyTabs + tabsCard) */
+.stickyTabs{
   position: sticky;
   top: 0;
-  z-index: 100;
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 10px 2px 12px;
-  margin: 10px 0 6px;
+  z-index: 120;
+  padding-top: 6px;
+}
+
+.tabsCard{
   background: rgba(247, 244, 246, 0.72);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+  padding: 10px 10px 12px;
+  margin: 10px 0 6px;
+}
+
+.tabs {
+  position: static;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0;
+  margin: 0;
 }
 
 .tabs::-webkit-scrollbar { height: 0; }
@@ -177,41 +187,67 @@ select {
 }
 
 /* Question header layout */
-.qHead{
+.qHead,
+.qHeader{
   display:flex;
   align-items:flex-start;
   gap: 12px;
 }
 
-.qHeadMain{
+.qHeadMain,
+.qHeaderLeft{
   flex: 1;
   min-width: 0;
 }
 
-.qHeadAside{
+.qHeadAside,
+.qHeaderRight{
   flex: 0 0 auto;
   display:flex;
   align-items:center;
   justify-content:flex-end;
   margin-left: auto;
   padding-top: 2px;
+
+  /* reserve space for the + button */
+  min-width: 42px;
+  width: 42px;
 }
 
-.q-title {
+.qSection{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(17,24,39,.60);
+  background: rgba(255,255,255,.72);
+  border: 1px solid rgba(17,24,39,.10);
+  border-radius: 999px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.q-title,
+.qTitle{
   font-weight: 900;
   margin-bottom: 6px;
   font-size: 16px;
   letter-spacing: -0.01em;
 }
 
-.q-desc {
+.q-desc,
+.qDesc{
   font-size: 14px;
   color: var(--muted);
   margin-bottom: 10px;
   line-height: 1.45;
 }
 
-.q-desc a {
+.q-desc a,
+.qDesc a {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -251,10 +287,6 @@ button {
 .btn:hover { filter: brightness(1.03); }
 .btn:active { transform: scale(.985); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
-
-button:hover { filter: brightness(1.03); }
-button:active { transform: scale(.985); }
-button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 .btnSecondary {
   background: rgba(255, 255, 255, 0.92);
@@ -390,7 +422,7 @@ label{
 .zoneBanner.red .zonePct{ background: rgba(0,0,0,.18); border-color: rgba(255,255,255,.22); }
 .zoneBanner.green .zonePct{ background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.30); }
 
-/* Image modal (hide everything unless open) */
+/* Image modal */
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -450,171 +482,71 @@ label{
 #imgPrev{ position: absolute; top: 50%; left: 14px; transform: translateY(-50%); }
 #imgNext{ position: absolute; top: 50%; right: 14px; transform: translateY(-50%); }
 
-#imgClose:hover, #imgPrev:hover, #imgNext:hover{ filter: brightness(1.05); }
-#imgPrev:active, #imgNext:active{ transform: translateY(-50%) scale(.98); }
-#imgClose:active{ transform: scale(.98); }
-
-/* Hide modal controls when overlay is CLOSED */
-.modalOverlay:not(.open) #imgClose,
-.modalOverlay:not(.open) #imgPrev,
-.modalOverlay:not(.open) #imgNext,
-.modalOverlay:not(.open) .modalNav,
-.modalOverlay:not(.open) .modal-nav,
-.modalOverlay:not(.open) .modalControls,
-.modalOverlay:not(.open) .modal-controls,
-.modalOverlay:not(.open) .modalButtons,
-.modalOverlay:not(.open) .modal-buttons,
-.modalOverlay:not(.open) .imgNav,
-.modalOverlay:not(.open) .img-nav,
-.modalOverlay:not(.open) .modalBtn,
-.modalOverlay:not(.open) .modal-btn,
-.modalOverlay:not(.open) .imageNav,
-.modalOverlay:not(.open) .image-nav{
-  display: none !important;
-}
-
-/* Show the 3 core controls only when overlay is OPEN */
 .modalOverlay.open #imgClose,
 .modalOverlay.open #imgPrev,
 .modalOverlay.open #imgNext{
   display: inline-flex !important;
 }
 
-@media (max-width: 480px) {
-  body { padding: 12px; }
-  h1 { font-size: 34px; }
-  .tab { padding: 9px 12px; }
-}
-
-/* ============================
-   Segmented answers (SINGLE)
-   ============================ */
-.segmented{
-  display:grid;
-  grid-auto-flow:column;
-  grid-auto-columns:1fr;
-  gap:10px;
-  margin-top:10px;
-}
-
-.segInput{ position:absolute; opacity:0; pointer-events:none; }
-
-.segBtn{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  padding:12px 10px;
-  border-radius:16px;
-  border:1px solid rgba(17,24,39,.12);
-  background:rgba(255,255,255,.94);
-  font-weight:900;
-  cursor:pointer;
-  user-select:none;
-  min-height:44px;
-  box-shadow:0 10px 22px rgba(17,24,39,.06);
-  transition:transform .06s ease, box-shadow .15s ease, filter .15s ease, background .15s ease;
-  position: relative;
-  white-space: normal;
-}
-
-.segBtn:active{ transform:scale(.985); }
-
-.segBtn.answer--bad{ border-color:rgba(214,69,69,.45); }
-.segBtn.answer--ok{ border-color:rgba(242,201,76,.55); }
-.segBtn.answer--good{ border-color:rgba(46,196,166,.45); }
-
-/* Stronger selected state */
-.segBtn.is-active{
-  transform: translateY(-1px);
-  box-shadow: 0 22px 60px rgba(17,24,39,.22);
-  border-width: 2px;
-}
-
-.segBtn.is-active::after{
-  content: "";
-  position: absolute;
-  inset: -3px;
-  border-radius: 20px;
-  pointer-events: none;
-  box-shadow: 0 0 0 5px rgba(18,19,26,.05);
-}
-
-.segBtn.answer--bad.is-active{
-  background: linear-gradient(135deg, rgba(214,69,69,.44), rgba(255,255,255,.98));
-  border-color: rgba(214,69,69,.86);
-}
-
-.segBtn.answer--ok.is-active{
-  background: linear-gradient(135deg, rgba(242,201,76,.48), rgba(255,255,255,.98));
-  border-color: rgba(242,201,76,.92);
-}
-
-.segBtn.answer--good.is-active{
-  background: linear-gradient(135deg, rgba(46,196,166,.42), rgba(255,255,255,.98));
-  border-color: rgba(46,196,166,.86);
-}
-
-@media (max-width: 420px){
-  .segmented{ gap:8px; }
-  .segBtn{ font-size:14px; padding:11px 8px; }
-}
-
 /* ============================
    Comment field (compact)
    ============================ */
-.commentWrap{ margin-top: 10px; }
 
-.commentLabel{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  font-size:12px;
-  font-weight:800;
-  color: var(--muted);
-  margin: 8px 2px 6px;
-}
-
-textarea.comment{
+textarea.noteInput.noteCompact{
   width: 100%;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.92);
   padding: 10px 12px;
-  min-height: 40px;     /* ~1 line */
-  max-height: 72px;     /* ~2 lines */
+  min-height: 40px;      /* ~1 line */
+  max-height: 72px;      /* ~2 lines */
   overflow-y: auto;
   resize: none;
   font-size: 15px;
   line-height: 1.25;
 }
 
-textarea.comment::-webkit-scrollbar{ width: 8px; }
-textarea.comment::-webkit-scrollbar-thumb{
-  background: rgba(17, 24, 39, 0.18);
-  border-radius: 999px;
+.noteRow.noteActions{
+  display:flex;
+  align-items:center;
+  gap: 10px;
 }
 
-textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
+.fileBtn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(17,24,39,.12);
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 10px 22px rgba(17,24,39,.06);
+  cursor: pointer;
+  user-select:none;
+}
+.fileBtn input{ display:none; }
+
+.fileBtnText{
+  font-weight: 900;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.noteHint{
+  font-size: 12px;
+  color: var(--muted);
+}
 
 /* Added styles for optBtn and optRow */
 .optRow{
-  display:grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display:grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap:10px;
   align-items: stretch;
 }
 
 .optRow.two{
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-/* single-choice questions with 3 answers */
-.optRow.single,
-.optRow.optRow3,
-.optRow.three{
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 
 .optBtn{
@@ -625,6 +557,7 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   font-weight:900;
   min-height:44px;
   box-shadow:0 10px 22px rgba(17,24,39,.06);
+  width: 100%;
 }
 
 .optBtn.selected{
@@ -648,104 +581,13 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   border-color: rgba(46,196,166,.86);
 }
 
-/* Added compatibility styles for question header classes */
-.qHeader, .qHead{ display:flex; gap:12px; align-items:flex-start; }
-.qHeaderLeft, .qHeadMain{ flex:1; min-width:0; }
-.qHeaderRight, .qHeadAside{ margin-left:auto; }
-
-.qTitle, .q-title{
-  font-weight:900;
-  margin-bottom:6px;
-  font-size:16px;
+@media (max-width: 480px) {
+  body { padding: 12px; }
+  h1 { font-size: 34px; }
+  .tab { padding: 9px 12px; }
 }
 
-.qDesc, .q-desc{
-  font-size:14px;
-  color:var(--muted);
-  line-height:1.45;
-}
-
-/* ============================
-   HOTFIX: keep answer options horizontal + prevent .btn styles leaking
-   ============================ */
-
-/* Force 2–3 options to render as a row (mobile + desktop) */
-.optRow{
-  display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  gap: 10px;
-  align-items: stretch;
-}
-
-/* If the question has only 2 options, allow it to be 2 columns */
-.optRow.two{
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-}
-
-/* single-choice questions with 3 answers */
-.optRow.single,
-.optRow.optRow3,
-.optRow.three{
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-}
-
-/* Make option buttons look like chips (even if they accidentally have .btn class) */
-.optRow .optBtn,
-.optRow button.optBtn,
-.optRow .btn.optBtn,
-.optRow button.btn.optBtn{
-  width: 100% !important;
-  background: rgba(255,255,255,0.94) !important;
-  color: var(--text) !important;
-  border: 1px solid rgba(17,24,39,.12) !important;
-  box-shadow: 0 10px 22px rgba(17,24,39,.06) !important;
-  border-radius: 16px !important;
-  padding: 12px 10px !important;
-  min-height: 44px !important;
-  font-weight: 900 !important;
-}
-
-/* Strong selected state (compat with different class names) */
-.optRow .optBtn.selected,
-.optRow .optBtn.is-active,
-.segmented .segBtn.is-active{
-  transform: translateY(-1px) !important;
-  box-shadow: 0 22px 60px rgba(17,24,39,.22) !important;
-  border-width: 2px !important;
-}
-
-/* Color states for selected */
-.optRow .optBtn.bad.selected,
-.optRow .optBtn.bad.is-active{
-  background: linear-gradient(135deg, rgba(214,69,69,.44), rgba(255,255,255,.98)) !important;
-  border-color: rgba(214,69,69,.86) !important;
-}
-.optRow .optBtn.ok.selected,
-.optRow .optBtn.ok.is-active{
-  background: linear-gradient(135deg, rgba(242,201,76,.48), rgba(255,255,255,.98)) !important;
-  border-color: rgba(242,201,76,.92) !important;
-}
-.optRow .optBtn.good.selected,
-.optRow .optBtn.good.is-active{
-  background: linear-gradient(135deg, rgba(46,196,166,.42), rgba(255,255,255,.98)) !important;
-  border-color: rgba(46,196,166,.86) !important;
-}
-
-/* Mobile: keep buttons readable and prevent wrapping into a vertical list */
 @media (max-width: 420px){
   .optRow{ gap: 8px; }
-  .optRow .optBtn,
-  .optRow .btn.optBtn{
-    font-size: 14px !important;
-    padding: 11px 8px !important;
-  }
-}
-
-/* Extra safety: hide any stray modal nav buttons unless overlay is open */
-.modalOverlay:not(.open) button,
-.modalOverlay:not(.open) .btn,
-.modalOverlay:not(.open) #imgClose,
-.modalOverlay:not(.open) #imgPrev,
-.modalOverlay:not(.open) #imgNext{
-  pointer-events: none;
+  .optBtn{ font-size: 14px; padding: 11px 8px; }
 }
