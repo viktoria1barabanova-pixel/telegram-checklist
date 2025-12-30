@@ -2,7 +2,60 @@
 
 (function () {
   // ---------- helpers ----------
-  function h(s) { return escapeHtml(s ?? ""); }
+  // Берём утилиты из core/utils.js (если они уже есть), иначе используем безопасные фолбэки.
+  const _escapeHtml = (typeof window !== "undefined" && window.escapeHtml)
+    ? window.escapeHtml
+    : function escapeHtmlFallback(str) {
+        return String(str ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      };
+
+  const norm = (typeof window !== "undefined" && window.norm)
+    ? window.norm
+    : function normFallback(v) {
+        const s = String(v ?? "").replace(/\s+/g, " ").trim();
+        return s;
+      };
+
+  const richTextHtml = (typeof window !== "undefined" && window.richTextHtml)
+    ? window.richTextHtml
+    : function richTextHtmlFallback(v) {
+        // минимально безопасно: без разметки, просто текст
+        return _escapeHtml(String(v ?? "")).replace(/\n/g, "<br>");
+      };
+
+  const driveToDirect = (typeof window !== "undefined" && window.driveToDirect)
+    ? window.driveToDirect
+    : function driveToDirectFallback(u) { return String(u ?? ""); };
+
+  const zoneLabel = (typeof window !== "undefined" && window.zoneLabel)
+    ? window.zoneLabel
+    : function zoneLabelFallback(z) {
+        const v = String(z ?? "").toLowerCase();
+        if (v === "green") return "ЗЕЛЁНАЯ ЗОНА";
+        if (v === "yellow") return "ЖЁЛТАЯ ЗОНА";
+        if (v === "red") return "КРАСНАЯ ЗОНА";
+        return "СЕРАЯ ЗОНА";
+      };
+
+  const formatRuDateTime = (typeof window !== "undefined" && window.formatRuDateTime)
+    ? window.formatRuDateTime
+    : function formatRuDateTimeFallback(ts) {
+        try {
+          const d = new Date(ts);
+          if (Number.isNaN(d.getTime())) return String(ts ?? "");
+          const pad = (n) => String(n).padStart(2, "0");
+          return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } catch {
+          return String(ts ?? "");
+        }
+      };
+
+  function h(s) { return _escapeHtml(s ?? ""); }
 
   // Robust field getter: поддерживает разные названия колонок (ENG/RU), регистры, пробелы/дефисы
   function keyNorm(k) {
@@ -192,7 +245,7 @@
     };
 
     return `
-      <div class="optRow single" data-kind="single">
+      <div class="optRow single optRow3" data-kind="single">
         ${btn("bad", badText, "bad")}
         ${btn("ok", okText, "ok")}
         ${btn("good", goodText, "good")}
@@ -247,7 +300,7 @@
     return `
       <div class="noteBlock" data-note-for="${h(q.id)}" style="display:none">
         <div class="noteRow">
-          <textarea class="noteInput" rows="1" placeholder="Комментарий (по желанию)"></textarea>
+          <textarea class="noteInput noteCompact" rows="2" placeholder="Комментарий (по желанию)" style="max-height:3.2em; overflow:auto;"></textarea>
         </div>
 
         <div class="noteRow noteActions">
