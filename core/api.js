@@ -1,3 +1,6 @@
+/* core/api.js — работа с Apps Script (JSONP GET + iframe POST) */
+
+(function () {
   // ---------- JSONP loader ----------
   function loadJsonp(url, { timeoutMs } = {}) {
     const t = timeoutMs ?? (typeof JSONP_TIMEOUT_MS !== "undefined" ? JSONP_TIMEOUT_MS : 20000);
@@ -31,7 +34,6 @@
         // Restore/cleanup fixed callback alias
         try {
           if (prevCb === undefined) {
-            // If we introduced it, remove it
             if (window.cb === window[cbName]) delete window.cb;
           } else {
             window.cb = prevCb;
@@ -71,8 +73,154 @@
         cb: cbName,
         _ts: Date.now(),
       });
-
       script.src = finalUrl;
       document.body.appendChild(script);
     });
   }
+
+  // ---------- iframe POST (bypass CORS) ----------
+  function ensureSubmitPlumbing() {
+    let frame = document.getElementById("submitFrame");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.id = "submitFrame";
+      frame.name = "submitFrame";
+      frame.style.display = "none";
+      document.body.appendChild(frame);
+    }
+
+    let form = document.getElementById("submitForm");
+    if (!form) {
+      form = document.createElement("form");
+      form.id = "submitForm";
+      form.method = "POST";
+      form.target = "submitFrame";
+      form.style.display = "none";
+      document.body.appendChild(form);
+    } else {
+      form.method = "POST";
+      form.target = "submitFrame";
+    }
+
+    let payloadInput = document.getElementById("submitPayload");
+    if (!payloadInput) {
+      payloadInput = document.createElement("input");
+      payloadInput.type = "hidden";
+      payloadInput.id = "submitPayload";
+      payloadInput.name = "payload";
+      form.appendChild(payloadInput);
+    }
+    if (!payloadInput.getAttribute("name")) payloadInput.setAttribute("name", "payload");
+
+    let actionInput = document.getElementById("submitAction");
+    if (!actionInput) {
+      actionInput = document.createElement("input");
+      actionInput.type = "hidden";
+      actionInput.id = "submitAction";
+      actionInput.name = "action";
+      form.appendChild(actionInput);
+    }
+    if (!actionInput.getAttribute("name")) actionInput.setAttribute("name", "action");
+
+    let returnInput = document.getElementById("submitReturn");
+    if (!returnInput) {
+      returnInput = document.createElement("input");
+      returnInput.type = "hidden";
+      returnInput.id = "submitReturn";
+      returnInput.name = "return";
+      form.appendChild(returnInput);
+    }
+    if (!returnInput.getAttribute("name")) returnInput.setAttribute("name", "return");
+
+    return { frame, form, payloadInput, actionInput, returnInput };
+  }
+
+  function iframePostSubmit(payloadObj, { usePostMessage = false, timeoutMs = 20000 } = {}) {
+    return new Promise((resolve, reject) => {
+      try {
+        const { frame, form, payloadInput, actionInput, returnInput } = ensureSubmitPlumbing();
+
+        const actionUrl = buildUrlWithParams(SUBMIT_URL, { action: "submit" });
+        form.action = actionUrl;
+
+        actionInput.value = "submit";
+        payloadInput.value = JSON.stringify(payloadObj);
+        returnInput.value = usePostMessage ? "postMessage" : "";
+
+        let finished = false;
+
+        const cleanup = () => {
+          try {
+            frame.removeEventListener("load", onLoad);
+          } catch {}
+          try {
+            window.removeEventListener("message", onMsg);
+          } catch {}
+          try {
+            clearTimeout(timer);
+          } catch {}
+        };
+
+        const onLoad = () => {
+          if (finished) return;
+          if (usePostMessage) {
+            // If we expected postMessage, ignore load as final signal (we wait message).
+            return;
+          }
+          finished = true;
+          cleanup();
+          resolve({ ok: true });
+        };
+
+        const onMsg = (ev) => {
+          if (finished) return;
+          // Accept any origin (Apps Script iframe). If you want stricter later — add origin check.
+          const data = ev?.data;
+          if (!data || typeof data !== "object") return;
+          if (data.ok !== true && data.result_id === undefined) return;
+          finished = true;
+          cleanup();
+          resolve(data);
+        };
+
+        frame.addEventListener("load", onLoad);
+        if (usePostMessage) window.addEventListener("message", onMsg);
+
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          reject(new Error("Submit timeout"));
+        }, timeoutMs);
+
+        form.submit();
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  // ---------- Public API ----------
+  window.api = {
+    // GET all app data (sections, checklist, branches, settings)
+    async getAll() {
+      const url = buildUrlWithParams(DATA_JSONP_URL, { action: "all" });
+      return await loadJsonp(url);
+    },
+
+    // GET a single submission with answers (for share-link view)
+    async getSubmission(submissionId) {
+      const id = norm(submissionId);
+      const url = buildUrlWithParams(DATA_JSONP_URL, { action: "submission", submission_id: id });
+      return await loadJsonp(url);
+    },
+
+    // POST submit
+    async submit(payloadObj, { usePostMessage = false } = {}) {
+      return await iframePostSubmit(payloadObj, { usePostMessage });
+    },
+
+    // Expose JSONP loader if needed
+    _loadJsonp: loadJsonp,
+  };
+})();
