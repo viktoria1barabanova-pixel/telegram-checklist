@@ -95,7 +95,11 @@
   }
 
   function isCheckboxQuestion(q) {
-    return normalizeQuestionType(q?.type ?? q?.answer_type ?? q?.kind ?? q?.тип ?? q?.тип_ответа) === "checkbox";
+    return normalizeQuestionType(getAny(q, [
+      "question_type",
+      "type", "answer_type", "kind",
+      "тип", "тип_ответа"
+    ], "single")) === "checkbox";
   }
   function getBranches() {
     return (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
@@ -261,8 +265,13 @@
     const sections = activeSections(DATA.sections);
     const allQs = sections.flatMap(s => questionsForSection(DATA.checklist, s.id));
 
-    const singleQs = allQs.filter(q => !isCheckboxQuestion(q));
-    const maxScore = singleQs.length;
+    // maxScore counts all questions except those explicitly excluded from max
+    const includedQs = allQs.filter(q => {
+      const ex = getAny(q, ["exclude_from_max", "exclude", "skip_max", "исключить_из_макс"], false);
+      const s = String(ex ?? "").trim().toLowerCase();
+      return !(s === "true" || s === "1" || s === "yes" || s === "да");
+    });
+    const maxScore = includedQs.length;
 
     let score = 0;
     let hasCritical = false;
@@ -278,10 +287,22 @@
       ], ""));
       const sectionTitle = sections.find(s => s.id === qSectionId)?.title || "";
 
+      const qScore = Number(getAny(q, ["score", "баллы", "points"], 1)) || 1;
+
+      // skip from max/score if excluded
+      const ex = String(getAny(q, ["exclude_from_max", "exclude", "skip_max", "исключить_из_макс"], false) ?? "").trim().toLowerCase();
+      const isExcluded = (ex === "true" || ex === "1" || ex === "yes" || ex === "да");
+
       if (isCheckboxQuestion(q)) {
+        // boolean checkbox model: checked => ideal_answer (OK), unchecked => bad_answer (ERROR)
         const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set();
-        if (set.size > 0) {
-          // considered error(s)
+        const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
+
+        if (!isExcluded) {
+          score += checked ? 1 : 0;
+        }
+
+        if (!checked) {
           const severity = (q.severity === "critical") ? "critical" : "noncritical";
           if (severity === "critical") hasCritical = true;
 
@@ -291,17 +312,30 @@
             title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity,
+            score: qScore,
             comment: norm(note.text),
             photos: notePhotos(qid),
           });
         }
       } else {
-        const ans = norm(STATE.singleAnswers[qid]);
-        if (ans === "good") score += 1;
-        else if (ans === "ok") score += 0.5;
-        else score += 0;
+        // table-driven single: compare selected label with ideal/acceptable/bad
+        const selectedLabel = norm(STATE.singleAnswers[qid]);
+        const ideal = norm(getAny(q, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
+        const ok = norm(getAny(q, ["acceptable_answer", "ok_text", "ok", "норм"], ""));
+        const bad = norm(getAny(q, ["bad_answer", "bad_text", "bad", "стрем", "плохо"], ""));
 
-        if (ans && ans !== "good") {
+        let kind = "bad";
+        if (selectedLabel && ideal && selectedLabel === ideal) kind = "good";
+        else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
+        else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
+
+        if (!isExcluded) {
+          if (kind === "good") score += 1;
+          else if (kind === "ok") score += 0.5;
+          else score += 0;
+        }
+
+        if (selectedLabel && kind !== "good") {
           const severity = (q.severity === "critical") ? "critical" : "noncritical";
           if (severity === "critical") hasCritical = true;
 
@@ -311,6 +345,7 @@
             title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity,
+            score: qScore,
             comment: norm(note.text),
             photos: notePhotos(qid),
           });
@@ -326,12 +361,8 @@
 
   // ---------- required validation ----------
   function isAnswered(q) {
-    if (isCheckboxQuestion(q)) {
-      // Always “answered”: if nothing checked, it's still a valid state
-      return true;
-    }
-    const v = norm(STATE.singleAnswers[q.id]);
-    return v === "good" || v === "ok" || v === "bad";
+    if (isCheckboxQuestion(q)) return true; // unchecked is a valid state
+    return !!norm(STATE.singleAnswers[q.id]);
   }
 
   function missingBySection() {
@@ -605,28 +636,30 @@ qList.innerHTML = qs.map(q => {
     });
 
     // wire single options
-    document.querySelectorAll(".qCard .optRow.single, .qCard .optRow.optRow3, .qCard .optRow.three").forEach(row => {
+    document.querySelectorAll(".qCard .optRow").forEach(row => {
       const card = row.closest(".qCard");
       const qid = card.getAttribute("data-qid");
 
       row.querySelectorAll(".optBtn").forEach(btn => {
-btn.onclick = () => {
-  const v = btn.getAttribute("data-val");
-  const label = (btn.textContent || "").trim();
+        btn.onclick = () => {
+          const v = btn.getAttribute("data-val");
+          const label = (btn.textContent || "").trim();
 
-  // canonical key for scoring/UI
-  STATE.singleAnswers[qid] = v;
+          // canonical key for scoring/UI
+          STATE.singleAnswers[qid] = v;
 
-  // human label for dashboards
-  STATE.singleAnswerLabels ??= {};
-  STATE.singleAnswerLabels[qid] = label;
+          // human label for dashboards
+          STATE.singleAnswerLabels ??= {};
+          STATE.singleAnswerLabels[qid] = label;
 
           // selected style
           row.querySelectorAll(".optBtn").forEach(x => x.classList.remove("selected"));
           btn.classList.add("selected");
 
-          // show notes if not good
-          toggleNotesByAnswer(qid, v);
+          // show notes if not ideal
+          const qObj = qs.find(x => x.id === qid) || {};
+          const ideal = norm(getAny(qObj, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
+          toggleNotesByAnswer(qid, (label && ideal && label === ideal) ? "good" : "bad");
 
           // clear required mark
           markRequired(card, true);
@@ -649,12 +682,11 @@ btn.onclick = () => {
 
       col.querySelectorAll("input[type=checkbox]").forEach(cb => {
         cb.onchange = () => {
-          const itemId = cb.getAttribute("data-item");
-          if (cb.checked) set.add(itemId);
-          else set.delete(itemId);
+          set.clear();
+          if (cb.checked) set.add("1");
 
-          // notes shown if any checked
-          toggleNotesByAnswer(qid, set.size > 0 ? "bad" : "good");
+          // checked => OK, unchecked => ERROR
+          toggleNotesByAnswer(qid, cb.checked ? "good" : "bad");
 
           saveDraft();
           refreshFinishState();
@@ -662,7 +694,8 @@ btn.onclick = () => {
       });
 
       // initial notes visibility
-      toggleNotesByAnswer(qid, set.size > 0 ? "bad" : "good");
+      const only = col.querySelector("input[type=checkbox]");
+      toggleNotesByAnswer(qid, (only && only.checked) ? "good" : "bad");
     });
 
     // wire notes UI
@@ -901,24 +934,74 @@ answers: { single, single_labels, checkbox },
     const list = document.getElementById("issuesList");
     const issues = (result.issues || []).slice();
 
+    function sevText(sev){
+      return sev === "critical" ? "Критическая" : "Некритическая";
+    }
+
+    function renderIssuesGrouped(issues){
+      const by = new Map();
+      for (const it of issues) {
+        const key = norm(it.sectionTitle || "Без раздела");
+        if (!by.has(key)) by.set(key, []);
+        by.get(key).push(it);
+      }
+
+      const blocks = [];
+      for (const [sec, arr] of by.entries()) {
+        blocks.push(`
+          <div class="issueSection">
+            <div class="issueSectionName">${escapeHtml(sec)}</div>
+            <div class="issueTableWrap">
+              <table class="issueTable">
+                <thead>
+                  <tr>
+                    <th>Ошибка</th>
+                    <th style="width:70px">Баллы</th>
+                    <th style="width:140px">Критичность</th>
+                    <th>Комментарий</th>
+                    <th style="width:90px">Фото</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${arr.map(it => {
+                    const photos = (it.photos || []).map(driveToDirect);
+                    const photoHtml = photos.length
+                      ? `<div class="thumbRow">${photos.map(src=>`<img class="thumb" src="${escapeHtml(src)}" data-src="${escapeHtml(src)}" />`).join("")}</div>`
+                      : `<span class="muted">—</span>`;
+
+                    const commentHtml = (it.comment && String(it.comment).trim())
+                      ? escapeHtml(it.comment)
+                      : `<span class="muted">—</span>`;
+
+                    return `
+                      <tr>
+                        <td>${escapeHtml(it.title || "")}</td>
+                        <td>${escapeHtml(it.score ?? "")}</td>
+                        <td>${escapeHtml(sevText(it.severity))}</td>
+                        <td>${commentHtml}</td>
+                        <td>${photoHtml}</td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `);
+      }
+
+      return blocks.join("");
+    }
+
     if (!issues.length) {
       list.innerHTML = `<div class="hint">Ошибок не найдено 🎉</div>`;
     } else {
-      list.innerHTML = issues.map(it => tplIssueItem({
-        title: it.title,
-        sectionTitle: it.sectionTitle,
-        severity: it.severity,
-        photos: it.photos,
-        comment: it.comment
-      })).join("");
-
-      // thumbnails click
+      list.innerHTML = renderIssuesGrouped(issues);
       list.querySelectorAll(".thumb").forEach(img => {
         img.onclick = () => {
-          const row = img.closest(".thumbRow");
-          const imgs = Array.from(row.querySelectorAll(".thumb")).map(i => i.getAttribute("src"));
-          const idx = Array.from(row.querySelectorAll(".thumb")).indexOf(img);
-          openImageModal(imgs, idx);
+          const src = img.getAttribute("data-src") || img.getAttribute("src");
+          if (!src) return;
+          openImageModal([src], 0);
         };
       });
     }
@@ -961,6 +1044,7 @@ answers: { single, single_labels, checkbox },
         title: it.title || it.question || "",
         sectionTitle: it.sectionTitle || it.section || "",
         severity: it.severity || "noncritical",
+        score: it.score,
         comment: it.comment || "",
         photos: it.photos || [],
       });
