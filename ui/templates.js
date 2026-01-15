@@ -223,7 +223,11 @@
 
     const descHtml = desc ? `<div class="qDesc">${richTextHtml(desc)}</div>` : "";
 
-    const rawType = String(getAny(q, ["type", "answer_type", "kind", "тип", "тип_ответа"], "single"));
+    const rawType = String(getAny(q, [
+      "question_type", // ключ из таблицы
+      "type", "answer_type", "kind",
+      "тип", "тип_ответа"
+    ], "single"));
     const qType = rawType.toLowerCase();
 
     const isCheckboxType = (
@@ -243,8 +247,7 @@
       <div class="card qCard" data-qid="${h(q.id)}">
         <div class="qHeader">
           <div class="qHeaderLeft">
-            ${sectionTitle ? `<div class="qSection">${h(sectionTitle)}</div>` : ``}
-            <div class="qTitle">${h(title)}</div>
+            <div class="qTitle qTitleText">${h(title)}</div>
             ${descHtml}
           </div>
           <div class="qHeaderRight">
@@ -398,21 +401,24 @@
     // UX: одна большая галка (есть/нет), НЕ 3-уровневая шкала.
     if (!items.length) {
       const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да")) ? "checked" : "";
-      const yesLabel = norm(getAny(q, [
-        "yes_label", "yes_text", "true_label", "true_text", "checkbox_yes",
-        "да", "есть", "галочка", "выполнено"
+
+      // sheet mapping
+      const ideal = norm(getAny(q, [
+        "ideal_answer", "good", "good_text", "option_good",
+        "идеал", "эталон", "хорошо"
       ], "Есть"));
-      const noLabel = norm(getAny(q, [
-        "no_label", "no_text", "false_label", "false_text", "checkbox_no",
-        "нет", "не_выполнено"
-      ], "Нет"));
+
+      const bad = norm(getAny(q, [
+        "bad_answer", "bad", "bad_text", "option_bad",
+        "плохо", "плохой", "стрем"
+      ], "Отсутствует"));
 
       return `
-        <div class="optCol checkbox" data-kind="checkbox">
+        <div class="optCol checkbox" data-kind="checkbox" data-mode="boolean">
           <label class="cbRow cbRowToggle">
-            <input type="checkbox" data-item="1" ${checked} />
-            <span>${h(yesLabel)}</span>
-            <span class="cbNoHint">${h(noLabel)}</span>
+            <input type="checkbox" data-item="1" data-ideal="${h(ideal)}" data-bad="${h(bad)}" ${checked} />
+            <span>${h("Есть")}</span>
+            <span class="cbNoHint">${h("Отсутствует")}</span>
           </label>
         </div>
       `;
@@ -441,7 +447,7 @@
     return `
       <div class="noteBlock" data-note-for="${h(q.id)}" style="display:none">
         <div class="noteRow">
-          <textarea class="noteInput noteCompact" rows="2" placeholder="Комментарий (по желанию)" style="max-height:3.2em; overflow:auto;"></textarea>
+          <textarea class="noteInput noteCompact" rows="1" placeholder="Комментарий (по желанию)"></textarea>
         </div>
 
         <div class="noteRow noteActions">
@@ -460,21 +466,20 @@
   // ---------- results header card ----------
   window.tplResultHeader = function tplResultHeader(opts) {
     opts = opts || {};
-    const zone = opts.zone;
+    const zone = (opts.zone || "gray");
     const percent = opts.percent;
     const lastTs = opts.lastTs;
+
     const pctNum = Number(percent);
     const pct = Number.isFinite(pctNum) ? Math.round(pctNum) : null;
 
     return `
-      <div class="resultHeader zone-${h(zone || "gray")}">
-        <div class="resultLeft">
-          <div class="resultZone">${h(zoneLabel(zone))}</div>
-          ${lastTs ? `<div class="resultDate">Последняя проверка: ${h(formatRuDateTime(lastTs))}</div>` : ``}
+      <div class="card">
+        <div class="zoneBanner ${h(zone)}">
+          <div class="zoneTitle">${h(zoneLabel(zone))}</div>
+          <div class="zonePct">${pct === null ? "—" : `${pct}%`}</div>
         </div>
-        <div class="resultRight">
-          <div class="resultCircle">${pct === null ? "—" : `${pct}%`}</div>
-        </div>
+        ${lastTs ? `<div class="zoneMeta">Последняя проверка: ${h(formatRuDateTime(lastTs))}</div>` : ``}
       </div>
     `;
   };
@@ -502,6 +507,7 @@
     const severity = opts.severity;
     const photos = opts.photos || [];
     const comment = opts.comment || "";
+    const score = (opts.score === undefined || opts.score === null) ? "" : String(opts.score);
 
     const sevLabel = severity === "critical" ? "Критическая" : "Некритическая";
     const thumbs = (photos || []).map((p, i) => {
@@ -513,7 +519,7 @@
       <div class="issueItem">
         <div class="issueTop">
           <div class="issueTitle">${h(title)}</div>
-          <div class="issueMeta">${h(sectionTitle)} • ${h(sevLabel)}</div>
+          <div class="issueMeta">${h(sectionTitle)} • ${h(sevLabel)}${score ? ` • ${h(score)} б.` : ``}</div>
         </div>
         ${comment ? `<div class="issueComment">${richTextHtml(comment)}</div>` : ``}
         ${thumbs ? `<div class="thumbRow">${thumbs}</div>` : ``}
