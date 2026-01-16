@@ -1617,9 +1617,41 @@
     // For now we use submission.issues if exists in stored payload_json.
     const stored = submissionPayload?.payload || submissionPayload;
     const payloadIssues = stored?.issues || sub?.issues || [];
+    const storedAnswers = stored?.answers || sub?.answers || {};
+
+    const buildIssueKey = (item = {}) => {
+      const id = norm(item.qid || item.id || "");
+      if (id) return `id:${id}`;
+      const title = norm(item.title || item.question || "");
+      const section = norm(item.sectionTitle || item.section || item.section_title || "");
+      return `title:${title}|section:${section}`;
+    };
+
+    const payloadIssueMap = new Map();
+    payloadIssues.forEach(it => {
+      const key = buildIssueKey(it);
+      if (!payloadIssueMap.has(key)) payloadIssueMap.set(key, it);
+    });
+
+    const hasAnswers = (() => {
+      if (!storedAnswers) return false;
+      if (typeof storedAnswers === "string") return storedAnswers.trim().length > 0;
+      return Object.keys(storedAnswers).length > 0;
+    })();
 
     let issues = [];
-    if (payloadIssues.length) {
+    if (hasAnswers) {
+      issues = buildIssuesFromAnswers(storedAnswers).map(issue => {
+        const match = payloadIssueMap.get(buildIssueKey(issue));
+        return {
+          ...issue,
+          severity: issue.severity || match?.severity || "noncritical",
+          score: issue.score ?? match?.score,
+          comment: issue.comment || match?.comment || "",
+          photos: (issue.photos && issue.photos.length) ? issue.photos : (match?.photos || []),
+        };
+      });
+    } else if (payloadIssues.length) {
       issues = payloadIssues.map(it => ({
         title: it.title || it.question || "",
         sectionTitle: it.sectionTitle || it.section || it.section_title || "",
@@ -1628,9 +1660,6 @@
         comment: it.comment || "",
         photos: it.photos || [],
       }));
-    } else {
-      const storedAnswers = stored?.answers || sub?.answers || {};
-      issues = buildIssuesFromAnswers(storedAnswers);
     }
 
     const zone = sub.zone || stored.zone || "gray";
