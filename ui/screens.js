@@ -143,6 +143,68 @@
 
     return false;
   }
+
+  function getCheckboxItems(q) {
+    let items = [];
+    try {
+      const jsonStr = getAny(q, [
+        "items_json", "checklist_items_json", "itemsJson",
+        "checkbox_items_json", "check_items_json", "cb_items_json",
+        "чекбоксы_json", "чекбокс_варианты_json", "галочки_json"
+      ], "");
+      if (jsonStr) {
+        const arr = JSON.parse(String(jsonStr));
+        if (Array.isArray(arr)) items = arr;
+      }
+    } catch {}
+
+    if (!items.length) {
+      const listStr = getAny(q, [
+        "items", "checklist_items",
+        "checkbox_items", "check_items", "cb_items",
+        "чекбоксы", "чекбоксы_список", "галочки", "галочки_список"
+      ], "");
+      if (listStr) {
+        items = String(listStr)
+          .split(/\s*[;|\n]+\s*/)
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map((text, i) => ({ id: `${q.id}_${i + 1}`, text }));
+      }
+    }
+
+    return items
+      .map((item, i) => ({
+        id: norm(item?.id || item?.key || item?.value || `${q.id}_${i + 1}`),
+        text: norm(item?.text || item?.label || item?.name || item?.value || item?.title || item?.id || "")
+      }))
+      .filter(item => item.id || item.text);
+  }
+
+  function getCheckboxAnswerLabels(q, answerSet) {
+    const hasItems = checkboxHasItems(q);
+    const set = answerSet instanceof Set ? answerSet : new Set(answerSet || []);
+
+    if (!hasItems) {
+      const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
+      const ideal = norm(getAny(q, [
+        "ideal_answer", "good", "good_text", "option_good",
+        "идеал", "эталон", "хорошо"
+      ], "Есть"));
+      const bad = norm(getAny(q, [
+        "bad_answer", "bad", "bad_text", "option_bad",
+        "плохо", "плохой", "стрем"
+      ], "Отсутствует"));
+      return [checked ? ideal : bad].filter(Boolean);
+    }
+
+    const items = getCheckboxItems(q);
+    const labels = items
+      .filter(item => set.has(item.id))
+      .map(item => item.text)
+      .filter(Boolean);
+    return labels;
+  }
   function getBranches() {
     return (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
   }
@@ -199,6 +261,109 @@
       .filter(x => x.id && x.label);
     list.sort((a, b) => a.label.localeCompare(b.label, "ru"));
     return list;
+  }
+
+  function parsePossibleDate(value) {
+    if (!value) return null;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const dNum = new Date(value);
+      if (Number.isFinite(dNum.getTime())) return dNum;
+    }
+    const d = new Date(String(value));
+    if (Number.isFinite(d.getTime())) return d;
+    return null;
+  }
+
+  function normalizePercentValue(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Number(String(value).replace(",", "."));
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function getLastCheckFromServer(branchId) {
+    const bid = norm(branchId);
+    if (!bid || !DATA) return null;
+
+    const sources = [
+      DATA.results,
+      DATA.submissions,
+      DATA.checks,
+      DATA.history,
+      DATA.last_checks,
+    ].filter(Array.isArray);
+
+    let best = null;
+
+    sources.forEach(rows => {
+      rows.forEach(row => {
+        const rowBranch = norm(getAny(row, [
+          "branch_id", "branchId", "id_филиала", "филиал_id", "branch", "branch_code"
+        ], ""));
+        if (!rowBranch || rowBranch !== bid) return;
+
+        const ts = getAny(row, [
+          "submitted_at", "submittedAt", "date", "created_at",
+          "timestamp", "ts", "дата", "дата_проверки"
+        ], "");
+        const date = parsePossibleDate(ts);
+        const percent = normalizePercentValue(getAny(row, [
+          "percent", "score_percent", "процент", "score_pct"
+        ], null));
+        const zone = norm(getAny(row, ["zone", "зона"], ""));
+        const fio = norm(getAny(row, [
+          "fio", "name", "имя", "фио", "checked_by", "checker"
+        ], ""));
+
+        const item = {
+          ts: date ? date.toISOString() : "",
+          percent,
+          zone,
+          fio,
+        };
+
+        if (!best) {
+          best = item;
+          return;
+        }
+
+        const bestDate = parsePossibleDate(best.ts);
+        if (!bestDate && date) {
+          best = item;
+          return;
+        }
+        if (bestDate && date && date.getTime() > bestDate.getTime()) {
+          best = item;
+        }
+      });
+    });
+
+    return best;
+  }
+
+  function mergeLastChecks(local, server) {
+    if (!local && !server) return null;
+    if (!local) return server;
+    if (!server) return local;
+
+    const localDate = parsePossibleDate(local.ts);
+    const serverDate = parsePossibleDate(server.ts);
+    if (localDate && serverDate) {
+      return serverDate.getTime() >= localDate.getTime() ? server : local;
+    }
+    return serverDate ? server : local;
+  }
+
+  function formatLastCheckHint(last) {
+    if (!last) return "";
+    const pct = (last.percent != null && isFinite(Number(last.percent)))
+      ? `${Math.round(Number(last.percent))}%`
+      : "";
+    const dt = last.ts ? formatRuDateTime(last.ts) : "";
+    const z = last.zone ? last.zone : "";
+    const fio = last.fio ? `Проверял: ${escapeHtml(last.fio)}` : "";
+    const bits = [pct, dt, z].filter(Boolean).join(" • ");
+    const main = bits ? `Последняя проверка: ${escapeHtml(bits)}` : "";
+    return [main, fio].filter(Boolean).map(line => `<div>${line}</div>`).join("");
   }
 
   function activeSections(sections) {
@@ -407,6 +572,159 @@
     return { score, maxScore, percent, zone, hasCritical, issues };
   }
 
+  function normalizeAnswersPayload(answers) {
+    let payload = answers || {};
+    if (typeof payload === "string") {
+      try {
+        payload = JSON.parse(payload);
+      } catch {
+        payload = {};
+      }
+    }
+    return {
+      single: payload.single || payload.single_answers || {},
+      single_labels: payload.single_labels || payload.singleLabels || {},
+      checkbox: payload.checkbox || payload.checkbox_answers || {},
+    };
+  }
+
+  function normalizeCheckboxSet(raw) {
+    if (raw instanceof Set) return raw;
+    if (Array.isArray(raw)) return new Set(raw.map(v => String(v)));
+    if (typeof raw === "string") {
+      const parts = raw.split(/\s*[;|,]\s*/).map(s => norm(s)).filter(Boolean);
+      return new Set(parts);
+    }
+    if (raw === true || raw === 1) return new Set(["1"]);
+    if (raw === false || raw === 0) return new Set();
+    return new Set();
+  }
+
+  function buildIssuesFromAnswers(answers) {
+    const normalized = normalizeAnswersPayload(answers);
+    const sections = activeSections(DATA.sections);
+    const issues = [];
+
+    sections.forEach(section => {
+      const qs = questionsForSection(DATA.checklist, section.id);
+      qs.forEach(q => {
+        const qid = q.id;
+        const sectionTitle = section.title || "";
+        const qScore = Number(getAny(q, ["score", "баллы", "points"], 1)) || 1;
+
+        if (isCheckboxQuestion(q)) {
+          const set = normalizeCheckboxSet(normalized.checkbox?.[qid]);
+          const hasItems = checkboxHasItems(q);
+          const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
+          const anySelected = set.size > 0;
+          const isIssue = hasItems ? anySelected : !checked;
+
+          if (isIssue) {
+            issues.push({
+              qid,
+              title: norm(q.title_text || q.title || q.question || q.name),
+              sectionTitle,
+              severity: (q.severity === "critical") ? "critical" : "noncritical",
+              score: qScore,
+              comment: "",
+              photos: [],
+            });
+          }
+          return;
+        }
+
+        const selectedValue = norm(normalized.single?.[qid]);
+        const selectedLabel = norm(normalized.single_labels?.[qid] || "");
+        if (!selectedValue && !selectedLabel) return;
+
+        const ideal = norm(getAny(q, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
+        const ok = norm(getAny(q, ["acceptable_answer", "ok_text", "ok", "норм"], ""));
+        const bad = norm(getAny(q, ["bad_answer", "bad_text", "bad", "стрем", "плохо"], ""));
+
+        let kind = "bad";
+        if (selectedValue === "good") kind = "good";
+        else if (selectedValue === "ok") kind = "ok";
+        else if (selectedValue === "bad") kind = "bad";
+        else if (selectedLabel && ideal && selectedLabel === ideal) kind = "good";
+        else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
+        else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
+
+        if (kind !== "good") {
+          issues.push({
+            qid,
+            title: norm(q.title_text || q.title || q.question || q.name),
+            sectionTitle,
+            severity: (q.severity === "critical") ? "critical" : "noncritical",
+            score: qScore,
+            comment: "",
+            photos: [],
+          });
+        }
+      });
+    });
+
+    return issues;
+  }
+
+  function renderIssuesGrouped(issues) {
+    function sevText(sev){
+      return sev === "critical" ? "Критическая" : "Некритическая";
+    }
+
+    const by = new Map();
+    for (const it of issues) {
+      const key = norm(it.sectionTitle || "Без раздела");
+      if (!by.has(key)) by.set(key, []);
+      by.get(key).push(it);
+    }
+
+    const blocks = [];
+    for (const [sec, arr] of by.entries()) {
+      blocks.push(`
+        <div class="issueSection">
+          <div class="issueSectionName">${escapeHtml(sec)}</div>
+          <div class="issueTableWrap">
+            <table class="issueTable">
+              <thead>
+                <tr>
+                  <th>Ошибка</th>
+                  <th style="width:70px">Баллы</th>
+                  <th style="width:140px">Критичность</th>
+                  <th>Комментарий</th>
+                  <th style="width:90px">Фото</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${arr.map(it => {
+                  const photos = (it.photos || []).map(driveToDirect);
+                  const photoHtml = photos.length
+                    ? `<div class="thumbRow">${photos.map(src=>`<img class="thumb" src="${escapeHtml(src)}" data-src="${escapeHtml(src)}" />`).join("")}</div>`
+                    : `<span class="muted">—</span>`;
+
+                  const commentHtml = (it.comment && String(it.comment).trim())
+                    ? escapeHtml(it.comment)
+                    : `<span class="muted">—</span>`;
+
+                  return `
+                    <tr>
+                      <td>${escapeHtml(it.title || "")}</td>
+                      <td>${escapeHtml(it.score ?? "")}</td>
+                      <td>${escapeHtml(sevText(it.severity))}</td>
+                      <td>${commentHtml}</td>
+                      <td>${photoHtml}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `);
+    }
+
+    return blocks.join("");
+  }
+
   // ---------- required validation ----------
   function isAnswered(q) {
     if (isCheckboxQuestion(q)) return true; // unchecked is a valid state
@@ -454,6 +772,13 @@
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
     const userLine = document.getElementById("userNameLine");
+    const userCard = document.getElementById("tgUserCard");
+    const userCardName = document.getElementById("tgUserName");
+    const userCardHandle = document.getElementById("tgUserHandle");
+    const userCardAvatar = document.getElementById("tgUserAvatar");
+
+    const tgUser = IS_TG ? (window.getTgUser ? window.getTgUser() : null) : null;
+    STATE.tgUser = tgUser;
 
     // TG vs non-TG
     if (IS_TG) {
@@ -464,17 +789,47 @@
       STATE.fio = "";
     }
 
-    // show username line (only if known)
-    if (userLine) {
-      const uname = IS_TG ? norm(STATE.fio) : "";
-      if (uname) {
+    function updateUserCard() {
+      if (userCard && IS_TG && tgUser?.name) {
+        userCard.style.display = "flex";
+        if (userCardName) userCardName.textContent = tgUser.name;
+        if (userCardHandle) {
+          if (tgUser.username) {
+            userCardHandle.textContent = `@${tgUser.username}`;
+            userCardHandle.style.display = "";
+          } else {
+            userCardHandle.textContent = "";
+            userCardHandle.style.display = "none";
+          }
+        }
+        if (userCardAvatar) {
+          const initials = tgUser.name
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map(part => part[0]?.toUpperCase())
+            .join("");
+          userCardAvatar.textContent = initials || "TG";
+        }
+      } else if (userCard) {
+        userCard.style.display = "none";
+      }
+    }
+
+    // show username line for non-TG (fallback)
+    function updateUserLine(name) {
+      if (!userLine) return;
+      if (name) {
         userLine.style.display = "";
-        userLine.textContent = uname;
+        userLine.textContent = name;
       } else {
         userLine.style.display = "none";
         userLine.textContent = "";
       }
     }
+
+    updateUserCard();
+    updateUserLine(!IS_TG ? norm(STATE.fio) : "");
 
     function resetCities() {
       citySelect.innerHTML = `<option value="">Сначала выбери область</option>`;
@@ -486,7 +841,7 @@
       addressSelect.innerHTML = `<option value="">Сначала выбери город</option>`;
       addressSelect.disabled = true;
       startBtn.disabled = true;
-      if (lastCheckHint) lastCheckHint.textContent = "";
+      if (lastCheckHint) lastCheckHint.innerHTML = "";
     }
 
     function refreshStartReady() {
@@ -517,7 +872,7 @@
         list.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.label)}</option>`).join("");
       addressSelect.disabled = !list.length;
       startBtn.disabled = true;
-      if (lastCheckHint) lastCheckHint.textContent = "";
+      if (lastCheckHint) lastCheckHint.innerHTML = "";
     }
 
     oblastSelect.onchange = () => {
@@ -551,13 +906,12 @@
       // show last check for this address (stored locally)
       if (lastCheckHint) {
         const bidNow = norm(addressSelect.value);
-        const last = getLastCheck(bidNow);
-        if (last && (last.ts || last.percent != null || last.zone)) {
-          const pct = (last.percent != null && isFinite(Number(last.percent))) ? `${Math.round(Number(last.percent))}%` : "";
-          const dt = last.ts ? formatRuDateTime(last.ts) : "";
-          const z = last.zone ? last.zone : "";
-          const bits = [pct, dt].filter(Boolean).join(" • ");
-          lastCheckHint.textContent = bits ? `Последняя проверка: ${bits}` : "";
+        const local = getLastCheck(bidNow);
+        const server = getLastCheckFromServer(bidNow);
+        const last = mergeLastChecks(local, server);
+        if (last && (last.ts || last.percent != null || last.zone || last.fio)) {
+          const hintHtml = formatLastCheckHint(last);
+          lastCheckHint.innerHTML = hintHtml || "";
         } else {
           lastCheckHint.textContent = "Последней проверки пока нет";
         }
@@ -595,18 +949,22 @@
           : `Есть черновик этого адреса.`;
         // if draft exists, keep last-check hint in sync with current selection
         if (lastCheckHint && !lastCheckHint.textContent) {
-          const last = getLastCheck(STATE.branchId);
-          if (last && (last.ts || last.percent != null)) {
-            const pct = (last.percent != null && isFinite(Number(last.percent))) ? `${Math.round(Number(last.percent))}%` : "";
-            const dt = last.ts ? formatRuDateTime(last.ts) : "";
-            const bits = [pct, dt].filter(Boolean).join(" • ");
-            lastCheckHint.textContent = bits ? `Последняя проверка: ${bits}` : "";
+          const local = getLastCheck(STATE.branchId);
+          const server = getLastCheckFromServer(STATE.branchId);
+          const last = mergeLastChecks(local, server);
+          if (last && (last.ts || last.percent != null || last.fio || last.zone)) {
+            lastCheckHint.innerHTML = formatLastCheckHint(last) || "";
           }
         }
       }
     };
 
-    if (!IS_TG) fioInput.oninput = refreshStartReady;
+    if (!IS_TG) {
+      fioInput.oninput = () => {
+        refreshStartReady();
+        updateUserLine(norm(fioInput.value));
+      };
+    }
 
     // initial state
     resetCities();
@@ -683,6 +1041,11 @@
       </div>
     `);
 
+    const sectionLine = document.getElementById("sectionLine");
+    if (sectionLine && activeTitle) {
+      sectionLine.innerHTML = `Раздел: ${escapeHtml(activeTitle)} <span class="loadingPill" id="sectionLoadingPill">Загружаю…</span>`;
+    }
+
     // wire tabs
     document.querySelectorAll(".tab").forEach(btn => {
       btn.onclick = () => {
@@ -706,6 +1069,13 @@
         : norm(STATE.singleAnswers[qWithSection.id]);
       return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: !isCheckbox });
     }).join("");
+
+    const sectionLoadingPill = document.getElementById("sectionLoadingPill");
+    if (sectionLoadingPill) {
+      setTimeout(() => {
+        if (sectionLoadingPill.isConnected) sectionLoadingPill.remove();
+      }, 300);
+    }
 
     if (isLockedSection) {
       qList.classList.add("sectionLocked");
@@ -909,28 +1279,44 @@
         return;
       }
 
-      const result = computeResultFromState();
-      STATE.isFinished = true;
-      STATE.lastResult = result;
-
-      // create submission payload for sheet
-      const submissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      STATE.lastResultId = submissionId;
-      STATE.lastSubmittedAt = new Date().toISOString();
-
-      const payload = buildSubmissionPayload(submissionId, result);
-      saveDraft();
-
-      // send
       try {
         finishBtn.disabled = true;
+        finishBtn.textContent = UI_TEXT?.submitSending || "Отправляю…";
+
+        const pendingSections = secs.filter(s => !isSectionCompleted(s.id));
+        if (pendingSections.length) {
+          for (let i = 0; i < pendingSections.length; i += 1) {
+            const section = pendingSections[i];
+            finishBtn.textContent = `Отправляю раздел ${i + 1}/${pendingSections.length}…`;
+            const sectionResult = computeResultFromState({ sectionId: section.id });
+            const sectionSubmissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const sectionPayload = buildSectionPayload(section.id, sectionResult, sectionSubmissionId);
+            await api.submit(sectionPayload, { usePostMessage: false });
+
+            if (!STATE.completedSections) STATE.completedSections = [];
+            if (!STATE.completedSections.includes(section.id)) STATE.completedSections.push(section.id);
+          }
+        }
+
+        const result = computeResultFromState();
+        STATE.isFinished = true;
+        STATE.lastResult = result;
+
+        // create submission payload for sheet
+        const submissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        STATE.lastResultId = submissionId;
+        STATE.lastSubmittedAt = new Date().toISOString();
+
+        const payload = buildSubmissionPayload(submissionId, result);
+        saveDraft();
+
         finishBtn.textContent = UI_TEXT?.submitSending || "Отправляю…";
 
         // use postMessage if you later want response; now OK with load as well
         await api.submit(payload, { usePostMessage: false });
 
         // last check meta for branch (local)
-        setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone });
+        setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
 
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
       } catch (e) {
@@ -941,7 +1327,7 @@
         return;
       }
 
-      renderResultScreen(DATA, result);
+      renderResultScreen(DATA, STATE.lastResult);
     };
 
     refreshFinishState();
@@ -995,9 +1381,8 @@
     const el = document.getElementById("missingHint");
     if (el) el.textContent = missing.length ? `Не заполнены ответы в разделах: ${missing.map(m => m.title).join(", ")}` : "";
 
-    const allDone = activeSections(DATA.sections).every(s => isSectionCompleted(s.id));
     const finishBtn = document.getElementById("finishBtn");
-    if (finishBtn) finishBtn.disabled = !allDone;
+    if (finishBtn) finishBtn.disabled = missing.length > 0;
   }
 
   // ---------- thumbs ----------
@@ -1054,12 +1439,22 @@
     const single = {};
     const single_labels = {};
     const checkbox = {};
+    const checkbox_labels = {};
 
     for (const qid of qids) {
       if (STATE.singleAnswers[qid] !== undefined) single[qid] = STATE.singleAnswers[qid];
       if (STATE.singleAnswerLabels?.[qid]) single_labels[qid] = STATE.singleAnswerLabels[qid];
       if (STATE.checkboxAnswers[qid]) checkbox[qid] = [...(STATE.checkboxAnswers[qid] || [])];
     }
+
+    sectionQs.forEach(q => {
+      if (!isCheckboxQuestion(q)) return;
+      const set = STATE.checkboxAnswers[q.id] instanceof Set ? STATE.checkboxAnswers[q.id] : new Set();
+      const labels = getCheckboxAnswerLabels(q, set);
+      if (labels.length) checkbox_labels[q.id] = labels;
+    });
+
+    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
 
     return {
       action: "submit",
@@ -1073,6 +1468,11 @@
       city: STATE.city,
       branch_id: STATE.branchId,
       fio: STATE.fio,
+      tg_id: tgUser?.id || "",
+      tg_username: tgUser?.username || "",
+      tg_first_name: tgUser?.first_name || "",
+      tg_last_name: tgUser?.last_name || "",
+      tg_name: tgUser?.name || "",
 
       zone: result.zone,
       percent: result.percent,
@@ -1081,7 +1481,7 @@
       has_critical: result.hasCritical,
 
       issues: result.issues,
-      answers: { single, single_labels, checkbox },
+      answers: { single, single_labels, checkbox, checkbox_labels },
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
     };
   }
@@ -1094,7 +1494,19 @@
     const single = { ...STATE.singleAnswers };
     const single_labels = { ...(STATE.singleAnswerLabels || {}) };
     const checkbox = {};
+    const checkbox_labels = {};
     for (const [k, set] of Object.entries(STATE.checkboxAnswers || {})) checkbox[k] = [...(set || [])];
+    const allSections = activeSections(DATA.sections);
+    allSections.forEach(section => {
+      questionsForSection(DATA.checklist, section.id).forEach(q => {
+        if (!isCheckboxQuestion(q)) return;
+        const set = STATE.checkboxAnswers[q.id] instanceof Set ? STATE.checkboxAnswers[q.id] : new Set();
+        const labels = getCheckboxAnswerLabels(q, set);
+        if (labels.length) checkbox_labels[q.id] = labels;
+      });
+    });
+
+    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
 
     return {
       action: "submit",
@@ -1105,6 +1517,11 @@
       city: STATE.city,
       branch_id: STATE.branchId,
       fio: STATE.fio,
+      tg_id: tgUser?.id || "",
+      tg_username: tgUser?.username || "",
+      tg_first_name: tgUser?.first_name || "",
+      tg_last_name: tgUser?.last_name || "",
+      tg_name: tgUser?.name || "",
 
       zone: result.zone,
       percent: result.percent,
@@ -1114,7 +1531,7 @@
 
       issues: result.issues, // already includes notes/photos
 
-      answers: { single, single_labels, checkbox },
+      answers: { single, single_labels, checkbox, checkbox_labels },
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
     };
   }
@@ -1156,65 +1573,6 @@
     const list = document.getElementById("issuesList");
     const issues = (result.issues || []).slice();
 
-    function sevText(sev){
-      return sev === "critical" ? "Критическая" : "Некритическая";
-    }
-
-    function renderIssuesGrouped(issues){
-      const by = new Map();
-      for (const it of issues) {
-        const key = norm(it.sectionTitle || "Без раздела");
-        if (!by.has(key)) by.set(key, []);
-        by.get(key).push(it);
-      }
-
-      const blocks = [];
-      for (const [sec, arr] of by.entries()) {
-        blocks.push(`
-          <div class="issueSection">
-            <div class="issueSectionName">${escapeHtml(sec)}</div>
-            <div class="issueTableWrap">
-              <table class="issueTable">
-                <thead>
-                  <tr>
-                    <th>Ошибка</th>
-                    <th style="width:70px">Баллы</th>
-                    <th style="width:140px">Критичность</th>
-                    <th>Комментарий</th>
-                    <th style="width:90px">Фото</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${arr.map(it => {
-                    const photos = (it.photos || []).map(driveToDirect);
-                    const photoHtml = photos.length
-                      ? `<div class="thumbRow">${photos.map(src=>`<img class="thumb" src="${escapeHtml(src)}" data-src="${escapeHtml(src)}" />`).join("")}</div>`
-                      : `<span class="muted">—</span>`;
-
-                    const commentHtml = (it.comment && String(it.comment).trim())
-                      ? escapeHtml(it.comment)
-                      : `<span class="muted">—</span>`;
-
-                    return `
-                      <tr>
-                        <td>${escapeHtml(it.title || "")}</td>
-                        <td>${escapeHtml(it.score ?? "")}</td>
-                        <td>${escapeHtml(sevText(it.severity))}</td>
-                        <td>${commentHtml}</td>
-                        <td>${photoHtml}</td>
-                      </tr>
-                    `;
-                  }).join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `);
-      }
-
-      return blocks.join("");
-    }
-
     if (!issues.length) {
       list.innerHTML = `<div class="hint">Ошибок не найдено 🎉</div>`;
     } else {
@@ -1254,22 +1612,25 @@
     DATA = data;
 
     const sub = submissionPayload?.submission || {};
-    const issues = [];
 
     // If Apps Script returns answers & you want to reconstruct issues — can do later.
     // For now we use submission.issues if exists in stored payload_json.
     const stored = submissionPayload?.payload || submissionPayload;
     const payloadIssues = stored?.issues || sub?.issues || [];
 
-    for (const it of payloadIssues) {
-      issues.push({
+    let issues = [];
+    if (payloadIssues.length) {
+      issues = payloadIssues.map(it => ({
         title: it.title || it.question || "",
-        sectionTitle: it.sectionTitle || it.section || "",
+        sectionTitle: it.sectionTitle || it.section || it.section_title || "",
         severity: it.severity || "noncritical",
         score: it.score,
         comment: it.comment || "",
         photos: it.photos || [],
-      });
+      }));
+    } else {
+      const storedAnswers = stored?.answers || sub?.answers || {};
+      issues = buildIssuesFromAnswers(storedAnswers);
     }
 
     const zone = sub.zone || stored.zone || "gray";
@@ -1311,13 +1672,12 @@
     if (!issues.length) {
       list.innerHTML = `<div class="hint">Ошибок не найдено 🎉</div>`;
     } else {
-      list.innerHTML = issues.map(it => tplIssueItem(it)).join("");
+      list.innerHTML = renderIssuesGrouped(issues);
       list.querySelectorAll(".thumb").forEach(img => {
         img.onclick = () => {
-          const row = img.closest(".thumbRow");
-          const imgs = Array.from(row.querySelectorAll(".thumb")).map(i => i.getAttribute("src"));
-          const idx = Array.from(row.querySelectorAll(".thumb")).indexOf(img);
-          openImageModal(imgs, idx);
+          const src = img.getAttribute("data-src") || img.getAttribute("src");
+          if (!src) return;
+          openImageModal([src], 0);
         };
       });
     }

@@ -7,6 +7,7 @@
     fio: "",
 
     branchId: "",
+    tgUser: null,
 
     enabledSections: [],
     activeSection: "",
@@ -28,14 +29,26 @@
   // ---------- Telegram helpers ----------
   window.IS_TG = !!(window.Telegram && Telegram.WebApp);
 
-  window.getTgName = function getTgName() {
+  window.getTgUser = function getTgUser() {
     try {
       const u = Telegram.WebApp?.initDataUnsafe?.user;
-      if (!u) return "";
-      return norm([u.last_name, u.first_name].filter(Boolean).join(" ")) || norm(u.username) || "";
+      if (!u) return null;
+      const name = norm([u.last_name, u.first_name].filter(Boolean).join(" ")) || norm(u.username) || "";
+      return {
+        id: u.id ?? "",
+        username: u.username ?? "",
+        first_name: u.first_name ?? "",
+        last_name: u.last_name ?? "",
+        name,
+      };
     } catch {
-      return "";
+      return null;
     }
+  };
+
+  window.getTgName = function getTgName() {
+    const user = window.getTgUser ? window.getTgUser() : null;
+    return user?.name || "";
   };
 
   // ---------- Notes helpers (with migration) ----------
