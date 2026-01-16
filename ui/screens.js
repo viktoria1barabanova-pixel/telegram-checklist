@@ -1022,7 +1022,6 @@ answers: { single, single_labels, checkbox },
 
     const newBtn = document.getElementById("newCheckBtn");
     newBtn.onclick = () => {
-      clearResultQuery();
       resetCheckKeepMeta();
       saveDraft();
       renderChecklist(DATA);
