@@ -301,20 +301,15 @@
   // Single question: good=1, ok=0.5, bad=0
   // Checkbox: “не стоит галочка” = ок (то есть ошибка не выбрана).
   // Если выбран хотя бы один checkbox item → это ошибка. Critical if any selected item is critical? (we treat checkbox question severity)
-  function computeResultFromState() {
+  function computeResultFromState({ sectionId } = {}) {
     // maxScore = number of single questions (each max 1)
     // percent = total / max * 100
     const sections = activeSections(DATA.sections);
     const allQs = sections.flatMap(s => questionsForSection(DATA.checklist, s.id));
 
     // maxScore counts all questions except those explicitly excluded from max
-    const includedQs = allQs.filter(q => {
-      const ex = getAny(q, ["exclude_from_max", "exclude", "skip_max", "исключить_из_макс"], false);
-      const s = String(ex ?? "").trim().toLowerCase();
-      return !(s === "true" || s === "1" || s === "yes" || s === "да");
-    });
-    const maxScore = includedQs.length;
-
+    const targetSectionId = sectionId ? norm(sectionId) : "";
+    let maxScore = 0;
     let score = 0;
     let hasCritical = false;
 
@@ -328,12 +323,14 @@
         "секция_id", "секция", "раздел_id", "раздел"
       ], ""));
       const sectionTitle = sections.find(s => s.id === qSectionId)?.title || "";
+      if (targetSectionId && targetSectionId !== qSectionId) continue;
 
       const qScore = Number(getAny(q, ["score", "баллы", "points"], 1)) || 1;
 
       // skip from max/score if excluded
       const ex = String(getAny(q, ["exclude_from_max", "exclude", "skip_max", "исключить_из_макс"], false) ?? "").trim().toLowerCase();
       const isExcluded = (ex === "true" || ex === "1" || ex === "yes" || ex === "да");
+      if (!isExcluded) maxScore += 1;
 
       if (isCheckboxQuestion(q)) {
         const hasItems = checkboxHasItems(q);
@@ -366,13 +363,17 @@
         }
       } else {
         // table-driven single: compare selected label with ideal/acceptable/bad
-        const selectedLabel = norm(STATE.singleAnswers[qid]);
+        const selectedValue = norm(STATE.singleAnswers[qid]);
+        const selectedLabel = norm(STATE.singleAnswerLabels?.[qid] || "");
         const ideal = norm(getAny(q, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
         const ok = norm(getAny(q, ["acceptable_answer", "ok_text", "ok", "норм"], ""));
         const bad = norm(getAny(q, ["bad_answer", "bad_text", "bad", "стрем", "плохо"], ""));
 
         let kind = "bad";
-        if (selectedLabel && ideal && selectedLabel === ideal) kind = "good";
+        if (selectedValue === "good") kind = "good";
+        else if (selectedValue === "ok") kind = "ok";
+        else if (selectedValue === "bad") kind = "bad";
+        else if (selectedLabel && ideal && selectedLabel === ideal) kind = "good";
         else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
         else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
 
@@ -382,7 +383,7 @@
           else score += 0;
         }
 
-        if (selectedLabel && kind !== "good") {
+        if ((selectedValue || selectedLabel) && kind !== "good") {
           const severity = (q.severity === "critical") ? "critical" : "noncritical";
           if (severity === "critical") hasCritical = true;
 
@@ -416,11 +417,21 @@
     const sections = activeSections(DATA.sections);
     const missing = [];
     for (const s of sections) {
+      if (STATE.completedSections?.includes(s.id)) continue;
       const qs = questionsForSection(DATA.checklist, s.id);
       const miss = qs.filter(q => !isCheckboxQuestion(q)).filter(q => !isAnswered(q));
       if (miss.length) missing.push({ sectionId: s.id, title: s.title, count: miss.length });
     }
     return missing;
+  }
+
+  function missingInSection(sectionId) {
+    const qs = questionsForSection(DATA.checklist, sectionId);
+    return qs.filter(q => !isCheckboxQuestion(q)).filter(q => !isAnswered(q));
+  }
+
+  function isSectionCompleted(sectionId) {
+    return (STATE.completedSections || []).includes(sectionId);
   }
 
   // ---------- Start screen ----------
@@ -563,6 +574,7 @@
 
         STATE.enabledSections = d.enabledSections || [];
         STATE.activeSection = d.activeSection || "";
+        STATE.completedSections = d.completedSections || [];
 
         STATE.singleAnswers = d.singleAnswers || {};
         STATE.checkboxAnswers = d.checkboxAnswers || {};
@@ -570,6 +582,7 @@
         STATE.isFinished = !!d.isFinished;
         STATE.lastResult = d.lastResult || null;
         STATE.lastResultId = d.lastResultId || null;
+        STATE.lastSubmittedAt = d.lastSubmittedAt || "";
 
         STATE.issueNotes = d.issueNotes || {};
         STATE.noteOpen = d.noteOpen || {};
@@ -603,10 +616,12 @@
       const secs = activeSections(DATA.sections);
       STATE.enabledSections = secs.map(s => s.id);
       STATE.activeSection = secs[0]?.id || "";
+      STATE.completedSections = [];
 
       STATE.isFinished = false;
       STATE.lastResult = null;
       STATE.lastResultId = null;
+      STATE.lastSubmittedAt = "";
       STATE.singleAnswerLabels = {};
 
       saveDraft();
@@ -619,34 +634,52 @@
     DATA = data;
 
     const secs = activeSections(DATA.sections);
-    if (!STATE.activeSection) STATE.activeSection = secs[0]?.id || "";
+    const completedSet = new Set(STATE.completedSections || []);
+    const orderedSecs = [
+      ...secs.filter(s => !completedSet.has(s.id)),
+      ...secs.filter(s => completedSet.has(s.id)),
+    ];
+
+    if (!STATE.activeSection) STATE.activeSection = orderedSecs[0]?.id || "";
+    if (!secs.find(s => s.id === STATE.activeSection)) {
+      STATE.activeSection = orderedSecs[0]?.id || "";
+    }
 
     const BRANCHES = getBranches();
     const branchRow = findBranchById(STATE.branchId);
     const city = norm(STATE.city || getCity(branchRow || {}));
     const addr = norm(getAddressLabel(branchRow || {}));
+    const addrLine = [norm(STATE.city || ""), addr].filter(Boolean).join(", ");
+    const addrLine = [norm(STATE.city || ""), addr].filter(Boolean).join(", ");
     const fio = norm(STATE.fio || "");
 
     const ctxLine = [fio, city, addr].filter(Boolean).join(" • ");
     const activeTitle = secs.find(s => s.id === STATE.activeSection)?.title || "";
+    const isLockedSection = isSectionCompleted(STATE.activeSection);
 
     // base layout
     mount(`
       <div class="container">
-        <div class="card" style="margin-bottom:12px;">
-          <div class="cardHeader">
-            <div class="title">Проверка</div>
-            <div class="subTitle" id="ctxLine">${escapeHtml(ctxLine || "")}</div>
-            <div class="subTitle" id="sectionLine">${activeTitle ? `Раздел: ${escapeHtml(activeTitle)}` : ``}</div>
+        <div class="stickyHeader">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="cardHeader">
+              <div class="title">Проверка</div>
+              <div class="subTitle" id="ctxLine">${escapeHtml(ctxLine || "")}</div>
+              ${fio ? `<div class="subTitle">Проверяет: <span class="userGlow">${escapeHtml(fio)}</span></div>` : ``}
+              <div class="subTitle" id="sectionLine">${activeTitle ? `Раздел: ${escapeHtml(activeTitle)}` : ``}</div>
+            </div>
           </div>
-        </div>
 
-        ${tplSectionTabs({ sections: secs, active: STATE.activeSection })}
+          ${tplSectionTabs({ sections: orderedSecs, active: STATE.activeSection, completed: STATE.completedSections || [] })}
+        </div>
         <div id="qList"></div>
 
         <div class="bottomBar">
           <div id="missingHint" class="missingHint"></div>
-          <button id="finishBtn" class="btn primary" type="button">Завершить</button>
+          <div class="bottomActions">
+            <button id="sendZoneBtn" class="btn btnSecondary" type="button">Отправить зону</button>
+            <button id="finishBtn" class="btn primary" type="button">Завершить</button>
+          </div>
         </div>
       </div>
     `);
@@ -668,11 +701,17 @@
     const qList = document.getElementById("qList");
     qList.innerHTML = qs.map(q => {
       const qWithSection = { ...q, section_title: activeTitle };
-      const state = isCheckboxQuestion(qWithSection)
+      const isCheckbox = isCheckboxQuestion(qWithSection);
+      const state = isCheckbox
         ? (STATE.checkboxAnswers[qWithSection.id] instanceof Set ? STATE.checkboxAnswers[qWithSection.id] : new Set())
         : norm(STATE.singleAnswers[qWithSection.id]);
-      return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: true });
+      return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: !isCheckbox });
     }).join("");
+
+    if (isLockedSection) {
+      qList.classList.add("sectionLocked");
+      qList.querySelectorAll(".qCard").forEach(card => card.classList.add("locked"));
+    }
 
     // wire photo toggle buttons
     document.querySelectorAll(".photoToggle").forEach(btn => {
@@ -689,6 +728,11 @@
       const qid = card.getAttribute("data-qid");
 
       row.querySelectorAll(".optBtn").forEach(btn => {
+        if (isLockedSection) {
+          btn.disabled = true;
+          btn.classList.add("is-locked");
+          return;
+        }
         btn.onclick = () => {
           const v = btn.getAttribute("data-val");
           const label = (btn.textContent || "").trim();
@@ -741,6 +785,10 @@
       };
 
       inputs.forEach(cb => {
+        if (isLockedSection) {
+          cb.disabled = true;
+          return;
+        }
         cb.onchange = () => {
           if (isBoolean) {
             set.clear();
@@ -804,6 +852,52 @@
       renderThumbs(block, qid);
     });
 
+    const sendZoneBtn = document.getElementById("sendZoneBtn");
+    if (sendZoneBtn) {
+      if (isLockedSection) {
+        sendZoneBtn.disabled = true;
+        sendZoneBtn.textContent = "Зона отправлена";
+      } else {
+        sendZoneBtn.disabled = false;
+        sendZoneBtn.textContent = "Отправить зону";
+      }
+
+      sendZoneBtn.onclick = async () => {
+        if (isLockedSection) return;
+        const missing = missingInSection(STATE.activeSection);
+        if (missing.length) {
+          showMissing([{ sectionId: STATE.activeSection, title: activeTitle, count: missing.length }]);
+          const first = document.querySelector(".qCard.missing");
+          if (first) first.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+
+        const sectionResult = computeResultFromState({ sectionId: STATE.activeSection });
+        const submissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const payload = buildSectionPayload(STATE.activeSection, sectionResult, submissionId);
+
+        try {
+          sendZoneBtn.disabled = true;
+          sendZoneBtn.textContent = UI_TEXT?.submitSending || "Отправляю…";
+          await api.submit(payload, { usePostMessage: false });
+          sendZoneBtn.textContent = UI_TEXT?.submitOk || "Отправлено ✅";
+        } catch (e) {
+          console.error(e);
+          alert(UI_TEXT?.submitFail || "Не удалось отправить результаты в таблицу. Попробуй ещё раз");
+          sendZoneBtn.disabled = false;
+          sendZoneBtn.textContent = "Отправить зону";
+          return;
+        }
+
+        if (!STATE.completedSections) STATE.completedSections = [];
+        if (!STATE.completedSections.includes(STATE.activeSection)) STATE.completedSections.push(STATE.activeSection);
+        const nextIncomplete = orderedSecs.find(s => !isSectionCompleted(s.id));
+        STATE.activeSection = nextIncomplete?.id || STATE.activeSection;
+        saveDraft();
+        renderChecklist(DATA);
+      };
+    }
+
     // finish button
     const finishBtn = document.getElementById("finishBtn");
     finishBtn.onclick = async () => {
@@ -823,6 +917,7 @@
       // create submission payload for sheet
       const submissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
       STATE.lastResultId = submissionId;
+      STATE.lastSubmittedAt = new Date().toISOString();
 
       const payload = buildSubmissionPayload(submissionId, result);
       saveDraft();
@@ -879,8 +974,10 @@
   function showMissing(missing) {
     // mark missing in UI
     const secs = activeSections(DATA.sections);
+    const targetSections = new Set((missing || []).map(m => m.sectionId));
 
     for (const s of secs) {
+      if (targetSections.size && !targetSections.has(s.id)) continue;
       const qs = questionsForSection(DATA.checklist, s.id).filter(q => !isCheckboxQuestion(q));
       for (const q of qs) {
         if (isAnswered(q)) continue;
@@ -898,6 +995,10 @@
     const missing = missingBySection();
     const el = document.getElementById("missingHint");
     if (el) el.textContent = missing.length ? `Не заполнены ответы в разделах: ${missing.map(m => m.title).join(", ")}` : "";
+
+    const allDone = activeSections(DATA.sections).every(s => isSectionCompleted(s.id));
+    const finishBtn = document.getElementById("finishBtn");
+    if (finishBtn) finishBtn.disabled = !allDone;
   }
 
   // ---------- thumbs ----------
@@ -944,6 +1045,48 @@
   }
 
   // ---------- submission payload ----------
+  function buildSectionPayload(sectionId, result, submissionId) {
+    const ts = new Date().toISOString();
+    const sections = activeSections(DATA.sections);
+    const sectionTitle = sections.find(s => s.id === sectionId)?.title || "";
+    const sectionQs = questionsForSection(DATA.checklist, sectionId);
+    const qids = new Set(sectionQs.map(q => q.id));
+
+    const single = {};
+    const single_labels = {};
+    const checkbox = {};
+
+    for (const qid of qids) {
+      if (STATE.singleAnswers[qid] !== undefined) single[qid] = STATE.singleAnswers[qid];
+      if (STATE.singleAnswerLabels?.[qid]) single_labels[qid] = STATE.singleAnswerLabels[qid];
+      if (STATE.checkboxAnswers[qid]) checkbox[qid] = [...(STATE.checkboxAnswers[qid] || [])];
+    }
+
+    return {
+      action: "submit",
+      submission_id: submissionId,
+      submitted_at: ts,
+      partial: true,
+      section_id: sectionId,
+      section_title: sectionTitle,
+
+      oblast: STATE.oblast || "",
+      city: STATE.city,
+      branch_id: STATE.branchId,
+      fio: STATE.fio,
+
+      zone: result.zone,
+      percent: result.percent,
+      score: result.score,
+      max_score: result.maxScore,
+      has_critical: result.hasCritical,
+
+      issues: result.issues,
+      answers: { single, single_labels, checkbox },
+      meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
+    };
+  }
+
   function buildSubmissionPayload(submissionId, result) {
     const ts = new Date().toISOString();
 
@@ -983,10 +1126,23 @@
 
     const last = getLastCheck(STATE.branchId);
     const lastTs = last?.ts || null;
+    const branchRow = findBranchById(STATE.branchId);
+    const addr = norm(getAddressLabel(branchRow || {}));
+    const addrLine = [norm(STATE.city || ""), addr].filter(Boolean).join(", ");
+    const metaDate = STATE.lastSubmittedAt ? formatRuDateTime(STATE.lastSubmittedAt) : "";
 
     mount(`
       <div class="container">
-        ${tplResultHeader({ zone: result.zone, percent: result.percent, lastTs })}
+        ${tplResultHeader({
+          zone: result.zone,
+          percent: result.percent,
+          lastTs,
+          meta: {
+            fio: norm(STATE.fio || ""),
+            address: addrLine,
+            date: metaDate,
+          },
+        })}
         ${tplResultActions({ showShare: true })}
 
         <div class="card">
@@ -1120,10 +1276,25 @@
     const zone = sub.zone || stored.zone || "gray";
     const percent = sub.percent ?? stored.percent ?? null;
     const lastTs = sub.submitted_at || stored.submitted_at || null;
+    const branchId = stored.branch_id || sub.branch_id || "";
+    const branchRow = findBranchById(branchId);
+    const addr = norm(getAddressLabel(branchRow || {}));
+    const addrLine = [norm(stored.city || sub.city || ""), addr].filter(Boolean).join(", ");
+    const fio = norm(stored.fio || sub.fio || "");
+    const submittedAt = lastTs ? formatRuDateTime(lastTs) : "";
 
     mount(`
       <div class="container">
-        ${tplResultHeader({ zone, percent, lastTs })}
+        ${tplResultHeader({
+          zone,
+          percent,
+          lastTs,
+          meta: {
+            fio,
+            address: addrLine,
+            date: submittedAt,
+          },
+        })}
         <div class="resultActions">
           <button id="backToStartBtn" class="btn primary">К выбору филиала</button>
         </div>

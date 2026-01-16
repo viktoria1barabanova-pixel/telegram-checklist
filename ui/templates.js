@@ -152,13 +152,15 @@
     opts = opts || {};
     const sections = opts.sections || [];
     const active = opts.active || "";
+    const completed = new Set((opts.completed || []).map(String));
     return `
       <div class="stickyTabs">
         <div class="card tabsCard">
           <div class="tabs">
             ${sections.map(s => {
               const isA = String(s.id) === String(active);
-              return `<button class="tab ${isA ? "active" : ""}" data-section="${h(s.id)}">${h(s.title)}</button>`;
+              const isDone = completed.has(String(s.id));
+              return `<button class="tab ${isA ? "active" : ""} ${isDone ? "completed" : ""}" data-section="${h(s.id)}">${h(s.title)}</button>`;
             }).join("")}
           </div>
         </div>
@@ -415,11 +417,18 @@
 
       return `
         <div class="optCol checkbox" data-kind="checkbox" data-mode="boolean">
-          <label class="cbRow cbRowToggle">
-            <input type="checkbox" data-item="1" data-ideal="${h(ideal)}" data-bad="${h(bad)}" ${checked} />
-            <span>${h("Есть")}</span>
-            <span class="cbNoHint">${h("Отсутствует")}</span>
-          </label>
+          <div class="cbToggleWrap">
+            <span class="cbToggleLabel cbToggleLabel--good">${h(ideal)}</span>
+            <label class="cbToggle">
+              <input type="checkbox" data-item="1" ${checked} />
+              <span class="cbToggleTrack">
+                <span class="cbToggleThumb"></span>
+                <span class="cbToggleIcon cbToggleIcon--good">✓</span>
+                <span class="cbToggleIcon cbToggleIcon--bad">×</span>
+              </span>
+            </label>
+            <span class="cbToggleLabel cbToggleLabel--bad">${h(bad)}</span>
+          </div>
         </div>
       `;
     }
@@ -442,20 +451,14 @@
   // ---------- issue notes (comment + photos) ----------
   function tplIssueNotesBlock(q) {
     // This block is shown/hidden by logic depending on answer != good
-    const maxPhotos = (typeof MAX_PHOTOS_PER_ISSUE !== "undefined") ? MAX_PHOTOS_PER_ISSUE : 5;
-
     return `
       <div class="noteBlock" data-note-for="${h(q.id)}" style="display:none">
-        <div class="noteRow">
+        <div class="noteRow noteRowTop">
           <textarea class="noteInput noteCompact" rows="1" placeholder="Комментарий (по желанию)"></textarea>
-        </div>
-
-        <div class="noteRow noteActions">
-          <label class="fileBtn">
+          <label class="fileBtn" aria-label="Добавить фото">
             <input class="noteFile" type="file" accept="image/*" multiple />
-            <span class="fileBtnText">+ Фото</span>
+            <span class="fileBtnIcon" aria-hidden="true"></span>
           </label>
-          <div class="noteHint">Можно добавить до ${maxPhotos} фото</div>
         </div>
 
         <div class="thumbRow"></div>
@@ -469,6 +472,11 @@
     const zone = (opts.zone || "gray");
     const percent = opts.percent;
     const lastTs = opts.lastTs;
+    const meta = opts.meta || {};
+    const metaLines = [];
+    if (meta.fio) metaLines.push(`Кто проверял: ${h(meta.fio)}`);
+    if (meta.address) metaLines.push(`Адрес: ${h(meta.address)}`);
+    if (meta.date) metaLines.push(`Дата проверки: ${h(meta.date)}`);
 
     const pctNum = Number(percent);
     const pct = Number.isFinite(pctNum) ? Math.round(pctNum) : null;
@@ -480,6 +488,7 @@
           <div class="zonePct">${pct === null ? "—" : `${pct}%`}</div>
         </div>
         ${lastTs ? `<div class="zoneMeta">Последняя проверка: ${h(formatRuDateTime(lastTs))}</div>` : ``}
+        ${metaLines.length ? `<div class="zoneMeta zoneMetaStack">${metaLines.map(line => `<div>${line}</div>`).join("")}</div>` : ``}
       </div>
     `;
   };
