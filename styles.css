@@ -513,6 +513,14 @@ label{
 }
 
 /* ============================
+   Issue table
+   ============================ */
+.issueTable th:nth-child(2),
+.issueTable td:nth-child(2) {
+  text-align: center;
+}
+
+/* ============================
    Comment field: 1 line -> up to 3 lines, then scroll
    ============================ */
 .commentWrap{ margin-top: 10px; }

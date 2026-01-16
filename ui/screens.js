@@ -359,6 +359,83 @@
     return { score, maxScore, percent, zone, hasCritical, issues };
   }
 
+  function filterIssuesByMaxScore(issues) {
+    const scores = (issues || [])
+      .map(it => Number(it.score))
+      .filter(n => Number.isFinite(n));
+    if (!scores.length) return issues;
+    const maxScore = Math.max(...scores);
+    return (issues || []).filter(it => {
+      const val = Number(it.score);
+      if (!Number.isFinite(val)) return true;
+      return val < maxScore;
+    });
+  }
+
+  function buildIssuesFromAnswers(answers) {
+    const sections = activeSections(DATA.sections);
+    const allQs = sections.flatMap(s => questionsForSection(DATA.checklist, s.id));
+    const issues = [];
+
+    const single = answers?.single || answers?.single_answers || {};
+    const singleLabels = answers?.single_labels || answers?.single_answer_labels || {};
+    const checkbox = answers?.checkbox || answers?.checkbox_answers || {};
+
+    for (const q of allQs) {
+      const qid = q.id;
+      const qSectionId = norm(getAny(q, [
+        "section_code",
+        "section_id", "section", "sectionId",
+        "секция_id", "секция", "раздел_id", "раздел"
+      ], ""));
+      const sectionTitle = sections.find(s => s.id === qSectionId)?.title || "";
+
+      const qScore = Number(getAny(q, ["score", "баллы", "points"], 1)) || 1;
+
+      if (isCheckboxQuestion(q)) {
+        const set = new Set(checkbox[qid] || []);
+        const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
+        if (!checked) {
+          const severity = (q.severity === "critical") ? "critical" : "noncritical";
+          issues.push({
+            qid,
+            title: norm(q.title_text || q.title || q.question || q.name),
+            sectionTitle,
+            severity,
+            score: qScore,
+            comment: "",
+            photos: [],
+          });
+        }
+      } else {
+        const selectedLabel = norm(single[qid] ?? singleLabels[qid]);
+        const ideal = norm(getAny(q, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
+        const ok = norm(getAny(q, ["acceptable_answer", "ok_text", "ok", "норм"], ""));
+        const bad = norm(getAny(q, ["bad_answer", "bad_text", "bad", "стрем", "плохо"], ""));
+
+        let kind = "bad";
+        if (selectedLabel && ideal && selectedLabel === ideal) kind = "good";
+        else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
+        else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
+
+        if (selectedLabel && kind !== "good") {
+          const severity = (q.severity === "critical") ? "critical" : "noncritical";
+          issues.push({
+            qid,
+            title: norm(q.title_text || q.title || q.question || q.name),
+            sectionTitle,
+            severity,
+            score: qScore,
+            comment: "",
+            photos: [],
+          });
+        }
+      }
+    }
+
+    return issues;
+  }
+
   // ---------- required validation ----------
   function isAnswered(q) {
     if (isCheckboxQuestion(q)) return true; // unchecked is a valid state
@@ -932,7 +1009,7 @@ answers: { single, single_labels, checkbox },
     `);
 
     const list = document.getElementById("issuesList");
-    const issues = (result.issues || []).slice();
+    const issues = filterIssuesByMaxScore((result.issues || []).slice());
 
     function sevText(sev){
       return sev === "critical" ? "Критическая" : "Некритическая";
@@ -1032,7 +1109,7 @@ answers: { single, single_labels, checkbox },
     DATA = data;
 
     const sub = submissionPayload?.submission || {};
-    const issues = [];
+    let issues = [];
 
     // If Apps Script returns answers & you want to reconstruct issues — can do later.
     // For now we use submission.issues if exists in stored payload_json.
@@ -1049,6 +1126,13 @@ answers: { single, single_labels, checkbox },
         photos: it.photos || [],
       });
     }
+
+    if (!issues.length) {
+      const storedAnswers = stored?.answers || submissionPayload?.answers || sub?.answers || {};
+      issues = buildIssuesFromAnswers(storedAnswers);
+    }
+
+    issues = filterIssuesByMaxScore(issues);
 
     const zone = sub.zone || stored.zone || "gray";
     const percent = sub.percent ?? stored.percent ?? null;
