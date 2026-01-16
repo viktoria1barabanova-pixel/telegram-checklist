@@ -417,8 +417,12 @@
         <div class="optCol checkbox" data-kind="checkbox" data-mode="boolean">
           <label class="cbRow cbRowToggle">
             <input type="checkbox" data-item="1" data-ideal="${h(ideal)}" data-bad="${h(bad)}" ${checked} />
-            <span>${h("Есть")}</span>
-            <span class="cbNoHint">${h("Отсутствует")}</span>
+            <span class="cbToggle" aria-hidden="true">
+              <span class="cbToggleText cbToggleTextOn">ON</span>
+              <span class="cbToggleText cbToggleTextOff">OFF</span>
+              <span class="cbToggleThumb"></span>
+            </span>
+            <span class="cbToggleSr">${h("Есть / Отсутствует")}</span>
           </label>
         </div>
       `;
