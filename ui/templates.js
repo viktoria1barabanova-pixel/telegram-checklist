@@ -106,11 +106,18 @@
     return `
       <div class="container">
         <div class="card">
-          <div class="cardHeader">
-            <div class="title">Проверки филиалов СушиSELL</div>
-            <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
-            ${versionLine}
+        <div class="cardHeader">
+          <div class="title">Проверки филиалов СушиSELL</div>
+          <div id="tgUserCard" class="userCard" style="display:none;">
+            <div id="tgUserAvatar" class="userCardAvatar" aria-hidden="true"></div>
+            <div class="userCardInfo">
+              <div id="tgUserName" class="userCardName"></div>
+              <div id="tgUserHandle" class="userCardHandle"></div>
+            </div>
           </div>
+          <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
+          ${versionLine}
+        </div>
 
           <div class="formRow">
             <label class="label">Область</label>
@@ -421,7 +428,7 @@
       return `
         <div class="optCol checkbox" data-kind="checkbox" data-mode="boolean">
           <div class="cbToggleWrap">
-            <span class="cbToggleLabel cbToggleLabel--good">${h(ideal)}</span>
+            <span class="cbToggleLabel cbToggleLabel--bad">${h(bad)}</span>
             <label class="cbToggle">
               <input type="checkbox" data-item="1" ${checked} />
               <span class="cbToggleTrack">
@@ -430,7 +437,7 @@
                 <span class="cbToggleIcon cbToggleIcon--bad">×</span>
               </span>
             </label>
-            <span class="cbToggleLabel cbToggleLabel--bad">${h(bad)}</span>
+            <span class="cbToggleLabel cbToggleLabel--good">${h(ideal)}</span>
           </div>
         </div>
       `;

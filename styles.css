@@ -99,6 +99,12 @@ h2 {
   line-height: 1.35;
 }
 
+.hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 /* Cards */
 .card {
   background: var(--card);
@@ -330,6 +336,32 @@ label{
 .photoWrap img { width: 100%; border-radius: var(--r-lg); box-shadow: var(--sh-sm); }
 
 /* Thumbs */
+.thumbRow{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.thumbWrap{
+  position: relative;
+  display: inline-flex;
+}
+.thumbDel{
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(15,17,23,.9);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 18px rgba(0,0,0,.2);
+}
 .thumbGrid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 .thumb {
   width: 78px; height: 78px; border-radius: 16px; object-fit: cover;
@@ -528,6 +560,7 @@ label{
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .cbToggleLabel{
@@ -716,6 +749,65 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   text-shadow: 0 0 14px rgba(232, 90, 138, 0.35);
 }
 
+.userCard{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(17,24,39,.12);
+  background: rgba(15,17,23,.08);
+}
+.userCardAvatar{
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #1B1D26;
+  background: linear-gradient(135deg, #FFD27C, #F2994A);
+  box-shadow: 0 12px 24px rgba(17,24,39,.16);
+}
+.userCardName{
+  font-weight: 700;
+  font-size: 15px;
+}
+.userCardHandle{
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.loadingPill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15,17,23,.08);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+.loadingPill::after{
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(107,114,128,.35);
+  border-top-color: rgba(232,90,138,.8);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0); }
+  to { transform: rotate(360deg); }
+}
+
 /* ============================
    optRow / optBtn — SINGLE SOURCE OF TRUTH (NO DUPLICATES)
    ============================ */
@@ -743,8 +835,10 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   border-radius: 16px !important;
   padding: 12px 10px !important;
   min-height: 44px !important;
-  font-weight: 900 !important;
+  font-weight: 600 !important;
   font-family: inherit !important;
+  white-space: normal !important;
+  line-height: 1.2;
 }
 
 .optRow .optBtn.selected,
@@ -785,4 +879,55 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
     font-size: 14px !important;
     padding: 11px 8px !important;
   }
+}
+
+@media (max-width: 360px){
+  .bottomActions,
+  .resultActions{
+    grid-template-columns: 1fr;
+  }
+  .optRow{
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+.issueSection{
+  margin-top: 18px;
+}
+.issueSection:first-child{
+  margin-top: 0;
+}
+.issueSectionName{
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent);
+  margin: 16px 0 12px;
+  position: relative;
+}
+.issueSectionName::before,
+.issueSectionName::after{
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 30%;
+  height: 1px;
+  background: rgba(232, 90, 138, 0.25);
+}
+.issueSectionName::before{ left: 0; }
+.issueSectionName::after{ right: 0; }
+
+.issueTableWrap{
+  overflow-x: auto;
+}
+.issueTable{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.issueTable th,
+.issueTable td{
+  padding: 8px;
+  border-bottom: 1px solid rgba(17,24,39,.08);
+  vertical-align: top;
+  text-align: left;
 }
