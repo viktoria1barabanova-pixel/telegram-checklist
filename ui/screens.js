@@ -1242,8 +1242,7 @@
         }
 
         const sectionResult = computeResultFromState({ sectionId: STATE.activeSection });
-        const submissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const payload = buildSectionPayload(STATE.activeSection, sectionResult, submissionId);
+        const payload = buildSectionPayload(STATE.activeSection, sectionResult, "");
 
         try {
           sendZoneBtn.disabled = true;
@@ -1289,8 +1288,7 @@
             const section = pendingSections[i];
             finishBtn.textContent = `Отправляю раздел ${i + 1}/${pendingSections.length}…`;
             const sectionResult = computeResultFromState({ sectionId: section.id });
-            const sectionSubmissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-            const sectionPayload = buildSectionPayload(section.id, sectionResult, sectionSubmissionId);
+            const sectionPayload = buildSectionPayload(section.id, sectionResult, "");
             await api.submit(sectionPayload, { usePostMessage: false });
 
             if (!STATE.completedSections) STATE.completedSections = [];
@@ -1429,8 +1427,73 @@
   }
 
   // ---------- submission payload ----------
+  function getBranchMeta() {
+    const branchRow = findBranchById(STATE.branchId);
+    return {
+      branchRow,
+      branchName: norm(getAddressLabel(branchRow || {})),
+    };
+  }
+
+  function buildAnswersRows(submissionId, submittedAt) {
+    const rows = [];
+    const sections = activeSections(DATA.sections);
+    const { branchName } = getBranchMeta();
+    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+
+    sections.forEach(section => {
+      const qs = questionsForSection(DATA.checklist, section.id);
+      qs.forEach(q => {
+        const qid = q.id;
+        const questionText = norm(q.title_text || q.title || q.question || q.name);
+        const note = safeEnsureNote(qid);
+        const isCheckbox = isCheckboxQuestion(q);
+        const baseRow = {
+          submission_id: submissionId,
+          submitted_at: submittedAt,
+          zone_room: section.title || "",
+          section_id: section.id,
+          section_title: section.title || "",
+          question_id: qid,
+          question_text: questionText,
+          question_type: isCheckbox ? "checkbox" : "single",
+          answer_value: "",
+          answer_label: "",
+          comment: norm(note.text),
+          photos: notePhotos(qid),
+
+          oblast: STATE.oblast || "",
+          city: STATE.city,
+          branch_id: STATE.branchId,
+          branch_name: branchName,
+          fio: STATE.fio,
+          tg_id: tgUser?.id || "",
+          tg_username: tgUser?.username || "",
+          tg_first_name: tgUser?.first_name || "",
+          tg_last_name: tgUser?.last_name || "",
+          tg_name: tgUser?.name || "",
+        };
+
+        if (isCheckbox) {
+          const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set(STATE.checkboxAnswers[qid] || []);
+          const labels = getCheckboxAnswerLabels(q, set);
+          const ids = [...set];
+          baseRow.answer_value = ids.length ? ids.join(", ") : (checkboxHasItems(q) ? "" : "0");
+          baseRow.answer_label = labels.join(", ");
+        } else {
+          baseRow.answer_value = norm(STATE.singleAnswers[qid] || "");
+          baseRow.answer_label = norm(STATE.singleAnswerLabels?.[qid] || "");
+        }
+
+        rows.push(baseRow);
+      });
+    });
+
+    return rows;
+  }
+
   function buildSectionPayload(sectionId, result, submissionId) {
-    const ts = new Date().toISOString();
+    const ts = formatRuDateTimeMsk(new Date());
     const sections = activeSections(DATA.sections);
     const sectionTitle = sections.find(s => s.id === sectionId)?.title || "";
     const sectionQs = questionsForSection(DATA.checklist, sectionId);
@@ -1455,18 +1518,21 @@
     });
 
     const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const { branchName } = getBranchMeta();
 
     return {
       action: "submit",
-      submission_id: submissionId,
+      submission_id: submissionId || "",
       submitted_at: ts,
       partial: true,
       section_id: sectionId,
       section_title: sectionTitle,
+      zone_room: sectionTitle,
 
       oblast: STATE.oblast || "",
       city: STATE.city,
       branch_id: STATE.branchId,
+      branch_name: branchName,
       fio: STATE.fio,
       tg_id: tgUser?.id || "",
       tg_username: tgUser?.username || "",
@@ -1478,6 +1544,7 @@
       percent: result.percent,
       score: result.score,
       max_score: result.maxScore,
+      zones_score_total: "",
       has_critical: result.hasCritical,
 
       issues: result.issues,
@@ -1487,7 +1554,7 @@
   }
 
   function buildSubmissionPayload(submissionId, result) {
-    const ts = new Date().toISOString();
+    const ts = formatRuDateTimeMsk(new Date());
 
     // You can expand with more columns expected by Apps Script doPost.
     // Keep it self-contained: result + answers + notes.
@@ -1507,15 +1574,19 @@
     });
 
     const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const { branchName } = getBranchMeta();
+    const answers_rows = buildAnswersRows(submissionId, ts);
 
     return {
       action: "submit",
       submission_id: submissionId,
       submitted_at: ts,
+      zone_room: "общая",
 
       oblast: STATE.oblast || "",
       city: STATE.city,
       branch_id: STATE.branchId,
+      branch_name: branchName,
       fio: STATE.fio,
       tg_id: tgUser?.id || "",
       tg_username: tgUser?.username || "",
@@ -1527,11 +1598,13 @@
       percent: result.percent,
       score: result.score,
       max_score: result.maxScore,
+      zones_score_total: result.score,
       has_critical: result.hasCritical,
 
       issues: result.issues, // already includes notes/photos
 
       answers: { single, single_labels, checkbox, checkbox_labels },
+      answers_rows,
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
     };
   }
