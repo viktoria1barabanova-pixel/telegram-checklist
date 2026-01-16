@@ -114,6 +114,35 @@
       "тип", "тип_ответа"
     ], "single")) === "checkbox";
   }
+
+  function checkboxHasItems(q) {
+    const jsonStr = getAny(q, [
+      "items_json", "checklist_items_json", "itemsJson",
+      "checkbox_items_json", "check_items_json", "cb_items_json",
+      "чекбоксы_json", "чекбокс_варианты_json", "галочки_json"
+    ], "");
+    if (jsonStr) {
+      try {
+        const arr = JSON.parse(String(jsonStr));
+        if (Array.isArray(arr) && arr.length) return true;
+      } catch {}
+    }
+
+    const listStr = getAny(q, [
+      "items", "checklist_items",
+      "checkbox_items", "check_items", "cb_items",
+      "чекбоксы", "чекбоксы_список", "галочки", "галочки_список"
+    ], "");
+    if (listStr) {
+      const items = String(listStr)
+        .split(/\s*[;|\n]+\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return items.length > 0;
+    }
+
+    return false;
+  }
   function getBranches() {
     return (DATA && (DATA.addresses || DATA.branches)) ? (DATA.addresses || DATA.branches) : [];
   }
@@ -307,15 +336,20 @@
       const isExcluded = (ex === "true" || ex === "1" || ex === "yes" || ex === "да");
 
       if (isCheckboxQuestion(q)) {
-        // boolean checkbox model: checked => ideal_answer (OK), unchecked => bad_answer (ERROR)
+        const hasItems = checkboxHasItems(q);
         const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set();
         const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
+        const anySelected = set.size > 0;
 
         if (!isExcluded) {
-          score += checked ? 1 : 0;
+          if (hasItems) {
+            score += anySelected ? 0 : 1;
+          } else {
+            score += checked ? 1 : 0;
+          }
         }
 
-        if (!checked) {
+        if ((hasItems && anySelected) || (!hasItems && !checked)) {
           const severity = (q.severity === "critical") ? "critical" : "noncritical";
           if (severity === "critical") hasCritical = true;
 
@@ -532,7 +566,7 @@
 
         STATE.singleAnswers = d.singleAnswers || {};
         STATE.checkboxAnswers = d.checkboxAnswers || {};
-	STATE.singleAnswerLabels = d.singleAnswerLabels || {};
+        STATE.singleAnswerLabels = d.singleAnswerLabels || {};
         STATE.isFinished = !!d.isFinished;
         STATE.lastResult = d.lastResult || null;
         STATE.lastResultId = d.lastResultId || null;
@@ -632,13 +666,13 @@
     let qs = questionsForSection(DATA.checklist, STATE.activeSection);
 
     const qList = document.getElementById("qList");
-qList.innerHTML = qs.map(q => {
-  const qWithSection = { ...q, section_title: activeTitle };
-  const state = isCheckboxQuestion(qWithSection)
-    ? (STATE.checkboxAnswers[qWithSection.id] instanceof Set ? STATE.checkboxAnswers[qWithSection.id] : new Set())
-    : norm(STATE.singleAnswers[qWithSection.id]);
-  return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: true });
-}).join("");
+    qList.innerHTML = qs.map(q => {
+      const qWithSection = { ...q, section_title: activeTitle };
+      const state = isCheckboxQuestion(qWithSection)
+        ? (STATE.checkboxAnswers[qWithSection.id] instanceof Set ? STATE.checkboxAnswers[qWithSection.id] : new Set())
+        : norm(STATE.singleAnswers[qWithSection.id]);
+      return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: true });
+    }).join("");
 
     // wire photo toggle buttons
     document.querySelectorAll(".photoToggle").forEach(btn => {
@@ -691,16 +725,36 @@ qList.innerHTML = qs.map(q => {
     document.querySelectorAll(".qCard .optCol.checkbox").forEach(col => {
       const card = col.closest(".qCard");
       const qid = card.getAttribute("data-qid");
+      const isBoolean = col.getAttribute("data-mode") === "boolean";
       STATE.checkboxAnswers[qid] ??= new Set();
       const set = STATE.checkboxAnswers[qid];
 
-      col.querySelectorAll("input[type=checkbox]").forEach(cb => {
-        cb.onchange = () => {
-          set.clear();
-          if (cb.checked) set.add("1");
+      const inputs = Array.from(col.querySelectorAll("input[type=checkbox]"));
+      const updateNotes = () => {
+        if (isBoolean) {
+          const checked = inputs[0]?.checked;
+          toggleNotesByAnswer(qid, checked ? "good" : "bad");
+          return;
+        }
+        const anyChecked = inputs.some((input) => input.checked);
+        toggleNotesByAnswer(qid, anyChecked ? "bad" : "good");
+      };
 
-          // checked => OK, unchecked => ERROR
-          toggleNotesByAnswer(qid, cb.checked ? "good" : "bad");
+      inputs.forEach(cb => {
+        cb.onchange = () => {
+          if (isBoolean) {
+            set.clear();
+            if (cb.checked) set.add("1");
+          } else {
+            const itemId = cb.getAttribute("data-item") || "1";
+            if (cb.checked) {
+              set.add(itemId);
+            } else {
+              set.delete(itemId);
+            }
+          }
+
+          updateNotes();
 
           saveDraft();
           refreshFinishState();
@@ -708,8 +762,7 @@ qList.innerHTML = qs.map(q => {
       });
 
       // initial notes visibility
-      const only = col.querySelector("input[type=checkbox]");
-      toggleNotesByAnswer(qid, (only && only.checked) ? "good" : "bad");
+      updateNotes();
     });
 
     // wire notes UI
@@ -896,8 +949,8 @@ qList.innerHTML = qs.map(q => {
 
     // You can expand with more columns expected by Apps Script doPost.
     // Keep it self-contained: result + answers + notes.
-const single = { ...STATE.singleAnswers };
-const single_labels = { ...(STATE.singleAnswerLabels || {}) };
+    const single = { ...STATE.singleAnswers };
+    const single_labels = { ...(STATE.singleAnswerLabels || {}) };
     const checkbox = {};
     for (const [k, set] of Object.entries(STATE.checkboxAnswers || {})) checkbox[k] = [...(set || [])];
 
@@ -919,7 +972,7 @@ const single_labels = { ...(STATE.singleAnswerLabels || {}) };
 
       issues: result.issues, // already includes notes/photos
 
-answers: { single, single_labels, checkbox },
+      answers: { single, single_labels, checkbox },
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
     };
   }

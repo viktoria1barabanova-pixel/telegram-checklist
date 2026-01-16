@@ -20,6 +20,7 @@
 
     issueNotes: {}, // key -> { text: string, photos: string[] (dataURL) }
     noteOpen: {}, // key -> bool
+    singleAnswerLabels: {}, // key -> human-readable label
   };
 
   // ---------- Telegram helpers ----------
@@ -92,6 +93,7 @@
 
           singleAnswers: STATE.singleAnswers,
           checkboxAnswers: serialCheckbox,
+          singleAnswerLabels: STATE.singleAnswerLabels,
 
           savedAt: Date.now(),
 
@@ -124,6 +126,7 @@
       const restored = {};
       for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
       d.checkboxAnswers = restored;
+      d.singleAnswerLabels = d.singleAnswerLabels || {};
 
       // migrate notes
       d.issueNotes = d.issueNotes || {};
