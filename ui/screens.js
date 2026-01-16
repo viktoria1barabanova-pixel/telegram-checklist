@@ -80,6 +80,19 @@
     root.innerHTML = html;
   }
 
+  function clearResultQuery() {
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("result")) return;
+      url.searchParams.delete("result");
+      const search = url.searchParams.toString();
+      const next = `${url.origin}${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
+      window.history.replaceState(null, "", next);
+    } catch (e) {
+      console.warn("Failed to clear result param", e);
+    }
+  }
+
   // ---------- normalize branches (адреса) & sections ----------
   // ---------- question type normalization ----------
   function normalizeQuestionType(raw) {
@@ -379,6 +392,7 @@
   // ---------- Start screen ----------
   window.renderStart = function renderStart(data) {
     DATA = data;
+    clearResultQuery();
 
     // Поддержка старого ключа branches и нового ключа addresses
     const BRANCHES = getBranches();
@@ -1008,6 +1022,7 @@ answers: { single, single_labels, checkbox },
 
     const newBtn = document.getElementById("newCheckBtn");
     newBtn.onclick = () => {
+      clearResultQuery();
       resetCheckKeepMeta();
       saveDraft();
       renderChecklist(DATA);
@@ -1087,6 +1102,7 @@ answers: { single, single_labels, checkbox },
 
     document.getElementById("backToStartBtn").onclick = async () => {
       // reload start flow
+      clearResultQuery();
       resetCheckKeepMeta();
       STATE.branchId = "";
       saveDraft();
