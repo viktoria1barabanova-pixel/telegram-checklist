@@ -33,6 +33,34 @@
     }
   };
 
+  window.formatRuDateTimeMsk = function formatRuDateTimeMsk(value) {
+    try {
+      const d = value instanceof Date ? value : new Date(value ?? Date.now());
+      if (!Number.isFinite(d.getTime())) return "";
+
+      const parts = new Intl.DateTimeFormat("ru-RU", {
+        timeZone: "Europe/Moscow",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(d);
+
+      const get = (type) => parts.find(p => p.type === type)?.value || "";
+      const dd = get("day");
+      const mm = get("month");
+      const yyyy = get("year");
+      const hh = get("hour");
+      const mi = get("minute");
+      if (!dd || !mm || !yyyy || !hh || !mi) return "";
+      return `${dd}.${mm}.${yyyy} ${hh}:${mi}`;
+    } catch {
+      return "";
+    }
+  };
+
   // ---------- urls ----------
   window.buildUrlWithParams = function buildUrlWithParams(baseUrl, params) {
     const u = new URL(baseUrl);
