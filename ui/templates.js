@@ -100,6 +100,8 @@
     const startText = (typeof UI_TEXT !== "undefined" && UI_TEXT && UI_TEXT.startButton)
       ? UI_TEXT.startButton
       : "Начать";
+    const appVersion = (typeof APP_VERSION !== "undefined" && APP_VERSION) ? `v${APP_VERSION}` : "";
+    const versionLine = appVersion ? `<div class="muted" style="margin-top:6px;">Версия: ${h(appVersion)}</div>` : "";
 
     return `
       <div class="container">
@@ -107,6 +109,7 @@
           <div class="cardHeader">
             <div class="title">Проверки филиалов СушиSELL</div>
             <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
+            ${versionLine}
           </div>
 
           <div class="formRow">
