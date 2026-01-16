@@ -650,7 +650,6 @@
     const city = norm(STATE.city || getCity(branchRow || {}));
     const addr = norm(getAddressLabel(branchRow || {}));
     const addrLine = [norm(STATE.city || ""), addr].filter(Boolean).join(", ");
-    const addrLine = [norm(STATE.city || ""), addr].filter(Boolean).join(", ");
     const fio = norm(STATE.fio || "");
 
     const ctxLine = [fio, city, addr].filter(Boolean).join(" • ");
