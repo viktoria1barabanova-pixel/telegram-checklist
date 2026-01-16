@@ -61,7 +61,7 @@
     const nextBtn = document.getElementById("imgNext");
     const caption = document.getElementById("imgCaption");
 
-    if (!overlay || !img || !closeBtn || !prevBtn || !nextBtn) {
+    if (!overlay || !img || !closeBtn) {
       // If markup not present — silently no-op
       _modal = { ok: false };
       return _modal;
@@ -76,9 +76,10 @@
     overlay.addEventListener("click", (e) => {
       if (e.target === overlay) close();
     });
+    img.addEventListener("click", close);
 
-    prevBtn.onclick = () => showIndex(_idx - 1);
-    nextBtn.onclick = () => showIndex(_idx + 1);
+    if (prevBtn) prevBtn.onclick = () => showIndex(_idx - 1);
+    if (nextBtn) nextBtn.onclick = () => showIndex(_idx + 1);
 
     document.addEventListener("keydown", (e) => {
       if (!overlay.classList.contains("open")) return;
@@ -115,8 +116,8 @@
     }
 
     // show/hide arrows
-    modal.prevBtn.style.display = _imgs.length > 1 ? "" : "none";
-    modal.nextBtn.style.display = _imgs.length > 1 ? "" : "none";
+    if (modal.prevBtn) modal.prevBtn.style.display = _imgs.length > 1 ? "" : "none";
+    if (modal.nextBtn) modal.nextBtn.style.display = _imgs.length > 1 ? "" : "none";
 
     centerImageInView(modal);
   }

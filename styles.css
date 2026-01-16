@@ -186,6 +186,15 @@ select {
     radial-gradient(900px 450px at 110% 120%, rgba(46, 196, 166, 0.16), transparent 62%),
     rgba(255, 255, 255, 0.96);
 }
+.tab.completed {
+  background: rgba(236, 238, 242, 0.92);
+  color: rgba(107, 114, 128, 0.9);
+  border-color: rgba(107, 114, 128, 0.25);
+}
+.tab.completed.active {
+  background: rgba(236, 238, 242, 0.96);
+  border-color: rgba(107, 114, 128, 0.35);
+}
 
 /* Question header layout */
 .qHead, .qHeader{
@@ -371,12 +380,13 @@ label{
 }
 
 .zoneMeta{ margin-top: 8px; font-size: 13px; color: var(--muted); }
+.zoneMetaStack{ display: grid; gap: 4px; }
 
 /* Softer “into white” gradients */
-.zoneBanner.green  { background: linear-gradient(135deg, #1E7D6A 0%, rgba(46,196,166,.92) 58%, rgba(255,255,255,.92) 140%); color: #FFFFFF; }
-.zoneBanner.yellow { background: linear-gradient(135deg, #D8B44A 0%, rgba(242,155,100,.92) 58%, rgba(255,255,255,.94) 140%); color: #241A00; }
-.zoneBanner.red    { background: linear-gradient(135deg, #6F2A2A 0%, rgba(185,75,75,.92) 58%, rgba(255,255,255,.92) 140%); color: #FFFFFF; }
-.zoneBanner.gray   { background: linear-gradient(135deg, #2F2F35 0%, rgba(140,140,148,.92) 58%, rgba(255,255,255,.88) 140%); color: #FFFFFF; }
+.zoneBanner.green  { background: linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(46,196,166,.92) 55%, #1E7D6A 100%); color: #FFFFFF; }
+.zoneBanner.yellow { background: linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(242,155,100,.92) 55%, #D8B44A 100%); color: #241A00; }
+.zoneBanner.red    { background: linear-gradient(135deg, rgba(255,255,255,.94) 0%, rgba(185,75,75,.92) 55%, #6F2A2A 100%); color: #FFFFFF; }
+.zoneBanner.gray   { background: linear-gradient(135deg, rgba(255,255,255,.9) 0%, rgba(140,140,148,.92) 55%, #2F2F35 100%); color: #FFFFFF; }
 
 .zoneBanner.yellow .zonePct{ background: rgba(255,255,255,.36); border-color: rgba(255,255,255,.42); }
 .zoneBanner.gray .zonePct,
@@ -412,7 +422,7 @@ label{
 }
 
 /* Modal controls */
-#imgClose, #imgPrev, #imgNext{
+#imgClose{
   all: unset;
   cursor: pointer;
   user-select: none;
@@ -438,12 +448,9 @@ label{
 }
 
 #imgClose{ position: absolute; top: 14px; right: 14px; }
-#imgPrev{ position: absolute; top: 50%; left: 14px; transform: translateY(-50%); }
-#imgNext{ position: absolute; top: 50%; right: 14px; transform: translateY(-50%); }
+#imgClose{ position: absolute; top: 14px; right: 14px; }
 
-.modalOverlay.open #imgClose,
-.modalOverlay.open #imgPrev,
-.modalOverlay.open #imgNext{
+.modalOverlay.open #imgClose{
   display: inline-flex !important;
 }
 
@@ -480,6 +487,10 @@ label{
 }
 
 .segBtn:active{ transform:scale(.985); }
+.optBtn:disabled{
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 .segBtn.answer--bad{ border-color:rgba(214,69,69,.45); }
 .segBtn.answer--ok{ border-color:rgba(242,201,76,.55); }
@@ -510,6 +521,79 @@ label{
 .segBtn.answer--good.is-active{
   background: linear-gradient(135deg, rgba(46,196,166,.42), rgba(255,255,255,.98));
   border-color: rgba(46,196,166,.86);
+}
+
+/* Checkbox toggle (ideal/bad) */
+.cbToggleWrap{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cbToggleLabel{
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--muted);
+  max-width: 40%;
+}
+.cbToggleLabel--good{ color: #1E7D6A; }
+.cbToggleLabel--bad{ color: #B94949; }
+
+.cbToggle{
+  position: relative;
+  display: inline-flex;
+  width: 92px;
+  height: 44px;
+}
+.cbToggle input{
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.cbToggleTrack{
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(214,69,69,.65), rgba(214,69,69,.95));
+  box-shadow: inset 0 0 0 1px rgba(17,24,39,.12), 0 12px 24px rgba(17,24,39,.08);
+  transition: background .2s ease;
+}
+.cbToggleThumb{
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 10px 22px rgba(17,24,39,.2);
+  transition: transform .2s ease;
+}
+.cbToggleIcon{
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  font-weight: 900;
+  color: rgba(255,255,255,.95);
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+.cbToggleIcon--good{ right: 16px; opacity: 0; }
+.cbToggleIcon--bad{ left: 18px; opacity: 1; }
+
+.cbToggle input:checked + .cbToggleTrack{
+  background: linear-gradient(135deg, rgba(46,196,166,.65), rgba(46,196,166,.95));
+}
+.cbToggle input:checked + .cbToggleTrack .cbToggleThumb{
+  transform: translateX(48px);
+}
+.cbToggle input:checked + .cbToggleTrack .cbToggleIcon--good{ opacity: 1; }
+.cbToggle input:checked + .cbToggleTrack .cbToggleIcon--bad{ opacity: 0; }
+.cbToggle input:disabled + .cbToggleTrack{
+  opacity: 0.6;
 }
 
 /* ============================
@@ -548,6 +632,89 @@ textarea.comment::-webkit-scrollbar-thumb{
   border-radius: 999px;
 }
 textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
+
+/* Notes (comment + photo) */
+.noteRow{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.noteRowTop{
+  align-items: center;
+}
+
+.noteInput{
+  width: 100%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 12px;
+  min-height: 44px;
+  max-height: 120px;
+  overflow-y: auto;
+  resize: none;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.noteInput::placeholder{ color: rgba(107, 114, 128, 0.75); }
+
+.fileBtn{
+  position: relative;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(17,24,39,.12);
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 10px 22px rgba(17,24,39,.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fileBtn input{
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.fileBtnIcon::before{
+  content: "📷";
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bottomActions{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.resultActions{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.resultActions .btn{
+  width: 100%;
+  border-radius: 18px;
+}
+.resultActions .btn:only-child{
+  grid-column: 1 / -1;
+}
+
+.userGlow{
+  color: var(--accent);
+  font-weight: 800;
+  text-shadow: 0 0 14px rgba(232, 90, 138, 0.35);
+}
 
 /* ============================
    optRow / optBtn — SINGLE SOURCE OF TRUTH (NO DUPLICATES)

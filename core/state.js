@@ -10,6 +10,7 @@
 
     enabledSections: [],
     activeSection: "",
+    completedSections: [],
 
     singleAnswers: {}, // key -> "ideal" | "acceptable" | "bad"
     checkboxAnswers: {}, // "_items" -> Set(keys)
@@ -17,6 +18,7 @@
     isFinished: false,
     lastResult: null,
     lastResultId: null, // submission_id for share link
+    lastSubmittedAt: "",
 
     issueNotes: {}, // key -> { text: string, photos: string[] (dataURL) }
     noteOpen: {}, // key -> bool
@@ -90,6 +92,7 @@
           branchId: STATE.branchId,
           enabledSections: STATE.enabledSections,
           activeSection: STATE.activeSection,
+          completedSections: STATE.completedSections,
 
           singleAnswers: STATE.singleAnswers,
           checkboxAnswers: serialCheckbox,
@@ -100,6 +103,7 @@
           isFinished: STATE.isFinished,
           lastResult: STATE.lastResult,
           lastResultId: STATE.lastResultId,
+          lastSubmittedAt: STATE.lastSubmittedAt,
 
           issueNotes: STATE.issueNotes,
           noteOpen: STATE.noteOpen,
@@ -127,6 +131,8 @@
       for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
       d.checkboxAnswers = restored;
       d.singleAnswerLabels = d.singleAnswerLabels || {};
+      d.lastSubmittedAt = d.lastSubmittedAt || "";
+      d.completedSections = d.completedSections || [];
 
       // migrate notes
       d.issueNotes = d.issueNotes || {};
@@ -162,9 +168,11 @@
     STATE.singleAnswers = {};
     STATE.checkboxAnswers = {};
     STATE.activeSection = "";
+    STATE.completedSections = [];
     STATE.isFinished = false;
     STATE.lastResult = null;
     STATE.lastResultId = null;
+    STATE.lastSubmittedAt = "";
     STATE.issueNotes = {};
     STATE.noteOpen = {};
     // city/fio/branchId/enabledSections пусть останутся — это “контекст”
@@ -175,9 +183,11 @@
     STATE.singleAnswers = {};
     STATE.checkboxAnswers = {};
     STATE.activeSection = STATE.enabledSections?.[0] || "";
+    STATE.completedSections = [];
     STATE.isFinished = false;
     STATE.lastResult = null;
     STATE.lastResultId = null;
+    STATE.lastSubmittedAt = "";
     STATE.issueNotes = {};
     STATE.noteOpen = {};
   };
