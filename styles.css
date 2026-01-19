@@ -723,6 +723,16 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   line-height: 1;
 }
 
+.bottomBar{
+  position: sticky;
+  bottom: 0;
+  z-index: 110;
+  padding: 8px 0 calc(16px + env(safe-area-inset-bottom, 0));
+  background: rgba(247, 244, 246, 0.92);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(17,24,39,0.06);
+}
+
 .bottomActions{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

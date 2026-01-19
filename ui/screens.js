@@ -105,7 +105,7 @@
     const link = buildResultLink(submissionId) || "—";
 
     const lines = [
-      "Поздравляем с прохождением проверки.",
+      "Поздравляю, вы прошли проверку.",
       `Результаты: ${zoneText} (${percent}% прохождения)`,
       "",
       "С результатами можно повторно ознакомиться по ссылке",
@@ -311,8 +311,26 @@
 
   function normalizePercentValue(value) {
     if (value === null || value === undefined || value === "") return null;
-    const num = Number(String(value).replace(",", "."));
+    const cleaned = String(value).replace("%", "").replace(",", ".").trim();
+    const num = Number(cleaned);
     return Number.isFinite(num) ? num : null;
+  }
+
+  function formatPercentForSheet(value) {
+    if (value === null || value === undefined || value === "") return "";
+    const cleaned = String(value).replace("%", "").replace(",", ".").trim();
+    const num = Number(cleaned);
+    if (!Number.isFinite(num)) return "";
+    return `${num.toFixed(1).replace(".", ",")}%`;
+  }
+
+  function ensureSubmissionId() {
+    if (!STATE.lastResultId) {
+      STATE.lastResultId = (crypto?.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    return STATE.lastResultId;
   }
 
   function getLastCheckFromServer(branchId) {
@@ -1341,7 +1359,8 @@
         }
 
         const sectionResult = computeResultFromState({ sectionId: STATE.activeSection });
-        const payload = buildSectionPayload(STATE.activeSection, sectionResult, "");
+        const submissionId = ensureSubmissionId();
+        const payload = buildSectionPayload(STATE.activeSection, sectionResult, submissionId);
 
         try {
           sendZoneBtn.disabled = true;
@@ -1382,12 +1401,13 @@
         finishBtn.textContent = UI_TEXT?.submitSending || "Отправляю…";
 
         const pendingSections = secs.filter(s => !isSectionCompleted(s.id));
+        const submissionId = ensureSubmissionId();
         if (pendingSections.length) {
           for (let i = 0; i < pendingSections.length; i += 1) {
             const section = pendingSections[i];
             finishBtn.textContent = `Отправляю раздел ${i + 1}/${pendingSections.length}…`;
             const sectionResult = computeResultFromState({ sectionId: section.id });
-            const sectionPayload = buildSectionPayload(section.id, sectionResult, "");
+            const sectionPayload = buildSectionPayload(section.id, sectionResult, submissionId);
             await api.submit(sectionPayload, { usePostMessage: false });
 
             if (!STATE.completedSections) STATE.completedSections = [];
@@ -1400,7 +1420,6 @@
         STATE.lastResult = result;
 
         // create submission payload for sheet
-        const submissionId = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
         STATE.lastResultId = submissionId;
         STATE.lastSubmittedAt = new Date().toISOString();
 
@@ -1588,6 +1607,7 @@
           branch_name: branchName,
           fio: STATE.fio,
           tg_id: tgUser?.id || "",
+          tg_user_id: tgUser?.id || "",
           tg_username: tgUser?.username || "",
           tg_first_name: tgUser?.first_name || "",
           tg_last_name: tgUser?.last_name || "",
@@ -1684,6 +1704,7 @@
       section_id: sectionId,
       section_title: sectionTitle,
       zone_room: sectionTitle,
+      inspection_area: sectionTitle,
 
       oblast: STATE.oblast || "",
       city: STATE.city,
@@ -1691,14 +1712,17 @@
       branch_name: branchName,
       fio: STATE.fio,
       tg_id: tgUser?.id || "",
+      tg_user_id: tgUser?.id || "",
       tg_username: tgUser?.username || "",
       tg_first_name: tgUser?.first_name || "",
       tg_last_name: tgUser?.last_name || "",
       tg_name: tgUser?.name || "",
 
       zone: result.zone,
-      percent: result.percent,
+      percent: formatPercentForSheet(result.percent),
+      percent_value: result.percent,
       score: result.score,
+      earned: result.score,
       max_score: result.maxScore,
       zones_score_total: "",
       has_critical: result.hasCritical,
@@ -1706,6 +1730,7 @@
       issues: result.issues,
       answers: { single, single_labels, checkbox, checkbox_labels },
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
+      meta_json: JSON.stringify({ app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG }),
     };
   }
 
@@ -1738,6 +1763,7 @@
       submission_id: submissionId,
       submitted_at: ts,
       zone_room: "общая",
+      inspection_area: "Общая",
 
       oblast: STATE.oblast || "",
       city: STATE.city,
@@ -1745,14 +1771,17 @@
       branch_name: branchName,
       fio: STATE.fio,
       tg_id: tgUser?.id || "",
+      tg_user_id: tgUser?.id || "",
       tg_username: tgUser?.username || "",
       tg_first_name: tgUser?.first_name || "",
       tg_last_name: tgUser?.last_name || "",
       tg_name: tgUser?.name || "",
 
       zone: result.zone,
-      percent: result.percent,
+      percent: formatPercentForSheet(result.percent),
+      percent_value: result.percent,
       score: result.score,
+      earned: result.score,
       max_score: result.maxScore,
       zones_score_total: result.score,
       has_critical: result.hasCritical,
@@ -1762,6 +1791,7 @@
       answers: { single, single_labels, checkbox, checkbox_labels },
       answers_rows,
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
+      meta_json: JSON.stringify({ app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG }),
     };
   }
 

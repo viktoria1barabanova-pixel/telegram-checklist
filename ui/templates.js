@@ -493,7 +493,7 @@
     if (meta.address) metaLines.push(`Адрес: ${h(meta.address)}`);
     if (meta.date) metaLines.push(`Дата проверки: ${h(meta.date)}`);
 
-    const pctNum = Number(percent);
+    const pctNum = Number(String(percent ?? "").replace("%", "").replace(",", "."));
     const pct = Number.isFinite(pctNum) ? Math.round(pctNum) : null;
 
     return `
