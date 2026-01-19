@@ -37,6 +37,15 @@
         } catch { return ""; }
       };
 
+  const truncateText = (window.truncateText && typeof window.truncateText === "function")
+    ? window.truncateText
+    : (value, maxLen = 1000) => {
+        const limit = Number(maxLen);
+        if (!Number.isFinite(limit) || limit <= 0) return "";
+        const str = String(value ?? "");
+        return str.length > limit ? str.slice(0, limit) : str;
+      };
+
   // ---------- robust field getter (ENG/RU headers, разные регистры/пробелы) ----------
   function keyNorm(k) {
     return String(k || "")
@@ -1696,7 +1705,7 @@
     const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
     const { branchName } = getBranchMeta();
 
-    return {
+    const payload = {
       action: "submit",
       submission_id: submissionId || "",
       submitted_at: ts,
@@ -1732,6 +1741,11 @@
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
       meta_json: JSON.stringify({ app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG }),
     };
+
+    const maxLogChars = (typeof LOG_PREVIEW_MAX_CHARS !== "undefined") ? LOG_PREVIEW_MAX_CHARS : 1000;
+    payload.payload_log = truncateText(JSON.stringify(payload), maxLogChars);
+
+    return payload;
   }
 
   function buildSubmissionPayload(submissionId, result) {
@@ -1757,8 +1771,9 @@
     const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
     const { branchName } = getBranchMeta();
     const answers_rows = buildAnswersRows(submissionId, ts);
+    const answers_rows_count = answers_rows.length;
 
-    return {
+    const payload = {
       action: "submit",
       submission_id: submissionId,
       submitted_at: ts,
@@ -1790,9 +1805,15 @@
 
       answers: { single, single_labels, checkbox, checkbox_labels },
       answers_rows,
+      answers_rows_count,
       meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
       meta_json: JSON.stringify({ app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG }),
     };
+
+    const maxLogChars = (typeof LOG_PREVIEW_MAX_CHARS !== "undefined") ? LOG_PREVIEW_MAX_CHARS : 1000;
+    payload.payload_log = truncateText(JSON.stringify(payload), maxLogChars);
+
+    return payload;
   }
 
   // ---------- Result screen ----------

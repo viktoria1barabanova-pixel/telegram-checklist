@@ -135,7 +135,7 @@
     return { frame, form, payloadInput, actionInput, returnInput };
   }
 
-  function iframePostSubmit(payloadObj, { usePostMessage = false, timeoutMs = 20000 } = {}) {
+  function iframePostSubmit(payloadObj, { usePostMessage = false, timeoutMs = 20000, loadFallbackMs = 2500 } = {}) {
     return new Promise((resolve, reject) => {
       try {
         const { frame, form, payloadInput, actionInput, returnInput } = ensureSubmitPlumbing();
@@ -148,6 +148,8 @@
         returnInput.value = usePostMessage ? "postMessage" : "";
 
         let finished = false;
+        let loadFallbackTimer = null;
+        let loadSeen = false;
 
         const cleanup = () => {
           try {
@@ -158,13 +160,23 @@
           } catch {}
           try {
             clearTimeout(timer);
+            if (loadFallbackTimer) clearTimeout(loadFallbackTimer);
           } catch {}
         };
 
         const onLoad = () => {
           if (finished) return;
           if (usePostMessage) {
-            // If we expected postMessage, ignore load as final signal (we wait message).
+            // If we expected postMessage, allow a short fallback after load.
+            if (!loadSeen) {
+              loadSeen = true;
+              loadFallbackTimer = setTimeout(() => {
+                if (finished) return;
+                finished = true;
+                cleanup();
+                resolve({ ok: true, via: "load" });
+              }, loadFallbackMs);
+            }
             return;
           }
           finished = true;
