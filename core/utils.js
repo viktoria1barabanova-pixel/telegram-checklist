@@ -18,6 +18,14 @@
     return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]));
   };
 
+  window.truncateText = function truncateText(value, maxLen = 1000) {
+    const limit = Number(maxLen);
+    if (!Number.isFinite(limit) || limit <= 0) return "";
+    const str = String(value ?? "");
+    if (str.length <= limit) return str;
+    return str.slice(0, limit);
+  };
+
   // ---------- dates ----------
   window.formatRuDateTime = function formatRuDateTime(iso) {
     try {
