@@ -1448,6 +1448,10 @@
         const questionText = norm(q.title_text || q.title || q.question || q.name);
         const note = safeEnsureNote(qid);
         const isCheckbox = isCheckboxQuestion(q);
+        const qScore = Number(getAny(q, ["score", "баллы", "points"], 1)) || 1;
+        const ex = String(getAny(q, ["exclude_from_max", "exclude", "skip_max", "исключить_из_макс"], false) ?? "").trim().toLowerCase();
+        const isExcluded = (ex === "true" || ex === "1" || ex === "yes" || ex === "да");
+        const severity = (q.severity === "critical") ? "critical" : "noncritical";
         const baseRow = {
           submission_id: submissionId,
           submitted_at: submittedAt,
@@ -1457,8 +1461,14 @@
           question_id: qid,
           question_text: questionText,
           question_type: isCheckbox ? "checkbox" : "single",
+          severity,
+          answer_key: "",
+          answer_text: "",
           answer_value: "",
           answer_label: "",
+          is_issue: false,
+          score_earned: isExcluded ? "" : 0,
+          score_max: isExcluded ? "" : qScore,
           comment: norm(note.text),
           photos: notePhotos(qid),
 
@@ -1478,11 +1488,47 @@
           const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set(STATE.checkboxAnswers[qid] || []);
           const labels = getCheckboxAnswerLabels(q, set);
           const ids = [...set];
-          baseRow.answer_value = ids.length ? ids.join(", ") : (checkboxHasItems(q) ? "" : "0");
+          const hasItems = checkboxHasItems(q);
+          const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
+          const anySelected = set.size > 0;
+          const isIssue = hasItems ? anySelected : !checked;
+          const earned = isExcluded ? "" : ((hasItems ? (anySelected ? 0 : 1) : (checked ? 1 : 0)) * qScore);
+          baseRow.answer_value = ids.length ? ids.join(", ") : (hasItems ? "" : "0");
           baseRow.answer_label = labels.join(", ");
+          baseRow.answer_key = baseRow.answer_value;
+          baseRow.answer_text = baseRow.answer_label;
+          baseRow.is_issue = isIssue;
+          baseRow.score_earned = earned;
         } else {
-          baseRow.answer_value = norm(STATE.singleAnswers[qid] || "");
-          baseRow.answer_label = norm(STATE.singleAnswerLabels?.[qid] || "");
+          const selectedValue = norm(STATE.singleAnswers[qid] || "");
+          const selectedLabel = norm(STATE.singleAnswerLabels?.[qid] || "");
+          const ideal = norm(getAny(q, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
+          const ok = norm(getAny(q, ["acceptable_answer", "ok_text", "ok", "норм"], ""));
+          const bad = norm(getAny(q, ["bad_answer", "bad_text", "bad", "стрем", "плохо"], ""));
+
+          let kind = "bad";
+          if (selectedValue === "good") kind = "good";
+          else if (selectedValue === "ok") kind = "ok";
+          else if (selectedValue === "bad") kind = "bad";
+          else if (selectedLabel && ideal && selectedLabel === ideal) kind = "good";
+          else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
+          else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
+
+          const answered = Boolean(selectedValue || selectedLabel);
+          const isIssue = answered && kind !== "good";
+          let earned = "";
+          if (!isExcluded) {
+            if (kind === "good") earned = 1 * qScore;
+            else if (kind === "ok") earned = 0.5 * qScore;
+            else earned = 0;
+          }
+
+          baseRow.answer_value = selectedValue;
+          baseRow.answer_label = selectedLabel;
+          baseRow.answer_key = selectedValue;
+          baseRow.answer_text = selectedLabel;
+          baseRow.is_issue = isIssue;
+          baseRow.score_earned = earned;
         }
 
         rows.push(baseRow);
