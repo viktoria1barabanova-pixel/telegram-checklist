@@ -771,6 +771,9 @@
     const lastCheckHint = document.getElementById("lastCheckHint");
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
+    const currentCheckBlock = document.getElementById("currentCheckBlock");
+    const currentCheckBtn = document.getElementById("currentCheckBtn");
+    const currentCheckHint = document.getElementById("currentCheckHint");
     const userLine = document.getElementById("userNameLine");
     const userCard = document.getElementById("tgUserCard");
     const userCardName = document.getElementById("tgUserName");
@@ -830,6 +833,86 @@
 
     updateUserCard();
     updateUserLine(!IS_TG ? norm(STATE.fio) : "");
+
+    function draftExpiresAt(draft) {
+      const savedAt = Number(draft?.savedAt || 0);
+      if (!savedAt) return null;
+      const ttl = typeof DRAFT_TTL_MS !== "undefined" ? DRAFT_TTL_MS : 5 * 60 * 60 * 1000;
+      return new Date(savedAt + ttl);
+    }
+
+    function draftHintText(draft) {
+      const expiresAt = draftExpiresAt(draft);
+      const untilTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
+      return untilTxt
+        ? `Есть черновик этого адреса (до ${untilTxt}).`
+        : `Есть черновик этого адреса.`;
+    }
+
+    function applyDraftToState(draft) {
+      if (!draft) return;
+      STATE.oblast = draft.oblast || STATE.oblast;
+      STATE.city = draft.city || STATE.city;
+      STATE.fio = draft.fio || STATE.fio;
+      STATE.branchId = draft.branchId || STATE.branchId;
+
+      STATE.enabledSections = draft.enabledSections || [];
+      STATE.activeSection = draft.activeSection || "";
+      STATE.completedSections = draft.completedSections || [];
+
+      STATE.singleAnswers = draft.singleAnswers || {};
+      STATE.checkboxAnswers = draft.checkboxAnswers || {};
+      STATE.singleAnswerLabels = draft.singleAnswerLabels || {};
+      STATE.isFinished = !!draft.isFinished;
+      STATE.lastResult = draft.lastResult || null;
+      STATE.lastResultId = draft.lastResultId || null;
+      STATE.lastSubmittedAt = draft.lastSubmittedAt || "";
+
+      STATE.issueNotes = draft.issueNotes || {};
+      STATE.noteOpen = draft.noteOpen || {};
+      migrateAllNotes();
+
+      if (!STATE.enabledSections.length) {
+        const secs = activeSections(DATA.sections);
+        STATE.enabledSections = secs.map(s => s.id);
+        STATE.activeSection = secs[0]?.id || "";
+      }
+      if (!STATE.activeSection) STATE.activeSection = STATE.enabledSections?.[0] || "";
+    }
+
+    function updateCurrentCheck(draft) {
+      if (!currentCheckBlock || !currentCheckBtn) return;
+      if (!draft) {
+        currentCheckBlock.style.display = "none";
+        if (currentCheckHint) currentCheckHint.textContent = "";
+        return;
+      }
+
+      currentCheckBlock.style.display = "";
+
+      const branchRow = findBranchById(draft.branchId);
+      const city = norm(draft.city || getCity(branchRow || {}));
+      const addr = norm(getAddressLabel(branchRow || {}));
+      const label = [city, addr].filter(Boolean).join(", ");
+      const expiresAt = draftExpiresAt(draft);
+      const expiresTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
+
+      if (currentCheckHint) {
+        if (label || expiresTxt) {
+          currentCheckHint.innerHTML = [
+            label ? escapeHtml(label) : "",
+            expiresTxt ? `до ${escapeHtml(expiresTxt)}` : ""
+          ].filter(Boolean).join(" • ");
+        } else {
+          currentCheckHint.textContent = "";
+        }
+      }
+
+      currentCheckBtn.onclick = () => {
+        applyDraftToState(draft);
+        renderChecklist(DATA);
+      };
+    }
 
     function resetCities() {
       citySelect.innerHTML = `<option value="">Сначала выбери область</option>`;
@@ -921,32 +1004,9 @@
       const bid = norm(addressSelect.value);
       const d = loadDraft(bid);
       if (d) {
-        STATE.oblast = d.oblast || STATE.oblast;
-        STATE.city = d.city || STATE.city;
-        STATE.fio = d.fio || STATE.fio;
         STATE.branchId = d.branchId || bid;
-
-        STATE.enabledSections = d.enabledSections || [];
-        STATE.activeSection = d.activeSection || "";
-        STATE.completedSections = d.completedSections || [];
-
-        STATE.singleAnswers = d.singleAnswers || {};
-        STATE.checkboxAnswers = d.checkboxAnswers || {};
-        STATE.singleAnswerLabels = d.singleAnswerLabels || {};
-        STATE.isFinished = !!d.isFinished;
-        STATE.lastResult = d.lastResult || null;
-        STATE.lastResultId = d.lastResultId || null;
-        STATE.lastSubmittedAt = d.lastSubmittedAt || "";
-
-        STATE.issueNotes = d.issueNotes || {};
-        STATE.noteOpen = d.noteOpen || {};
-        migrateAllNotes();
-
-        const untilIso = d.savedAt ? new Date(d.savedAt).toISOString() : "";
-        const untilTxt = untilIso ? formatRuDateTime(untilIso) : "";
-        hint.innerHTML = untilTxt
-          ? `Есть черновик этого адреса (до ${untilTxt}).`
-          : `Есть черновик этого адреса.`;
+        applyDraftToState(d);
+        hint.innerHTML = draftHintText(d);
         // if draft exists, keep last-check hint in sync with current selection
         if (lastCheckHint && !lastCheckHint.textContent) {
           const local = getLastCheck(STATE.branchId);
@@ -969,6 +1029,10 @@
     // initial state
     resetCities();
     refreshStartReady();
+
+    const lastDraftBranchId = (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
+    const lastDraft = lastDraftBranchId ? loadDraft(lastDraftBranchId) : null;
+    updateCurrentCheck(lastDraft);
 
     startBtn.onclick = () => {
       const secs = activeSections(DATA.sections);
