@@ -1409,13 +1409,22 @@
 
         finishBtn.textContent = UI_TEXT?.submitSending || "Отправляю…";
 
-        // use postMessage if you later want response; now OK with load as well
-        await api.submit(payload, { usePostMessage: false });
+        // try postMessage response for result_id (share links), fallback to load-only
+        let submitResult = null;
+        try {
+          submitResult = await api.submit(payload, { usePostMessage: true });
+        } catch (err) {
+          console.warn("postMessage submit failed, fallback to load", err);
+          submitResult = await api.submit(payload, { usePostMessage: false });
+        }
+
+        const returnedId = norm(submitResult?.result_id || "");
+        if (returnedId) STATE.lastResultId = returnedId;
 
         // last check meta for branch (local)
         setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
 
-        sendTelegramResultMessage(result, submissionId);
+        sendTelegramResultMessage(result, STATE.lastResultId || submissionId);
 
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
       } catch (e) {
