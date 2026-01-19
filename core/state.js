@@ -3,6 +3,7 @@
 (function () {
   // ---------- GLOBAL STATE ----------
   window.STATE = {
+    oblast: "",
     city: "",
     fio: "",
 
@@ -86,6 +87,34 @@
     return `lastcheck_v3_${norm(branchId) || "no_branch"}`;
   }
 
+  const LAST_DRAFT_BRANCH_KEY = "last_draft_branch_v3";
+
+  window.setLastDraftBranchId = function setLastDraftBranchId(branchId) {
+    try {
+      const id = norm(branchId);
+      if (!id) return;
+      localStorage.setItem(LAST_DRAFT_BRANCH_KEY, id);
+    } catch {}
+  };
+
+  window.getLastDraftBranchId = function getLastDraftBranchId() {
+    try {
+      return localStorage.getItem(LAST_DRAFT_BRANCH_KEY) || "";
+    } catch {
+      return "";
+    }
+  };
+
+  window.clearLastDraftBranchId = function clearLastDraftBranchId(branchId) {
+    try {
+      const stored = localStorage.getItem(LAST_DRAFT_BRANCH_KEY);
+      if (!stored) return;
+      if (!branchId || norm(stored) === norm(branchId)) {
+        localStorage.removeItem(LAST_DRAFT_BRANCH_KEY);
+      }
+    } catch {}
+  };
+
   // ---------- Draft CRUD ----------
   window.saveDraft = function saveDraft() {
     try {
@@ -100,6 +129,7 @@
       localStorage.setItem(
         draftKeyForBranch(branchId),
         JSON.stringify({
+          oblast: STATE.oblast,
           city: STATE.city,
           fio: STATE.fio,
           branchId: STATE.branchId,
@@ -122,6 +152,7 @@
           noteOpen: STATE.noteOpen,
         })
       );
+      setLastDraftBranchId(branchId);
     } catch {}
   };
 
@@ -136,6 +167,7 @@
       const ttl = typeof DRAFT_TTL_MS !== "undefined" ? DRAFT_TTL_MS : 5 * 60 * 60 * 1000;
       if (!savedAt || Date.now() - savedAt > ttl) {
         localStorage.removeItem(draftKeyForBranch(branchId));
+        clearLastDraftBranchId(branchId);
         return null;
       }
 
@@ -169,6 +201,7 @@
     try {
       if (!branchId) return;
       localStorage.removeItem(draftKeyForBranch(branchId));
+      clearLastDraftBranchId(branchId);
     } catch {}
   };
 
@@ -176,6 +209,7 @@
     try {
       if (!branchId) return;
       localStorage.removeItem(draftKeyForBranch(branchId));
+      clearLastDraftBranchId(branchId);
     } catch {}
 
     STATE.singleAnswers = {};

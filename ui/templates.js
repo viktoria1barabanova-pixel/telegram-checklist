@@ -147,6 +147,11 @@
             <input id="fioInput" class="input" placeholder="Введите ФИО" />
           </div>
 
+          <div id="currentCheckBlock" class="actions" style="display:none;">
+            <button id="currentCheckBtn" class="btn btnSecondary" type="button">Текущая проверка</button>
+            <div id="currentCheckHint" class="hint"></div>
+          </div>
+
           <div class="actions">
             <button id="startBtn" class="btn primary" disabled>${h(startText)}</button>
           </div>
