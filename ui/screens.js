@@ -80,6 +80,41 @@
     root.innerHTML = html;
   }
 
+  function buildResultLink(submissionId) {
+    const id = norm(submissionId);
+    if (!id) return "";
+    return `${location.origin}${location.pathname}?result=${encodeURIComponent(id)}`;
+  }
+
+  function zoneLabelLower(zone) {
+    const v = String(zone ?? "").toLowerCase();
+    if (v === "green") return "зелёная зона";
+    if (v === "yellow") return "жёлтая зона";
+    if (v === "red") return "красная зона";
+    return "серая зона";
+  }
+
+  function sendTelegramResultMessage(result, submissionId) {
+    if (!IS_TG) return;
+    const sendData = Telegram?.WebApp?.sendData;
+    if (typeof sendData !== "function") return;
+
+    const percentRaw = Number(result?.percent);
+    const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : "—";
+    const zoneText = zoneLabelLower(result?.zone);
+    const link = buildResultLink(submissionId) || "—";
+
+    const lines = [
+      "Поздравляем с прохождением проверки.",
+      `Результаты: ${zoneText} (${percent}% прохождения)`,
+      "",
+      "С результатами можно повторно ознакомиться по ссылке",
+      link,
+    ];
+
+    sendData(lines.join("\n"));
+  }
+
   function clearResultQuery() {
     try {
       const url = new URL(window.location.href);
@@ -1380,6 +1415,8 @@
         // last check meta for branch (local)
         setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
 
+        sendTelegramResultMessage(result, submissionId);
+
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
       } catch (e) {
         console.error(e);
@@ -1782,7 +1819,7 @@
         const id = norm(STATE.lastResultId);
         if (!id) return;
 
-        const url = `${location.origin}${location.pathname}?result=${encodeURIComponent(id)}`;
+        const url = buildResultLink(id);
         const ok = await copyTextToClipboard(url);
         copyBtn.textContent = ok ? "Ссылка скопирована ✅" : "Не удалось скопировать";
         setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
