@@ -32,16 +32,16 @@
       const hasUsername = String(user.username || "").trim() !== "";
       const hasFirstName = String(user.first_name || "").trim() !== "";
       const hasLastName = String(user.last_name || "").trim() !== "";
-      return hasId && hasUsername && hasFirstName && hasLastName;
+      const hasDisplayName = hasUsername || hasFirstName || hasLastName;
+      return hasId && hasDisplayName;
     } catch {
       return false;
     }
   }
 
   async function boot() {
-    if (!hasTelegramUserInfo()) {
-      setLoading("перейди в телеграм в бота @sc_control_bot и открой проверку через него. с браузера к сожалению нельзя");
-      return;
+    if (window.Telegram?.WebApp && !hasTelegramUserInfo()) {
+      console.warn("Telegram user data missing or incomplete");
     }
 
     setLoading((UI_TEXT?.loading || "Загружаю данные…") + (typeof APP_VERSION !== "undefined" ? ` (v${APP_VERSION})` : ""));
