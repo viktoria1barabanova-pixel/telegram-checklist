@@ -108,6 +108,12 @@
         <div class="card">
         <div class="cardHeader">
           <div class="title">Проверки филиалов СушиSELL</div>
+          <div id="nonTgBlock" class="noticeBlock" style="display:none;">
+            <div class="noticeTitle">Открыто вне Telegram</div>
+            <div class="noticeText">
+              Мы не можем подтянуть ID сотрудника и данные профиля. Откройте ссылку через Telegram, чтобы сохранить проверяющего.
+            </div>
+          </div>
           <div id="tgUserCard" class="userCard" style="display:none;">
             <div id="tgUserAvatar" class="userCardAvatar" aria-hidden="true"></div>
             <div class="userCardInfo">

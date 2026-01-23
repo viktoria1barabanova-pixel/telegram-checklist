@@ -833,6 +833,7 @@
     const lastCheckHint = document.getElementById("lastCheckHint");
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
+    const nonTgBlock = document.getElementById("nonTgBlock");
     const currentCheckBlock = document.getElementById("currentCheckBlock");
     const currentCheckBtn = document.getElementById("currentCheckBtn");
     const currentCheckHint = document.getElementById("currentCheckHint");
@@ -849,9 +850,11 @@
     if (IS_TG) {
       fioRow.style.display = "none";
       STATE.fio = getTgName();
+      if (nonTgBlock) nonTgBlock.style.display = "none";
     } else {
       fioRow.style.display = "";
       STATE.fio = "";
+      if (nonTgBlock) nonTgBlock.style.display = "";
     }
 
     function updateUserCard() {
@@ -990,6 +993,16 @@
     }
 
     function refreshStartReady() {
+      if (!IS_TG) {
+        startBtn.disabled = true;
+        startBtn.textContent = "Откройте в Telegram";
+        oblastSelect.disabled = true;
+        citySelect.disabled = true;
+        addressSelect.disabled = true;
+        fioInput.disabled = true;
+        return;
+      }
+
       const oblast = norm(oblastSelect.value);
       const city = norm(citySelect.value);
       const branchId = norm(addressSelect.value);
@@ -1573,11 +1586,26 @@
     };
   }
 
+  function getCheckerMeta() {
+    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const fio = norm(STATE.fio || tgUser?.name || "");
+    if (!STATE.fio && fio) STATE.fio = fio;
+    return {
+      fio,
+      tg_id: tgUser?.id || "",
+      tg_user_id: tgUser?.id || "",
+      tg_username: tgUser?.username || "",
+      tg_first_name: tgUser?.first_name || "",
+      tg_last_name: tgUser?.last_name || "",
+      tg_name: tgUser?.name || "",
+    };
+  }
+
   function buildAnswersRows(submissionId, submittedAt) {
     const rows = [];
     const sections = activeSections(DATA.sections);
     const { branchName } = getBranchMeta();
-    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const checker = getCheckerMeta();
 
     sections.forEach(section => {
       const qs = questionsForSection(DATA.checklist, section.id);
@@ -1614,13 +1642,13 @@
           city: STATE.city,
           branch_id: STATE.branchId,
           branch_name: branchName,
-          fio: STATE.fio,
-          tg_id: tgUser?.id || "",
-          tg_user_id: tgUser?.id || "",
-          tg_username: tgUser?.username || "",
-          tg_first_name: tgUser?.first_name || "",
-          tg_last_name: tgUser?.last_name || "",
-          tg_name: tgUser?.name || "",
+          fio: checker.fio,
+          tg_id: checker.tg_id,
+          tg_user_id: checker.tg_user_id,
+          tg_username: checker.tg_username,
+          tg_first_name: checker.tg_first_name,
+          tg_last_name: checker.tg_last_name,
+          tg_name: checker.tg_name,
         };
 
         if (isCheckbox) {
@@ -1632,15 +1660,17 @@
           const anySelected = set.size > 0;
           const isIssue = hasItems ? anySelected : !checked;
           const earned = isExcluded ? "" : ((hasItems ? (anySelected ? 0 : 1) : (checked ? 1 : 0)) * qScore);
-          baseRow.answer_value = ids.length ? ids.join(", ") : (hasItems ? "" : "0");
-          baseRow.answer_label = labels.join(", ");
+          const hasAnswer = ids.length > 0;
+          const emptyLabel = hasItems ? "Нет нарушений" : "";
+          baseRow.answer_value = hasAnswer ? ids.join(", ") : (hasItems ? "0" : "0");
+          baseRow.answer_label = labels.length ? labels.join(", ") : (hasItems ? emptyLabel : "");
           baseRow.answer_key = baseRow.answer_value;
           baseRow.answer_text = baseRow.answer_label;
           baseRow.is_issue = isIssue;
           baseRow.score_earned = earned;
         } else {
           const selectedValue = norm(STATE.singleAnswers[qid] || "");
-          const selectedLabel = norm(STATE.singleAnswerLabels?.[qid] || "");
+          let selectedLabel = norm(STATE.singleAnswerLabels?.[qid] || "");
           const ideal = norm(getAny(q, ["ideal_answer", "good_text", "good", "эталон", "идеал"], ""));
           const ok = norm(getAny(q, ["acceptable_answer", "ok_text", "ok", "норм"], ""));
           const bad = norm(getAny(q, ["bad_answer", "bad_text", "bad", "стрем", "плохо"], ""));
@@ -1660,6 +1690,12 @@
             if (kind === "good") earned = 1 * qScore;
             else if (kind === "ok") earned = 0.5 * qScore;
             else earned = 0;
+          }
+
+          if (!selectedLabel && selectedValue) {
+            if (selectedValue === "good") selectedLabel = ideal;
+            if (selectedValue === "ok") selectedLabel = ok;
+            if (selectedValue === "bad") selectedLabel = bad;
           }
 
           baseRow.answer_value = selectedValue;
@@ -1702,7 +1738,7 @@
       if (labels.length) checkbox_labels[q.id] = labels;
     });
 
-    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const checker = getCheckerMeta();
     const { branchName } = getBranchMeta();
 
     const payload = {
@@ -1719,13 +1755,13 @@
       city: STATE.city,
       branch_id: STATE.branchId,
       branch_name: branchName,
-      fio: STATE.fio,
-      tg_id: tgUser?.id || "",
-      tg_user_id: tgUser?.id || "",
-      tg_username: tgUser?.username || "",
-      tg_first_name: tgUser?.first_name || "",
-      tg_last_name: tgUser?.last_name || "",
-      tg_name: tgUser?.name || "",
+      fio: checker.fio,
+      tg_id: checker.tg_id,
+      tg_user_id: checker.tg_user_id,
+      tg_username: checker.tg_username,
+      tg_first_name: checker.tg_first_name,
+      tg_last_name: checker.tg_last_name,
+      tg_name: checker.tg_name,
 
       zone: result.zone,
       percent: formatPercentForSheet(result.percent),
@@ -1738,8 +1774,16 @@
 
       issues: result.issues,
       answers: { single, single_labels, checkbox, checkbox_labels },
-      meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
-      meta_json: JSON.stringify({ app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG }),
+      meta: {
+        app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""),
+        is_tg: IS_TG,
+        checker,
+      },
+      meta_json: JSON.stringify({
+        app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""),
+        is_tg: IS_TG,
+        checker,
+      }),
     };
 
     const maxLogChars = (typeof LOG_PREVIEW_MAX_CHARS !== "undefined") ? LOG_PREVIEW_MAX_CHARS : 1000;
@@ -1768,7 +1812,7 @@
       });
     });
 
-    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const checker = getCheckerMeta();
     const { branchName } = getBranchMeta();
     const answers_rows = buildAnswersRows(submissionId, ts);
     const answers_rows_count = answers_rows.length;
@@ -1784,13 +1828,13 @@
       city: STATE.city,
       branch_id: STATE.branchId,
       branch_name: branchName,
-      fio: STATE.fio,
-      tg_id: tgUser?.id || "",
-      tg_user_id: tgUser?.id || "",
-      tg_username: tgUser?.username || "",
-      tg_first_name: tgUser?.first_name || "",
-      tg_last_name: tgUser?.last_name || "",
-      tg_name: tgUser?.name || "",
+      fio: checker.fio,
+      tg_id: checker.tg_id,
+      tg_user_id: checker.tg_user_id,
+      tg_username: checker.tg_username,
+      tg_first_name: checker.tg_first_name,
+      tg_last_name: checker.tg_last_name,
+      tg_name: checker.tg_name,
 
       zone: result.zone,
       percent: formatPercentForSheet(result.percent),
@@ -1806,8 +1850,16 @@
       answers: { single, single_labels, checkbox, checkbox_labels },
       answers_rows,
       answers_rows_count,
-      meta: { app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG },
-      meta_json: JSON.stringify({ app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""), is_tg: IS_TG }),
+      meta: {
+        app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""),
+        is_tg: IS_TG,
+        checker,
+      },
+      meta_json: JSON.stringify({
+        app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""),
+        is_tg: IS_TG,
+        checker,
+      }),
     };
 
     const maxLogChars = (typeof LOG_PREVIEW_MAX_CHARS !== "undefined") ? LOG_PREVIEW_MAX_CHARS : 1000;

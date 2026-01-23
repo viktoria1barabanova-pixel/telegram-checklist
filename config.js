@@ -1,7 +1,7 @@
 /* config.js — глобальные настройки и fallback (реальные значения берём из листа «Настройки») */
 
 // ====== BUILD / CACHE ======
-const APP_VERSION = "2025-01-19-2"; // меняй, чтобы пробивать кэш GitHub Pages
+const APP_VERSION = "2025-01-19-3"; // меняй, чтобы пробивать кэш GitHub Pages
 
 // ====== API (Google Apps Script Web App) ======
 // Используй PROD (/exec), не /dev
