@@ -142,7 +142,8 @@
       }
     }
 
-    if (typeof tgApp?.close === "function") {
+    const shouldAutoClose = (typeof AUTO_CLOSE_AFTER_SUBMIT !== "undefined") ? AUTO_CLOSE_AFTER_SUBMIT : false;
+    if (shouldAutoClose && typeof tgApp?.close === "function") {
       setTimeout(() => tgApp.close(), 500);
     }
   }
