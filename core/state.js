@@ -30,6 +30,12 @@
   // ---------- Telegram helpers ----------
   window.IS_TG = !!(window.Telegram && Telegram.WebApp);
 
+  try {
+    if (window.Telegram?.WebApp?.ready) {
+      window.Telegram.WebApp.ready();
+    }
+  } catch {}
+
   window.getTgUser = function getTgUser() {
     try {
       const u = Telegram.WebApp?.initDataUnsafe?.user;

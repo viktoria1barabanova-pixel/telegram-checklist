@@ -104,10 +104,13 @@
   }
 
   function sendTelegramResultMessage(result, submissionId) {
-    if (!IS_TG) return;
-    const tgApp = Telegram?.WebApp;
+    const tgApp = window.Telegram?.WebApp;
     const sendData = tgApp?.sendData;
     if (typeof sendData !== "function") return;
+
+    try {
+      if (tgApp?.ready) tgApp.ready();
+    } catch {}
 
     const zoneRaw = String(result?.zone ?? "").toLowerCase();
     const zoneText = (
@@ -140,7 +143,7 @@
     }
 
     if (typeof tgApp?.close === "function") {
-      setTimeout(() => tgApp.close(), 120);
+      setTimeout(() => tgApp.close(), 500);
     }
   }
 
