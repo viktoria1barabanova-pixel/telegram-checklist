@@ -111,7 +111,7 @@
           <div id="nonTgBlock" class="noticeBlock" style="display:none;">
             <div class="noticeTitle">Открыто вне Telegram</div>
             <div class="noticeText">
-              Мы не можем подтянуть ID сотрудника и данные профиля. Откройте ссылку через Telegram, чтобы сохранить проверяющего.
+              Перейди в телеграм в бота @sc_control_bot и открой проверку через него. С браузера к сожалению нельзя.
             </div>
           </div>
           <div id="tgUserCard" class="userCard" style="display:none;">

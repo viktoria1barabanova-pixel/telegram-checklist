@@ -23,7 +23,27 @@
     `;
   }
 
+  function hasTelegramUserInfo() {
+    try {
+      const tg = window.Telegram?.WebApp;
+      const user = tg?.initDataUnsafe?.user;
+      if (!tg || !user) return false;
+      const hasId = user.id !== undefined && user.id !== null && String(user.id).trim() !== "";
+      const hasUsername = String(user.username || "").trim() !== "";
+      const hasFirstName = String(user.first_name || "").trim() !== "";
+      const hasLastName = String(user.last_name || "").trim() !== "";
+      return hasId && hasUsername && hasFirstName && hasLastName;
+    } catch {
+      return false;
+    }
+  }
+
   async function boot() {
+    if (!hasTelegramUserInfo()) {
+      setLoading("перейди в телеграм в бота @sc_control_bot и открой проверку через него. с браузера к сожалению нельзя");
+      return;
+    }
+
     setLoading((UI_TEXT?.loading || "Загружаю данные…") + (typeof APP_VERSION !== "undefined" ? ` (v${APP_VERSION})` : ""));
 
     let data;
