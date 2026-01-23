@@ -106,7 +106,13 @@
   function sendTelegramResultMessage(result, submissionId) {
     const tgApp = window.Telegram?.WebApp;
     const sendData = tgApp?.sendData;
-    if (typeof sendData !== "function") return;
+    if (typeof sendData !== "function") {
+      console.warn("Telegram WebApp sendData is unavailable", {
+        hasTelegram: Boolean(window.Telegram),
+        hasWebApp: Boolean(window.Telegram?.WebApp),
+      });
+      return;
+    }
 
     try {
       if (tgApp?.ready) tgApp.ready();
@@ -131,12 +137,15 @@
       zone_text: zoneText,
     };
 
+    console.info("Sending Telegram result payload", payload);
     try {
       sendData(JSON.stringify(payload));
+      console.info("Telegram sendData invoked");
     } catch (err) {
       console.warn("Failed to send Telegram payload, fallback to text", err);
       try {
         sendData(text);
+        console.info("Telegram sendData fallback invoked");
       } catch (fallbackErr) {
         console.warn("Failed to send Telegram text payload", fallbackErr);
       }
@@ -144,6 +153,7 @@
 
     const shouldAutoClose = (typeof AUTO_CLOSE_AFTER_SUBMIT !== "undefined") ? AUTO_CLOSE_AFTER_SUBMIT : false;
     if (shouldAutoClose && typeof tgApp?.close === "function") {
+      console.info("Auto-closing Telegram WebApp after submit");
       setTimeout(() => tgApp.close(), 500);
     }
   }
