@@ -108,20 +108,16 @@
     const sendData = Telegram?.WebApp?.sendData;
     if (typeof sendData !== "function") return;
 
-    const percentRaw = Number(result?.percent);
-    const percent = Number.isFinite(percentRaw) ? Math.round(percentRaw) : "—";
-    const zoneText = zoneLabelLower(result?.zone);
+    const zoneRaw = String(result?.zone ?? "").toLowerCase();
+    const zoneText = (
+      zoneRaw === "green" ? "зелёную зону" :
+      zoneRaw === "yellow" ? "жёлтую зону" :
+      zoneRaw === "red" ? "красную зону" :
+      "серую зону"
+    );
     const link = buildResultLink(submissionId) || "—";
 
-    const lines = [
-      "Поздравляю, вы прошли проверку.",
-      `Результаты: ${zoneText} (${percent}% прохождения)`,
-      "",
-      "С результатами можно повторно ознакомиться по ссылке",
-      link,
-    ];
-
-    sendData(lines.join("\n"));
+    sendData(`Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`);
   }
 
   function clearResultQuery() {
@@ -947,6 +943,11 @@
 
     function updateCurrentCheck(draft) {
       if (!currentCheckBlock || !currentCheckBtn) return;
+      if (!IS_TG) {
+        currentCheckBlock.style.display = "none";
+        if (currentCheckHint) currentCheckHint.textContent = "";
+        return;
+      }
       if (!draft) {
         currentCheckBlock.style.display = "none";
         if (currentCheckHint) currentCheckHint.textContent = "";
@@ -1110,6 +1111,10 @@
     updateCurrentCheck(lastDraft);
 
     startBtn.onclick = () => {
+      if (!IS_TG) {
+        alert("Откройте проверку через Telegram, чтобы начать.");
+        return;
+      }
       const secs = activeSections(DATA.sections);
       STATE.enabledSections = secs.map(s => s.id);
       STATE.activeSection = secs[0]?.id || "";
@@ -1763,12 +1768,12 @@
       tg_last_name: checker.tg_last_name,
       tg_name: checker.tg_name,
 
-      zone: result.zone,
-      percent: formatPercentForSheet(result.percent),
-      percent_value: result.percent,
+      zone: result.maxScore > 0 ? result.zone : "",
+      percent: result.maxScore > 0 ? formatPercentForSheet(result.percent) : "",
+      percent_value: result.maxScore > 0 ? result.percent : "",
       score: result.score,
       earned: result.score,
-      max_score: result.maxScore,
+      max_score: result.maxScore > 0 ? result.maxScore : "",
       zones_score_total: "",
       has_critical: result.hasCritical,
 

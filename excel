@@ -163,6 +163,8 @@ function doPost(e) {
     // Prepare values (one submission row)
     const tg = payload.tg || {};
     const meta = payload.meta || {};
+    const metaJson = payload.meta_json ? String(payload.meta_json) : "";
+    const tgUserId = safe_(payload.tg_user_id || payload.tg_id || tg.user_id || tg.id);
 
     const subRow = [
       safe_(payload.submission_id),
@@ -176,38 +178,39 @@ function doPost(e) {
       safe_(payload.percent),
       safe_(payload.earned),
       safe_(payload.max_score),
-      safe_(tg.user_id),
-      json_(meta),
+      tgUserId,
+      metaJson || json_(meta),
     ];
 
     shSub.appendRow(subRow);
 
     // Prepare answers rows (flat)
-    const flat = Array.isArray(payload.answers_flat) ? payload.answers_flat : [];
+    const flat = Array.isArray(payload.answers_rows)
+      ? payload.answers_rows
+      : (Array.isArray(payload.answers_flat) ? payload.answers_flat : []);
     if (flat.length) {
-      const rows = flat.map(a => ([
-        safe_(payload.submission_id),
-        safe_(payload.submitted_at),
-        safe_(payload.fio),
-        safe_(payload.city),
-        safe_(payload.branch_id),
-        safe_(payload.branch_name),
-        safe_(a.section_code),
-        safe_(a.section_title),
-        safe_(a.question_id),
-        safe_(a.critikal),
-        safe_(a.question_text),
-        safe_(a.severity),
-        safe_(a.answer_key),
-        safe_(a.answer_text),
-        safe_(a.score_earned),
-        safe_(a.score_max),
-        safe_(a.comment),
-        json_(a.photos),
-      ]));
+      const rows = flat.map(a => ({
+        submission_id: safe_(payload.submission_id),
+        submitted_at: safe_(payload.submitted_at),
+        fio: safe_(payload.fio),
+        city: safe_(payload.city),
+        branch_id: safe_(payload.branch_id),
+        branch_name: safe_(payload.branch_name),
+        section_code: safe_(a.section_code || a.section_id || ""),
+        section_title: safe_(a.section_title),
+        question_id: safe_(a.question_id),
+        critikal: safe_(a.critikal || (String(a.severity || "").toLowerCase() === "critical" ? "critical" : "")),
+        question_text: safe_(a.question_text),
+        severity: safe_(a.severity),
+        answer_key: safe_(a.answer_key || a.answer_value),
+        answer_text: safe_(a.answer_text || a.answer_label),
+        score_earned: safe_(a.score_earned),
+        score_max: safe_(a.score_max),
+        comment: safe_(a.comment),
+        photos_json: json_(a.photos),
+      }));
 
-      // batch write (fast)
-      shAns.getRange(shAns.getLastRow() + 1, 1, rows.length, ANSWERS_HEADERS.length).setValues(rows);
+      appendObjectsRowsByHeaders_(shAns, rows);
     }
 
     log_(ss, { event: "submit_ok", submission_id: payload.submission_id, answers: flat.length });
