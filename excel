@@ -1,0 +1,470 @@
+/***************
+ * CONFIG
+ ***************/
+const SHEET_NAMES = {
+  sections: "Разделы",
+  checklist: "Вопросы",
+  branches: "Адреса",
+  inspectors: "Проверяющие",
+  submissions: "Результаты",
+  answers: "Ответы",
+  log: "Log",
+};
+
+// IMPORTANT: set this to the ID of the Google Spreadsheet that contains your questions
+const SPREADSHEET_ID = "1Ln_cnU64l1NZRIDk2iAInkcFM1ACf6_2aiwqz7X8caw";
+
+// Заголовки для листов с результатами
+const SUBMISSIONS_HEADERS = [
+  "submission_id",
+  "submitted_at",
+  "fio",
+  "city",
+  "branch_id",
+  "branch_name",
+  "zone",
+  "inspection_area",
+  "percent",
+  "earned",
+  "max_score",
+  "tg_user_id",
+  "meta_json",
+];
+
+const ANSWERS_HEADERS = [
+  "submission_id",
+  "submitted_at",
+  "fio",
+  "city",
+  "branch_id",
+  "branch_name",
+  "section_code",
+  "section_title",
+  "question_id",
+  "critikal",
+  "question_text",
+  "severity",
+  "answer_key",
+  "answer_text",
+  "score_earned",
+  "score_max",
+  "comment",
+  "photos_json",
+];
+
+const INSPECTORS_HEADERS = [
+  "tg_user_id",
+  "fio",
+  "tg_username",
+  "tg_first_name",
+  "tg_last_name",
+  "tg_name",
+  "updated_at",
+];
+
+// Зоны (настройки теперь задаются в коде, без листа "Настройки")
+const SETTINGS = {
+  block_green_if_critical: true,
+  yellow_zone_max_percent: 80,
+  red_zone_max_percent: 70,
+  grey_zone_max_percent: "",
+};
+
+/***************
+ * GET (data API)
+ ***************/
+function doGet(e) {
+  try {
+    const action = e?.parameter?.action ? String(e.parameter.action) : "all";
+    const callback = e?.parameter?.callback ? String(e.parameter.callback) : null;
+    if (action === "ping") {
+      return output_({ ok: true, action: "ping", ts: new Date().toISOString() }, callback);
+    }
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    let payload;
+    if (action === "all") {
+      payload = {
+        sections: readSheetAsObjects_(ss, SHEET_NAMES.sections),
+        checklist: readSheetAsObjects_(ss, SHEET_NAMES.checklist),
+        branches: readSheetAsObjects_(ss, SHEET_NAMES.branches),
+        settings: SETTINGS,
+        meta: { updatedAt: new Date().toISOString() },
+      };
+    } else if (action === "sections") payload = readSheetAsObjects_(ss, SHEET_NAMES.sections);
+    else if (action === "checklist") payload = readSheetAsObjects_(ss, SHEET_NAMES.checklist);
+    else if (action === "branches") payload = readSheetAsObjects_(ss, SHEET_NAMES.branches);
+    else if (action === "settings") payload = SETTINGS;
+    else if (action === "submission") {
+      const submissionId = e?.parameter?.submission_id ? String(e.parameter.submission_id).trim() : "";
+      payload = getSubmissionPayload_(ss, submissionId);
+    }
+    else payload = { error: "Unknown action", action };
+
+    return output_(payload, callback);
+  } catch (err) {
+    return output_(
+      { error: String(err), stack: err?.stack ?? null },
+      e?.parameter?.callback ?? null
+    );
+  }
+}
+
+/***************
+ * POST (submit answers)
+ ***************/
+function doPost(e) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  try {
+    // железный лог: что реально прилетает
+    const logSh = ss.getSheetByName(SHEET_NAMES.log) || ss.insertSheet(SHEET_NAMES.log);
+    if (logSh.getLastRow() === 0) logSh.appendRow(["ts", "event", "data"]);
+    logSh.appendRow([
+      new Date().toISOString(),
+      "doPost_hit",
+      JSON.stringify({
+        param: e && e.parameter ? e.parameter : null,
+        postType: e && e.postData ? e.postData.type : null,
+        postData: e && e.postData && e.postData.contents ? String(e.postData.contents).slice(0, 300) : ""
+      })
+    ]);
+    logSh.appendRow([
+      new Date().toISOString(),
+      "target_spreadsheet",
+      JSON.stringify({ id: ss.getId(), name: ss.getName() })
+    ]);
+
+    // Apps Script WebApp обычно кладёт form fields в e.parameter,
+    // но на всякий случай поддержим e.postData.contents
+    const params = (e && e.parameter) ? e.parameter : {};
+    const action = params.action ? String(params.action) : "";
+
+    if (action !== "submit") {
+      log_(ss, { event: "post_unknown_action", action, params });
+      return text_("OK");
+    }
+
+    // payload может прийти как params.payload (form POST), либо внутри postData.contents
+    let raw = params.payload ? String(params.payload) : "";
+    if (!raw && e && e.postData && e.postData.contents) {
+      const parsed = parseFormUrlEncoded_(String(e.postData.contents));
+      raw = parsed.payload ? String(parsed.payload) : "";
+    }
+
+    if (!raw) throw new Error("Empty payload");
+
+    const payload = JSON.parse(raw);
+
+    // Ensure output sheets exist & have headers
+    const shSub = getOrCreateSheet_(ss, SHEET_NAMES.submissions, SUBMISSIONS_HEADERS);
+    const shAns = getOrCreateSheet_(ss, SHEET_NAMES.answers, ANSWERS_HEADERS);
+
+    // Prepare values (one submission row)
+    const tg = payload.tg || {};
+    const meta = payload.meta || {};
+
+    const subRow = [
+      safe_(payload.submission_id),
+      safe_(payload.submitted_at),
+      safe_(payload.fio),
+      safe_(payload.city),
+      safe_(payload.branch_id),
+      safe_(payload.branch_name),
+      safe_(payload.zone),
+      safe_(payload.inspection_area),
+      safe_(payload.percent),
+      safe_(payload.earned),
+      safe_(payload.max_score),
+      safe_(tg.user_id),
+      json_(meta),
+    ];
+
+    shSub.appendRow(subRow);
+
+    // Prepare answers rows (flat)
+    const flat = Array.isArray(payload.answers_flat) ? payload.answers_flat : [];
+    if (flat.length) {
+      const rows = flat.map(a => ([
+        safe_(payload.submission_id),
+        safe_(payload.submitted_at),
+        safe_(payload.fio),
+        safe_(payload.city),
+        safe_(payload.branch_id),
+        safe_(payload.branch_name),
+        safe_(a.section_code),
+        safe_(a.section_title),
+        safe_(a.question_id),
+        safe_(a.critikal),
+        safe_(a.question_text),
+        safe_(a.severity),
+        safe_(a.answer_key),
+        safe_(a.answer_text),
+        safe_(a.score_earned),
+        safe_(a.score_max),
+        safe_(a.comment),
+        json_(a.photos),
+      ]));
+
+      // batch write (fast)
+      shAns.getRange(shAns.getLastRow() + 1, 1, rows.length, ANSWERS_HEADERS.length).setValues(rows);
+    }
+
+    log_(ss, { event: "submit_ok", submission_id: payload.submission_id, answers: flat.length });
+    return text_("OK");
+
+  } catch (err) {
+    try {
+      log_(ss, { event: "submit_error", error: String(err), stack: err && err.stack ? err.stack : "" });
+    } catch (_) {}
+    // Всё равно отдаём OK, чтобы iframe не ломал UX
+    return text_("OK");
+  }
+}
+
+/***************
+ * Helpers
+ ***************/
+function output_(data, callback) {
+  const json = JSON.stringify(data);
+
+  // JSONP (обходит CORS)
+  if (callback) {
+    return ContentService
+      .createTextOutput(`${callback}(${json});`)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
+  // обычный JSON
+  return ContentService
+    .createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function text_(s) {
+  return ContentService
+    .createTextOutput(String(s))
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+function readSheetAsObjects_(ss, name) {
+  const sh = ss.getSheetByName(name);
+  if (!sh) return [];
+  const values = sh.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(h => String(h).trim());
+
+  return values.slice(1)
+    .filter(r => r.some(cell => String(cell).trim() !== ""))
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = r[i]);
+      return obj;
+    });
+}
+
+function readSheetAsKeyValue_(ss, name) {
+  const sh = ss.getSheetByName(name);
+  if (!sh) return {};
+  const values = sh.getDataRange().getValues();
+  const out = {};
+  for (let i = 1; i < values.length; i++) {
+    const key = String(values[i][0] ?? "").trim();
+    if (key) out[key] = values[i][1];
+  }
+  return out;
+}
+
+function getOrCreateSheet_(ss, name, headers) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+
+  // Ensure header row exists and correct
+  const lastCol = Math.max(sh.getLastColumn(), headers.length);
+  const existing = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v || "").trim());
+
+  const needRewrite =
+    existing.slice(0, headers.length).join("|") !== headers.join("|");
+
+  if (needRewrite) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+  }
+
+  return sh;
+}
+
+function log_(ss, obj) {
+  const sh = getOrCreateSheet_(ss, SHEET_NAMES.log, ["ts", "event", "data"]);
+  sh.appendRow([new Date().toISOString(), obj?.event || "", JSON.stringify(obj || {})]);
+}
+
+function safe_(v) {
+  if (v === null || v === undefined) return "";
+  // Apps Script любит boolean/number норм, оставим как есть
+  return v;
+}
+
+function json_(v) {
+  if (v === null || v === undefined) return "";
+  try { return JSON.stringify(v); } catch { return ""; }
+}
+function parseFormUrlEncoded_(s) {
+  const out = {};
+  String(s || "").split("&").forEach(pair => {
+    const idx = pair.indexOf("=");
+    const k = idx >= 0 ? pair.slice(0, idx) : pair;
+    const v = idx >= 0 ? pair.slice(idx + 1) : "";
+    if (!k) return;
+    out[decodeURIComponent(k)] = decodeURIComponent(String(v || "").replace(/\+/g, " "));
+  });
+  return out;
+}
+
+/***************
+ * Submission fetch helpers (for shareable result links)
+ ***************/
+function getSubmissionPayload_(ss, submissionId) {
+  if (!submissionId) return { ok: false, error: "No submission_id" };
+
+  const sub = findRowById_(ss.getSheetByName(SHEET_NAMES.submissions), "submission_id", submissionId);
+  if (!sub) return { ok: false, error: "Submission not found", submission_id: submissionId };
+
+  const answers = findRowsById_(ss.getSheetByName(SHEET_NAMES.answers), "submission_id", submissionId);
+
+  return {
+    ok: true,
+    submission_id: submissionId,
+    submission: sub,
+    answers,
+    meta: { updatedAt: new Date().toISOString() }
+  };
+}
+
+function findRowById_(sh, idHeader, idValue) {
+  if (!sh) return null;
+  const values = sh.getDataRange().getValues();
+  if (values.length < 2) return null;
+
+  const headers = values[0].map(h => String(h).trim());
+  const idCol = headers.indexOf(idHeader);
+  if (idCol < 0) return null;
+
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][idCol] || "").trim() === idValue) {
+      const obj = {};
+      headers.forEach((h, j) => obj[h] = values[i][j]);
+      return obj;
+    }
+  }
+  return null;
+}
+
+function findRowsById_(sh, idHeader, idValue) {
+  if (!sh) return [];
+  const values = sh.getDataRange().getValues();
+  if (values.length < 2) return [];
+
+  const headers = values[0].map(h => String(h).trim());
+  const idCol = headers.indexOf(idHeader);
+  if (idCol < 0) return [];
+
+  const out = [];
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][idCol] || "").trim() === idValue) {
+      const obj = {};
+      headers.forEach((h, j) => obj[h] = values[i][j]);
+      out.push(obj);
+    }
+  }
+  return out;
+}
+
+function getHeaderMap_(sh) {
+  const lastCol = sh.getLastColumn();
+  if (lastCol === 0) return {};
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(h => String(h || "").trim());
+  const map = {};
+  headers.forEach((h, i) => { if (h) map[h] = i + 1; }); // 1-based
+  return map;
+}
+
+function appendObjectRowByHeaders_(sh, obj) {
+  const map = getHeaderMap_(sh);
+  const lastCol = sh.getLastColumn();
+  const row = new Array(lastCol).fill("");
+
+  Object.keys(obj || {}).forEach(key => {
+    const col = map[key];
+    if (col) row[col - 1] = obj[key];
+  });
+
+  sh.appendRow(row);
+}
+
+function appendObjectsRowsByHeaders_(sh, objects) {
+  if (!objects || !objects.length) return;
+
+  const map = getHeaderMap_(sh);
+  const lastCol = sh.getLastColumn();
+
+  const rows = objects.map(obj => {
+    const row = new Array(lastCol).fill("");
+    Object.keys(obj || {}).forEach(key => {
+      const col = map[key];
+      if (col) row[col - 1] = obj[key];
+    });
+    return row;
+  });
+
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, lastCol).setValues(rows);
+}
+
+function upsertInspector_(ss, payload) {
+  const sh = getOrCreateSheet_(ss, SHEET_NAMES.inspectors, INSPECTORS_HEADERS);
+
+  const tg = payload.tg || {};
+  const tgUserId = safe_(payload.tg_user_id || tg.user_id);
+  const fio = safe_(payload.fio);
+
+  if (!tgUserId) return;
+
+  const now = new Date().toISOString();
+  const headerMap = getHeaderMap_(sh);
+
+  const idCol = headerMap["tg_user_id"];
+  if (!idCol) return;
+
+  const lastRow = sh.getLastRow();
+  let foundRow = 0;
+
+  if (lastRow >= 2) {
+    const ids = sh.getRange(2, idCol, lastRow - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (String(ids[i][0] || "").trim() === String(tgUserId).trim()) {
+        foundRow = i + 2;
+        break;
+      }
+    }
+  }
+
+  const record = {
+    tg_user_id: tgUserId,
+    fio: fio,
+    tg_username: safe_(payload.tg_username || tg.username),
+    tg_first_name: safe_(payload.tg_first_name || tg.first_name),
+    tg_last_name: safe_(payload.tg_last_name || tg.last_name),
+    tg_name: safe_(payload.tg_name || [tg.first_name, tg.last_name].filter(Boolean).join(" ").trim()),
+    updated_at: now,
+  };
+
+  if (!foundRow) {
+    appendObjectRowByHeaders_(sh, record);
+  } else {
+    Object.keys(record).forEach(key => {
+      const col = headerMap[key];
+      if (col) sh.getRange(foundRow, col).setValue(record[key]);
+    });
+  }
+}
