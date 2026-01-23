@@ -105,7 +105,8 @@
 
   function sendTelegramResultMessage(result, submissionId) {
     if (!IS_TG) return;
-    const sendData = Telegram?.WebApp?.sendData;
+    const tgApp = Telegram?.WebApp;
+    const sendData = tgApp?.sendData;
     if (typeof sendData !== "function") return;
 
     const zoneRaw = String(result?.zone ?? "").toLowerCase();
@@ -117,7 +118,30 @@
     );
     const link = buildResultLink(submissionId) || "—";
 
-    sendData(`Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`);
+    const text = `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
+    const payload = {
+      type: "result_link",
+      text,
+      link,
+      result_id: norm(submissionId),
+      zone: zoneRaw || "unknown",
+      zone_text: zoneText,
+    };
+
+    try {
+      sendData(JSON.stringify(payload));
+    } catch (err) {
+      console.warn("Failed to send Telegram payload, fallback to text", err);
+      try {
+        sendData(text);
+      } catch (fallbackErr) {
+        console.warn("Failed to send Telegram text payload", fallbackErr);
+      }
+    }
+
+    if (typeof tgApp?.close === "function") {
+      setTimeout(() => tgApp.close(), 120);
+    }
   }
 
   function clearResultQuery() {
