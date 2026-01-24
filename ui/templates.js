@@ -91,7 +91,49 @@
     return fallback;
   }
 
-  // ---------- start screen ----------
+  // ---------- home screen ----------
+  window.tplHomeScreen = function tplHomeScreen(opts) {
+    opts = opts || {};
+    const appVersion = (typeof APP_VERSION !== "undefined" && APP_VERSION) ? `v${APP_VERSION}` : "";
+    const versionLine = appVersion ? `<div class="muted homeVersion">Версия: ${h(appVersion)}</div>` : "";
+
+    return `
+      <div class="container">
+        <div class="card homeCard">
+          <div class="homeHeader">
+            <div class="homeUserInfo">
+              <div id="homeUserName" class="homeUserName"></div>
+              <div id="homeUserHandle" class="homeUserHandle"></div>
+            </div>
+            <div id="homeUserAvatar" class="homeUserAvatar" aria-hidden="true"></div>
+          </div>
+
+          <div id="nonTgBlock" class="noticeBlock" style="display:none;">
+            <div class="noticeTitle">Открыто вне Telegram</div>
+            <div class="noticeText">
+              Перейди в телеграм в бота @sc_control_bot и открой проверку через него. С браузера к сожалению нельзя.
+            </div>
+          </div>
+
+          <div class="homeActions">
+            <button id="homeNewCheckBtn" class="btn btnOutline homeActionBtn" type="button">Новая проверка</button>
+            <button id="homeHistoryBtn" class="btn btnOutline homeActionBtn" type="button">История моих проверок</button>
+            <button id="homeTasksBtn" class="btn btnOutline homeActionBtn" type="button">Мои задачи</button>
+          </div>
+
+          <div class="homeAnalytics">
+            <div class="homeAnalyticsTitle">Аналитика</div>
+            <div class="hint homeAnalyticsHint">Скоро здесь появятся сводные показатели по вашим проверкам.</div>
+          </div>
+
+          ${versionLine}
+          <div id="homeCabinetHint" class="hint" style="display:none;"></div>
+        </div>
+      </div>
+    `;
+  };
+
+  // ---------- branch picker screen ----------
   // 3 шага: область → город → адрес
   window.tplStartScreen = function tplStartScreen(opts) {
     opts = opts || {};
@@ -110,24 +152,31 @@
     return `
       <div class="container">
         <div class="card">
-        <div class="cardHeader">
-          <div class="title">Проверки филиалов СушиSELL</div>
-          <div id="nonTgBlock" class="noticeBlock" style="display:none;">
-            <div class="noticeTitle">Открыто вне Telegram</div>
-            <div class="noticeText">
-              Перейди в телеграм в бота @sc_control_bot и открой проверку через него. С браузера к сожалению нельзя.
+          <div class="screenHeader">
+            <div class="screenHeaderTitles">
+              <div class="title">Новая проверка</div>
+              <div class="subTitle">Выберите филиал</div>
             </div>
+            <button id="branchPickerBackBtn" class="iconBtn" type="button" aria-label="Назад">←</button>
           </div>
-          <div id="tgUserCard" class="userCard" style="display:none;">
-            <div id="tgUserAvatar" class="userCardAvatar" aria-hidden="true"></div>
-            <div class="userCardInfo">
-              <div id="tgUserName" class="userCardName"></div>
-              <div id="tgUserHandle" class="userCardHandle"></div>
+
+          <div class="cardHeader branchPickerHeader">
+            <div id="nonTgBlock" class="noticeBlock" style="display:none;">
+              <div class="noticeTitle">Открыто вне Telegram</div>
+              <div class="noticeText">
+                Перейди в телеграм в бота @sc_control_bot и открой проверку через него. С браузера к сожалению нельзя.
+              </div>
             </div>
+            <div id="tgUserCard" class="userCard" style="display:none;">
+              <div id="tgUserAvatar" class="userCardAvatar" aria-hidden="true"></div>
+              <div class="userCardInfo">
+                <div id="tgUserName" class="userCardName"></div>
+                <div id="tgUserHandle" class="userCardHandle"></div>
+              </div>
+            </div>
+            <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
+            ${versionLine}
           </div>
-          <div class="muted" id="userNameLine" style="margin-top:6px; display:none;"></div>
-          ${versionLine}
-        </div>
 
           <div class="formRow">
             <label class="label">Область</label>

@@ -70,7 +70,7 @@ const SETTINGS = {
   grey_zone_max_percent: "",
 };
 
-const MY_SUBMISSIONS_DEFAULT_LIMIT = 50;
+const MY_SUBMISSIONS_DEFAULT_LIMIT = 200;
 
 /***************
  * GET (data API)
@@ -342,7 +342,7 @@ function parseFormUrlEncoded_(s) {
  * Submission fetch helpers (for shareable result links)
  ***************/
 function getMySubmissionsPayload_(ss, tgUserId, limitRaw) {
-  const id = safe_(tgUserId);
+  const id = String(safe_(tgUserId)).trim();
   if (!id) return { ok: false, error: "No tg_user_id", items: [] };
 
   const sh = ss.getSheetByName(SHEET_NAMES.submissions);
@@ -362,8 +362,8 @@ function getMySubmissionsPayload_(ss, tgUserId, limitRaw) {
   let total = 0;
 
   for (let i = values.length - 1; i >= 1; i -= 1) {
-    const rowId = safe_(values[i][idCol]);
-    if (rowId !== id) continue;
+    const rowId = String(safe_(values[i][idCol])).trim();
+    if (!rowId || rowId !== id) continue;
     total += 1;
     if (items.length >= limit) continue;
     const obj = {};

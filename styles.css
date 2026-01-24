@@ -299,6 +299,19 @@ button {
   box-shadow: var(--sh-sm);
 }
 
+.btnOutline{
+  width: 100%;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+  border: 2px solid rgba(15, 17, 23, 0.9);
+  box-shadow: none;
+  font-weight: 700;
+}
+.btnOutline:hover{
+  filter: none;
+  background: rgba(255, 255, 255, 0.92);
+}
+
 .btnDanger { background: linear-gradient(135deg, #7C2C2C, #C44747); }
 
 /* Form layout */
@@ -766,6 +779,111 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   grid-column: 1 / -1;
 }
 
+.homeCard{
+  padding: 18px 16px 20px;
+}
+.homeHeader{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.homeUserInfo{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.homeUserName{
+  font-size: 18px;
+  font-weight: 700;
+}
+.homeUserHandle{
+  font-size: 14px;
+  color: var(--muted);
+}
+.homeUserAvatar{
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  border: 2px solid rgba(15, 17, 23, 0.9);
+  background: #fff;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.homeActions{
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+.homeActionBtn{
+  padding: 16px 18px;
+  border-radius: 20px;
+}
+.homeAnalytics{
+  margin-top: 18px;
+  padding: 28px 20px;
+  min-height: 260px;
+  border-radius: 24px;
+  border: 2px solid rgba(15, 17, 23, 0.9);
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.homeAnalyticsTitle{
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.homeAnalyticsHint{
+  max-width: 320px;
+}
+.homeVersion{
+  margin-top: 14px;
+  text-align: center;
+}
+
+.screenHeader{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.screenHeaderTitles{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.iconBtn{
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 2px solid rgba(15, 17, 23, 0.9);
+  background: #fff;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  box-shadow: none;
+}
+.iconBtn:active{
+  transform: scale(.98);
+}
+.branchPickerHeader{
+  margin-top: 6px;
+}
+
 .resultActions{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -837,6 +955,17 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   line-height: 1.4;
 }
 
+.cabinetHeader{
+  margin-bottom: 6px;
+}
+.cabinetActions{
+  grid-template-columns: 1fr;
+  margin-top: 4px;
+}
+.cabinetCard{
+  padding-top: 10px;
+}
+
 .cabinetTableWrap{
   overflow-x: auto;
 }
@@ -844,28 +973,45 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 .cabinetTable{
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
+  border: 1.5px solid rgba(17,24,39,.22);
+  background: rgba(255,255,255,.7);
 }
 
 .cabinetTable th,
 .cabinetTable td{
-  padding: 10px 8px;
-  border-bottom: 1px solid rgba(17,24,39,.08);
+  padding: 12px 10px;
+  border: 1.5px solid rgba(17,24,39,.22);
   text-align: left;
   vertical-align: middle;
 }
 
-.cabinetTable tbody tr{
-  transition: background-color .18s ease;
+.cabinetTable thead th{
+  font-weight: 800;
+  background: rgba(255,255,255,.92);
 }
 
-.cabinetTable tbody tr:hover{
-  background: rgba(255,255,255,.55);
+.cabinetRow{
+  cursor: pointer;
+  transition: background-color .18s ease, transform .06s ease;
 }
 
-.cabinetRowAction{
-  text-align: right;
-  white-space: nowrap;
+.cabinetRow:hover{
+  background: rgba(255,255,255,.92);
+}
+
+.cabinetRow:active{
+  transform: scale(.995);
+}
+
+.cabinetRow[data-loading="true"]{
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.cabinetRow:focus-visible{
+  outline: 2px solid rgba(232, 90, 138, 0.7);
+  outline-offset: -2px;
 }
 
 .zoneBadge{
