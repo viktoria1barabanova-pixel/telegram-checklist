@@ -111,7 +111,7 @@
           <div id="nonTgBlock" class="noticeBlock" style="display:none;">
             <div class="noticeTitle">Открыто вне Telegram</div>
             <div class="noticeText">
-              Перейди в телеграм в бота @sc_control_bot и открой проверку через него. С браузера к сожалению нельзя.
+              Можно пройти проверку и в браузере, но для корректной отправки результатов лучше открывать через бота @sc_control_bot.
             </div>
           </div>
 
@@ -161,7 +161,7 @@
             <div id="nonTgBlock" class="noticeBlock" style="display:none;">
               <div class="noticeTitle">Открыто вне Telegram</div>
               <div class="noticeText">
-                Перейди в телеграм в бота @sc_control_bot и открой проверку через него. С браузера к сожалению нельзя.
+                Можно пройти проверку и в браузере, но для корректной отправки результатов лучше открывать через бота @sc_control_bot.
               </div>
             </div>
             <div id="tgUserCard" class="userCard" style="display:none;">
