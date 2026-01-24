@@ -1,7 +1,7 @@
 /* config.js — глобальные настройки и fallback (реальные значения берём из листа «Настройки») */
 
 // ====== BUILD / CACHE ======
-const APP_VERSION = "2026-01-24-2"; // меняй, чтобы пробивать кэш GitHub Pages
+const APP_VERSION = "2026-01-24-3"; // меняй, чтобы пробивать кэш GitHub Pages
 
 // ====== API (Google Apps Script Web App) ======
 // Используй PROD (/exec), не /dev
@@ -40,6 +40,9 @@ const MAX_PHOTO_SIZE_BYTES = 4 * 1024 * 1024;   // 4MB
 // ====== NETWORK ======
 const JSONP_TIMEOUT_MS = 20000; // 20 секунд на загрузку JSONP
 const LOG_PREVIEW_MAX_CHARS = 1000; // длина логов (payload_log) — только первые 1000 символов
+
+// ====== HISTORY ======
+const MY_SUBMISSIONS_DEFAULT_LIMIT = 200; // сколько последних проверок загружать в историю
 
 // ====== OPTIONAL UI TEXTS ======
 const UI_TEXT = {

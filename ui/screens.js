@@ -393,6 +393,14 @@
     return `${num.toFixed(1).replace(".", ",")}%`;
   }
 
+  function formatPercentDisplay(value) {
+    const num = normalizePercentValue(value);
+    if (num === null) return "—";
+    const rounded = Math.round(num * 10) / 10;
+    const str = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.0$/, "");
+    return `${str.replace(".", ",")}%`;
+  }
+
   function ensureSubmissionId() {
     if (!STATE.lastResultId) {
       STATE.lastResultId = (crypto?.randomUUID)
@@ -978,17 +986,24 @@
     return (STATE.completedSections || []).includes(sectionId);
   }
 
-  // ---------- Start screen ----------
-  window.renderStart = function renderStart(data) {
+  function initialsFromName(name) {
+    return norm(name)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part[0]?.toUpperCase())
+      .join("") || "TG";
+  }
+
+  function renderBranchPickerScreen(data) {
     DATA = data;
     clearResultQuery();
 
-    // Поддержка старого ключа branches и нового ключа addresses
     const BRANCHES = getBranches();
-
     const oblasts = listOblasts(BRANCHES);
     mount(tplStartScreen({ oblasts, showCabinet: IS_TG }));
 
+    const branchBackBtn = document.getElementById("branchPickerBackBtn");
     const oblastSelect = document.getElementById("oblastSelect");
     const citySelect = document.getElementById("citySelect");
     const addressSelect = document.getElementById("addressSelect");
@@ -1012,14 +1027,19 @@
 
     const tgUser = IS_TG ? (window.getTgUser ? window.getTgUser() : null) : null;
     STATE.tgUser = tgUser;
+    const tgId = norm(tgUser?.id || "");
+
+    if (branchBackBtn) {
+      branchBackBtn.onclick = () => renderStart(DATA);
+    }
 
     // TG vs non-TG
     if (IS_TG) {
-      fioRow.style.display = "none";
+      if (fioRow) fioRow.style.display = "none";
       STATE.fio = getTgName();
       if (nonTgBlock) nonTgBlock.style.display = "none";
     } else {
-      fioRow.style.display = "";
+      if (fioRow) fioRow.style.display = "";
       STATE.fio = "";
       if (nonTgBlock) nonTgBlock.style.display = "";
     }
@@ -1038,13 +1058,7 @@
           }
         }
         if (userCardAvatar) {
-          const initials = tgUser.name
-            .split(/\s+/)
-            .filter(Boolean)
-            .slice(0, 2)
-            .map(part => part[0]?.toUpperCase())
-            .join("");
-          userCardAvatar.textContent = initials || "TG";
+          userCardAvatar.textContent = initialsFromName(tgUser.name);
         }
       } else if (userCard) {
         userCard.style.display = "none";
@@ -1067,7 +1081,6 @@
     updateUserLine(!IS_TG ? norm(STATE.fio) : "");
 
     if (myChecksBtn) {
-      const tgId = norm(tgUser?.id || "");
       if (!tgId) {
         myChecksBtn.disabled = true;
         if (cabinetHint) {
@@ -1140,56 +1153,55 @@
         if (currentCheckHint) currentCheckHint.textContent = "";
         return;
       }
-      if (!draft) {
+
+      const lastDraftBranchId = draft?.branchId || (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
+      const d = draft || (lastDraftBranchId ? loadDraft(lastDraftBranchId) : null);
+      if (!d) {
         currentCheckBlock.style.display = "none";
         if (currentCheckHint) currentCheckHint.textContent = "";
         return;
       }
 
-      currentCheckBlock.style.display = "";
-
-      const branchRow = findBranchById(draft.branchId);
-      const city = norm(draft.city || getCity(branchRow || {}));
+      const branchRow = findBranchById(d.branchId);
+      const city = norm(d.city || getCity(branchRow || {}));
       const addr = norm(getAddressLabel(branchRow || {}));
-      const label = [city, addr].filter(Boolean).join(", ");
-      const expiresAt = draftExpiresAt(draft);
-      const expiresTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
-
+      const addrLine = [city, addr].filter(Boolean).join(", ");
+      currentCheckBlock.style.display = "";
+      currentCheckBtn.textContent = "Текущая проверка";
       if (currentCheckHint) {
-        if (label || expiresTxt) {
-          currentCheckHint.innerHTML = [
-            label ? escapeHtml(label) : "",
-            expiresTxt ? `до ${escapeHtml(expiresTxt)}` : ""
-          ].filter(Boolean).join(" • ");
-        } else {
-          currentCheckHint.textContent = "";
-        }
+        const expiresAt = draftExpiresAt(d);
+        const untilTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
+        currentCheckHint.innerHTML = [
+          addrLine ? `Адрес: ${escapeHtml(addrLine)}` : "",
+          untilTxt ? `Черновик хранится до ${escapeHtml(untilTxt)}` : "",
+        ].filter(Boolean).join("<br>");
       }
 
       currentCheckBtn.onclick = () => {
-        applyDraftToState(draft);
+        STATE.oblast = d.oblast || STATE.oblast;
+        STATE.city = d.city || STATE.city;
+        STATE.fio = d.fio || STATE.fio;
+        STATE.branchId = d.branchId || STATE.branchId;
+        applyDraftToState(d);
         renderChecklist(DATA);
       };
     }
 
     function resetCities() {
+      if (!citySelect) return;
       citySelect.innerHTML = `<option value="">Сначала выбери область</option>`;
       citySelect.disabled = true;
       resetAddresses();
     }
 
     function resetAddresses() {
+      if (!addressSelect) return;
       addressSelect.innerHTML = `<option value="">Сначала выбери город</option>`;
       addressSelect.disabled = true;
-      startBtn.disabled = true;
-      if (lastCheckHint) lastCheckHint.innerHTML = "";
-      if (draftActions) {
-        draftActions.innerHTML = "";
-        draftActions.style.display = "none";
-      }
     }
 
     function refreshStartReady() {
+      if (!startBtn || !oblastSelect || !citySelect || !addressSelect || !fioInput) return;
       if (!IS_TG) {
         startBtn.disabled = true;
         startBtn.textContent = "Откройте в Telegram";
@@ -1214,6 +1226,7 @@
     }
 
     function fillCities(oblast) {
+      if (!citySelect) return;
       const cities = citiesByOblast(BRANCHES, oblast);
       citySelect.innerHTML = `<option value="">Выбери город</option>` +
         cities.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
@@ -1222,6 +1235,7 @@
     }
 
     function fillAddresses(oblast, city) {
+      if (!addressSelect || !startBtn) return;
       const list = addressesByCity(BRANCHES, oblast, city);
       addressSelect.innerHTML = `<option value="">Выбери адрес</option>` +
         list.map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(x.label)}</option>`).join("");
@@ -1230,90 +1244,96 @@
       if (lastCheckHint) lastCheckHint.innerHTML = "";
     }
 
-    oblastSelect.onchange = () => {
-      const oblast = norm(oblastSelect.value);
-      hint.textContent = "";
-      if (!oblast) {
-        resetCities();
-        refreshStartReady();
-        return;
-      }
-      fillCities(oblast);
-      refreshStartReady();
-    };
-
-    citySelect.onchange = () => {
-      const oblast = norm(oblastSelect.value);
-      const city = norm(citySelect.value);
-      hint.textContent = "";
-      if (!city) {
-        resetAddresses();
-        refreshStartReady();
-        return;
-      }
-      fillAddresses(oblast, city);
-      refreshStartReady();
-    };
-
-    addressSelect.onchange = () => {
-      refreshStartReady();
-      if (draftActions) {
-        draftActions.innerHTML = "";
-        draftActions.style.display = "none";
-      }
-
-      // show last check for this address (stored locally)
-      if (lastCheckHint) {
-        const bidNow = norm(addressSelect.value);
-        const local = getLastCheck(bidNow);
-        const server = getLastCheckFromServer(bidNow);
-        const last = mergeLastChecks(local, server);
-        if (last && (last.ts || last.percent != null || last.zone || last.fio)) {
-          const hintHtml = formatLastCheckHint(last);
-          lastCheckHint.innerHTML = hintHtml || "";
-        } else {
-          lastCheckHint.textContent = "Последней проверки пока нет";
+    if (oblastSelect) {
+      oblastSelect.onchange = () => {
+        const oblast = norm(oblastSelect.value);
+        if (hint) hint.textContent = "";
+        if (!oblast) {
+          resetCities();
+          refreshStartReady();
+          return;
         }
-      }
+        fillCities(oblast);
+        refreshStartReady();
+      };
+    }
 
-      // restore draft for this address (branchId)
-      const bid = norm(addressSelect.value);
-      const d = loadDraft(bid);
-      if (d) {
-        hint.innerHTML = draftHintText(d);
+    if (citySelect) {
+      citySelect.onchange = () => {
+        const oblast = norm(oblastSelect?.value || "");
+        const city = norm(citySelect.value);
+        if (hint) hint.textContent = "";
+        if (!city) {
+          resetAddresses();
+          refreshStartReady();
+          return;
+        }
+        fillAddresses(oblast, city);
+        refreshStartReady();
+      };
+    }
+
+    if (addressSelect) {
+      addressSelect.onchange = () => {
+        refreshStartReady();
         if (draftActions) {
-          draftActions.style.display = "";
-          draftActions.innerHTML = `
-            <div class="actions">
-              <button id="useDraftBtn" class="btn btnSecondary" type="button">Продолжить черновик</button>
-              <button id="resetDraftBtn" class="btn btnDanger" type="button">Сбросить данные</button>
-            </div>
-          `;
-          const useBtn = document.getElementById("useDraftBtn");
-          const resetBtn = document.getElementById("resetDraftBtn");
-          if (useBtn) {
-            useBtn.onclick = () => {
-              STATE.branchId = d.branchId || bid;
-              applyDraftToState(d);
-              renderChecklist(DATA);
-            };
-          }
-          if (resetBtn) {
-            resetBtn.onclick = () => {
-              clearDraftForBranch(bid);
-              hint.textContent = "Данные сброшены. Можно начать заново.";
-              if (draftActions) {
-                draftActions.innerHTML = "";
-                draftActions.style.display = "none";
-              }
-              refreshStartReady();
-            };
+          draftActions.innerHTML = "";
+          draftActions.style.display = "none";
+        }
+
+        // show last check for this address (stored locally)
+        if (lastCheckHint) {
+          const bidNow = norm(addressSelect.value);
+          const local = getLastCheck(bidNow);
+          const server = getLastCheckFromServer(bidNow);
+          const last = mergeLastChecks(local, server);
+          if (last && (last.ts || last.percent != null || last.zone || last.fio)) {
+            const hintHtml = formatLastCheckHint(last);
+            lastCheckHint.innerHTML = hintHtml || "";
+          } else {
+            lastCheckHint.textContent = "Последней проверки пока нет";
           }
         }
-      }
-    };
 
-    if (!IS_TG) {
+        // restore draft for this address (branchId)
+        const bid = norm(addressSelect.value);
+        const d = loadDraft(bid);
+        if (d) {
+          if (hint) hint.innerHTML = draftHintText(d);
+          if (draftActions) {
+            draftActions.style.display = "";
+            draftActions.innerHTML = `
+              <div class="actions">
+                <button id="useDraftBtn" class="btn btnSecondary" type="button">Продолжить черновик</button>
+                <button id="resetDraftBtn" class="btn btnDanger" type="button">Сбросить данные</button>
+              </div>
+            `;
+            const useBtn = document.getElementById("useDraftBtn");
+            const resetBtn = document.getElementById("resetDraftBtn");
+            if (useBtn) {
+              useBtn.onclick = () => {
+                STATE.branchId = d.branchId || bid;
+                applyDraftToState(d);
+                renderChecklist(DATA);
+              };
+            }
+            if (resetBtn) {
+              resetBtn.onclick = () => {
+                clearDraftForBranch(bid);
+                if (hint) hint.textContent = "Данные сброшены. Можно начать заново.";
+                if (draftActions) {
+                  draftActions.innerHTML = "";
+                  draftActions.style.display = "none";
+                }
+                refreshStartReady();
+              };
+            }
+          }
+        }
+      };
+    }
+
+    if (!IS_TG && fioInput) {
       fioInput.oninput = () => {
         refreshStartReady();
         updateUserLine(norm(fioInput.value));
@@ -1328,27 +1348,110 @@
     const lastDraft = lastDraftBranchId ? loadDraft(lastDraftBranchId) : null;
     updateCurrentCheck(lastDraft);
 
-    startBtn.onclick = () => {
-      if (!IS_TG) {
-        alert("Откройте проверку через Telegram, чтобы начать.");
-        return;
+    if (startBtn) {
+      startBtn.onclick = () => {
+        if (!IS_TG) {
+          alert("Откройте проверку через Telegram, чтобы начать.");
+          return;
+        }
+        const secs = activeSections(DATA.sections);
+        STATE.enabledSections = secs.map(s => s.id);
+        STATE.activeSection = secs[0]?.id || "";
+        STATE.completedSections = [];
+
+        STATE.isFinished = false;
+        STATE.lastResult = null;
+        STATE.lastResultId = null;
+        STATE.lastSubmittedAt = "";
+        STATE.lastBotSendStatus = "";
+        STATE.lastBotSendError = "";
+        STATE.singleAnswerLabels = {};
+
+        saveDraft();
+        renderChecklist(DATA);
+      };
+    }
+  }
+
+  window.renderBranchPickerScreen = renderBranchPickerScreen;
+
+  // ---------- Start screen ----------
+  window.renderStart = function renderStart(data) {
+    DATA = data;
+    clearResultQuery();
+
+    const tgUser = IS_TG ? (window.getTgUser ? window.getTgUser() : null) : null;
+    STATE.tgUser = tgUser;
+    const tgId = norm(tgUser?.id || "");
+
+    mount(tplHomeScreen({ showCabinet: IS_TG }));
+
+    const nonTgBlock = document.getElementById("nonTgBlock");
+    const nameEl = document.getElementById("homeUserName");
+    const handleEl = document.getElementById("homeUserHandle");
+    const avatarEl = document.getElementById("homeUserAvatar");
+    const newCheckBtn = document.getElementById("homeNewCheckBtn");
+    const historyBtn = document.getElementById("homeHistoryBtn");
+    const tasksBtn = document.getElementById("homeTasksBtn");
+    const cabinetHint = document.getElementById("homeCabinetHint");
+
+    const displayName = tgUser?.name || "Пользователь Telegram";
+
+    if (nameEl) {
+      nameEl.textContent = IS_TG ? displayName : "Откройте в Telegram";
+    }
+    if (handleEl) {
+      if (IS_TG && tgUser?.username) {
+        handleEl.textContent = `@${tgUser.username}`;
+        handleEl.style.display = "";
+      } else {
+        handleEl.textContent = IS_TG ? "Без username" : "";
+        handleEl.style.display = IS_TG ? "" : "none";
       }
-      const secs = activeSections(DATA.sections);
-      STATE.enabledSections = secs.map(s => s.id);
-      STATE.activeSection = secs[0]?.id || "";
-      STATE.completedSections = [];
+    }
+    if (avatarEl) {
+      avatarEl.textContent = IS_TG ? initialsFromName(displayName) : "TG";
+    }
 
-      STATE.isFinished = false;
-      STATE.lastResult = null;
-      STATE.lastResultId = null;
-      STATE.lastSubmittedAt = "";
-      STATE.lastBotSendStatus = "";
-      STATE.lastBotSendError = "";
-      STATE.singleAnswerLabels = {};
+    if (nonTgBlock) nonTgBlock.style.display = IS_TG ? "none" : "";
 
-      saveDraft();
-      renderChecklist(DATA);
-    };
+    const disableAll = !IS_TG;
+    if (newCheckBtn) newCheckBtn.disabled = disableAll;
+    if (historyBtn) historyBtn.disabled = disableAll || !tgId;
+    if (tasksBtn) tasksBtn.disabled = disableAll;
+
+    if (cabinetHint) {
+      if (!IS_TG) {
+        cabinetHint.style.display = "";
+        cabinetHint.textContent = "Личный кабинет доступен только из Telegram.";
+      } else if (!tgId) {
+        cabinetHint.style.display = "";
+        cabinetHint.textContent = "Не удалось определить ваш Telegram ID.";
+      } else {
+        cabinetHint.style.display = "none";
+        cabinetHint.textContent = "";
+      }
+    }
+
+    if (newCheckBtn) {
+      newCheckBtn.onclick = () => {
+        if (!IS_TG) return;
+        renderBranchPickerScreen(DATA);
+      };
+    }
+
+    if (historyBtn) {
+      historyBtn.onclick = () => {
+        if (!IS_TG || !tgId) return;
+        renderCabinetScreen(DATA);
+      };
+    }
+
+    if (tasksBtn) {
+      tasksBtn.onclick = () => {
+        alert("Раздел «Мои задачи» пока в разработке.");
+      };
+    }
   };
 
   // ---------- Cabinet screen ----------
@@ -1365,24 +1468,19 @@
     }
 
     mount(`
-      <div class="container">
-        <div class="card">
-          <div class="cardHeader">
-            <div class="title">Личный кабинет</div>
-            <div class="subTitle">Мои проверки</div>
+      <div class="container cabinetScreen">
+        <div class="screenHeader cabinetHeader">
+          <div class="screenHeaderTitles">
+            <div class="title">История моих проверок</div>
           </div>
-          <div class="resultActions">
-            <button id="cabinetBackBtn" class="btn btnSecondary" type="button">К выбору филиала</button>
-            <button id="cabinetReloadBtn" class="btn primary" type="button">Обновить</button>
-          </div>
-          <div id="cabinetStatus" class="hint cabinetMeta"></div>
+          <button id="cabinetBackBtn" class="iconBtn cabinetBackBtn" type="button" aria-label="Назад">←</button>
         </div>
-
-        <div class="card">
-          <div class="cardHeader">
-            <div class="title">История проверок</div>
-          </div>
+        <div id="cabinetStatus" class="hint cabinetMeta"></div>
+        <div class="card cabinetCard">
           <div id="cabinetTableWrap" class="cabinetTableWrap"></div>
+        </div>
+        <div class="resultActions cabinetActions">
+          <button id="cabinetReloadBtn" class="btn btnSecondary" type="button">Обновить</button>
         </div>
       </div>
     `);
@@ -1411,25 +1509,48 @@
       return [city, branchName].filter(Boolean).join(", ") || branchName || city || "—";
     }
 
+    const openSubmission = async (submissionId, rowEl) => {
+      const id = norm(submissionId);
+      if (!id || !rowEl) return;
+      if (rowEl.dataset.loading === "true") return;
+
+      rowEl.dataset.loading = "true";
+      renderStatus("Открываю результат…");
+
+      try {
+        const res = await api.getSubmission(id);
+        if (!res?.ok) throw new Error(res?.error || "Не удалось открыть результат");
+        renderReadonlyResult(DATA, res, { backMode: "cabinet" });
+        return;
+      } catch (err) {
+        console.warn("Failed to open submission", err);
+        alert("Не удалось открыть результат. Попробуйте ещё раз.");
+        rowEl.dataset.loading = "false";
+        renderStatus("Не удалось открыть результат.", true);
+      }
+    };
+
     const renderTable = (items, total) => {
       const list = Array.isArray(items) ? items : [];
+      if (!tableWrap) return;
       if (!list.length) {
         tableWrap.innerHTML = `<div class="hint">Пока нет сохранённых проверок.</div>`;
         renderStatus("Как только вы завершите проверку, она появится здесь.");
         return;
       }
 
-      const totalText = total && total > list.length ? `Показано ${list.length} из ${total}.` : `Всего проверок: ${list.length}.`;
-      renderStatus(totalText);
+      const totalText = total && total > list.length
+        ? `Показано ${list.length} из ${total}.`
+        : `Всего проверок: ${list.length}.`;
+      renderStatus(`${totalText} Нажмите на строку, чтобы открыть результат.`);
 
       tableWrap.innerHTML = `
         <table class="cabinetTable">
           <thead>
             <tr>
-              <th style="width:130px;">Дата</th>
+              <th style="width:140px;">Дата</th>
               <th>Адрес</th>
-              <th style="width:140px;">Зона</th>
-              <th style="width:110px;"></th>
+              <th style="width:140px;">% прохождения</th>
             </tr>
           </thead>
           <tbody>
@@ -1437,16 +1558,13 @@
               const submissionId = norm(item.submission_id);
               const submittedAt = formatDateSmart(item.submitted_at);
               const address = addressFromRow(item);
-              const zone = zoneBadgeHtml(item.zone);
+              const percent = formatPercentDisplay(item.percent);
 
               return `
-                <tr>
+                <tr class="cabinetRow" data-open-submission="${escapeHtml(submissionId)}" tabindex="0" role="button" aria-label="Открыть проверку ${escapeHtml(submittedAt)}">
                   <td>${escapeHtml(submittedAt)}</td>
                   <td>${escapeHtml(address)}</td>
-                  <td>${zone}</td>
-                  <td class="cabinetRowAction">
-                    <button class="btn btnSecondary" type="button" data-open-submission="${escapeHtml(submissionId)}">Открыть</button>
-                  </td>
+                  <td>${escapeHtml(percent)}</td>
                 </tr>
               `;
             }).join("")}
@@ -1454,31 +1572,20 @@
         </table>
       `;
 
-      tableWrap.querySelectorAll("[data-open-submission]").forEach(btn => {
-        btn.onclick = async () => {
-          const submissionId = norm(btn.getAttribute("data-open-submission"));
-          if (!submissionId) return;
-          btn.disabled = true;
-          const prevText = btn.textContent;
-          btn.textContent = "Открываю…";
-          try {
-            renderStatus("Открываю результат…");
-            const res = await api.getSubmission(submissionId);
-            if (!res?.ok) throw new Error(res?.error || "Не удалось открыть результат");
-            renderReadonlyResult(DATA, res, { backMode: "cabinet" });
-            return;
-          } catch (err) {
-            console.warn("Failed to open submission", err);
-            alert("Не удалось открыть результат. Попробуйте ещё раз.");
-            btn.disabled = false;
-            btn.textContent = prevText;
-            renderStatus("Не удалось открыть результат.", true);
+      tableWrap.querySelectorAll("[data-open-submission]").forEach(row => {
+        const submissionId = row.getAttribute("data-open-submission");
+        row.onclick = () => openSubmission(submissionId, row);
+        row.onkeydown = (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            openSubmission(submissionId, row);
           }
         };
       });
     };
 
     const renderLoading = () => {
+      if (!tableWrap) return;
       tableWrap.innerHTML = `<div class="hint">Загружаю ваши проверки…</div>`;
       renderStatus("Запрашиваю данные из таблицы…");
     };
@@ -1494,7 +1601,7 @@
       }
 
       try {
-        const limit = (typeof MY_SUBMISSIONS_DEFAULT_LIMIT !== "undefined") ? MY_SUBMISSIONS_DEFAULT_LIMIT : 50;
+        const limit = (typeof MY_SUBMISSIONS_DEFAULT_LIMIT !== "undefined") ? MY_SUBMISSIONS_DEFAULT_LIMIT : 200;
         const res = await api.getMySubmissions(tgId, { limit });
         if (!res?.ok) throw new Error(res?.error || "Не удалось загрузить список");
         const items = Array.isArray(res.items) ? res.items : [];
@@ -1502,7 +1609,7 @@
         renderTable(items, res.total || items.length);
       } catch (err) {
         console.error(err);
-        tableWrap.innerHTML = `<div class="hint">Не удалось загрузить список проверок 😕</div>`;
+        if (tableWrap) tableWrap.innerHTML = `<div class="hint">Не удалось загрузить список проверок 😕</div>`;
         renderStatus("Попробуйте обновить список чуть позже.", true);
       }
     };
@@ -2515,7 +2622,7 @@
     const fio = norm(stored.fio || sub.fio || "");
     const submittedAt = lastTs ? (formatRuDateTime(lastTs) || norm(lastTs)) : "";
     const backMode = opts?.backMode === "cabinet" ? "cabinet" : "start";
-    const backLabel = backMode === "cabinet" ? "К моим проверкам" : "К выбору филиала";
+    const backLabel = backMode === "cabinet" ? "К моим проверкам" : "На главную";
 
     mount(`
       <div class="container">
