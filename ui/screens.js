@@ -111,7 +111,7 @@
         hasTelegram: Boolean(window.Telegram),
         hasWebApp: Boolean(window.Telegram?.WebApp),
       });
-      return;
+      return false;
     }
 
     try {
@@ -138,14 +138,17 @@
     };
 
     console.info("Sending Telegram result payload", payload);
+    let sent = false;
     try {
       sendData(JSON.stringify(payload));
       console.info("Telegram sendData invoked");
+      sent = true;
     } catch (err) {
       console.warn("Failed to send Telegram payload, fallback to text", err);
       try {
         sendData(text);
         console.info("Telegram sendData fallback invoked");
+        sent = true;
       } catch (fallbackErr) {
         console.warn("Failed to send Telegram text payload", fallbackErr);
       }
@@ -156,6 +159,8 @@
       console.info("Auto-closing Telegram WebApp after submit");
       setTimeout(() => tgApp.close(), 500);
     }
+
+    return sent;
   }
 
   function clearResultQuery() {
@@ -1535,7 +1540,6 @@
         // last check meta for branch (local)
         setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
 
-        sendTelegramResultMessage(result, STATE.lastResultId || submissionId);
         clearDraftStorageOnly(STATE.branchId);
 
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
@@ -1996,6 +2000,31 @@
       saveDraft();
       renderStart(DATA);
     };
+
+    const sendBotBtn = document.getElementById("sendBotResultBtn");
+    if (sendBotBtn) {
+      sendBotBtn.onclick = () => {
+        const id = norm(STATE.lastResultId);
+        if (!id) return;
+
+        sendBotBtn.disabled = true;
+        sendBotBtn.textContent = "Отправляю боту…";
+
+        try {
+          const sent = sendTelegramResultMessage(result, id);
+          if (!sent) {
+            sendBotBtn.disabled = false;
+            sendBotBtn.textContent = "Сообщить боту (закроет форму)";
+            return;
+          }
+          sendBotBtn.textContent = "Отправлено ✅";
+        } catch (err) {
+          console.warn("Failed to send data to Telegram bot", err);
+          sendBotBtn.disabled = false;
+          sendBotBtn.textContent = "Сообщить боту (закроет форму)";
+        }
+      };
+    }
 
     const copyBtn = document.getElementById("copyResultLinkBtn");
     if (copyBtn) {

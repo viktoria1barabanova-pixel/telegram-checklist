@@ -156,6 +156,13 @@ function doPost(e) {
 
     const payload = JSON.parse(raw);
 
+    // Обновляем/добавляем проверяющего
+    try {
+      upsertInspector_(ss, payload);
+    } catch (inspectorErr) {
+      log_(ss, { event: "inspector_upsert_error", error: String(inspectorErr) });
+    }
+
     // Ensure output sheets exist & have headers
     const shSub = getOrCreateSheet_(ss, SHEET_NAMES.submissions, SUBMISSIONS_HEADERS);
     const shAns = getOrCreateSheet_(ss, SHEET_NAMES.answers, ANSWERS_HEADERS);
@@ -428,8 +435,8 @@ function upsertInspector_(ss, payload) {
   const sh = getOrCreateSheet_(ss, SHEET_NAMES.inspectors, INSPECTORS_HEADERS);
 
   const tg = payload.tg || {};
-  const tgUserId = safe_(payload.tg_user_id || tg.user_id);
-  const fio = safe_(payload.fio);
+  const tgUserId = safe_(payload.tg_user_id || payload.tg_id || tg.user_id || tg.id);
+  const fio = safe_(payload.fio || payload.tg_name || tg.name || "");
 
   if (!tgUserId) return;
 
@@ -458,16 +465,39 @@ function upsertInspector_(ss, payload) {
     tg_username: safe_(payload.tg_username || tg.username),
     tg_first_name: safe_(payload.tg_first_name || tg.first_name),
     tg_last_name: safe_(payload.tg_last_name || tg.last_name),
-    tg_name: safe_(payload.tg_name || [tg.first_name, tg.last_name].filter(Boolean).join(" ").trim()),
+    tg_name: safe_(payload.tg_name || tg.name || [tg.first_name, tg.last_name].filter(Boolean).join(" ").trim()),
     updated_at: now,
   };
 
   if (!foundRow) {
     appendObjectRowByHeaders_(sh, record);
   } else {
-    Object.keys(record).forEach(key => {
+    const lastCol = sh.getLastColumn();
+    const existingVals = sh.getRange(foundRow, 1, 1, lastCol).getValues()[0];
+    const existing = {};
+    Object.keys(headerMap).forEach(key => {
       const col = headerMap[key];
-      if (col) sh.getRange(foundRow, col).setValue(record[key]);
+      existing[key] = col ? existingVals[col - 1] : "";
     });
+
+    let changed = false;
+    Object.keys(record).forEach(key => {
+      if (key === "updated_at") return;
+      const col = headerMap[key];
+      if (!col) return;
+
+      const nextVal = record[key];
+      if (nextVal === "" || nextVal === null || nextVal === undefined) return;
+
+      const prevVal = existing[key];
+      if (String(prevVal ?? "") === String(nextVal ?? "")) return;
+
+      sh.getRange(foundRow, col).setValue(nextVal);
+      changed = true;
+    });
+
+    if (changed && headerMap.updated_at) {
+      sh.getRange(foundRow, headerMap.updated_at).setValue(now);
+    }
   }
 }
