@@ -380,9 +380,14 @@
 
   function normalizePercentValue(value) {
     if (value === null || value === undefined || value === "") return null;
-    const cleaned = String(value).replace("%", "").replace(",", ".").trim();
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const hasPercentSign = raw.includes("%");
+    const cleaned = raw.replace("%", "").replace(",", ".").trim();
     const num = Number(cleaned);
-    return Number.isFinite(num) ? num : null;
+    if (!Number.isFinite(num)) return null;
+    if (!hasPercentSign && Math.abs(num) <= 1) return num * 100;
+    return num;
   }
 
   function formatPercentForSheet(value) {
@@ -1477,6 +1482,28 @@
         </div>
         <div id="cabinetStatus" class="hint cabinetMeta"></div>
         <div class="card cabinetCard">
+          <div class="cabinetFilters" id="cabinetFilters">
+            <label class="cabinetFilterField">
+              <span>Дата с</span>
+              <input id="cabinetDateFrom" type="date" inputmode="numeric" />
+            </label>
+            <label class="cabinetFilterField">
+              <span>Дата по</span>
+              <input id="cabinetDateTo" type="date" inputmode="numeric" />
+            </label>
+            <label class="cabinetFilterField cabinetFilterField--grow">
+              <span>Имя</span>
+              <input id="cabinetNameFilter" type="text" placeholder="ФИО проверяющего" />
+            </label>
+            <label class="cabinetFilterField">
+              <span>% от</span>
+              <input id="cabinetPercentMin" type="number" step="0.1" min="0" max="100" placeholder="0" />
+            </label>
+            <label class="cabinetFilterField">
+              <span>% до</span>
+              <input id="cabinetPercentMax" type="number" step="0.1" min="0" max="100" placeholder="100" />
+            </label>
+          </div>
           <div id="cabinetTableWrap" class="cabinetTableWrap"></div>
         </div>
         <div class="resultActions cabinetActions">
@@ -1489,6 +1516,23 @@
     const reloadBtn = document.getElementById("cabinetReloadBtn");
     const statusEl = document.getElementById("cabinetStatus");
     const tableWrap = document.getElementById("cabinetTableWrap");
+    const filtersWrap = document.getElementById("cabinetFilters");
+    const dateFromInput = document.getElementById("cabinetDateFrom");
+    const dateToInput = document.getElementById("cabinetDateTo");
+    const nameInput = document.getElementById("cabinetNameFilter");
+    const percentMinInput = document.getElementById("cabinetPercentMin");
+    const percentMaxInput = document.getElementById("cabinetPercentMax");
+
+    const filters = {
+      dateFrom: "",
+      dateTo: "",
+      name: "",
+      percentMin: "",
+      percentMax: "",
+    };
+
+    let latestRawItems = [];
+    let latestTotal = 0;
 
     const renderStatus = (text, isError = false) => {
       if (!statusEl) return;
@@ -1501,12 +1545,89 @@
       return formatted || norm(value) || "—";
     };
 
+    const parsePercentFilterValue = (value) => {
+      if (value === null || value === undefined || value === "") return null;
+      const cleaned = String(value).replace("%", "").replace(",", ".").trim();
+      const num = Number(cleaned);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    const toDayStart = (value) => {
+      if (!value) return null;
+      const d = new Date(value);
+      if (!Number.isFinite(d.getTime())) return null;
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const toDayEnd = (value) => {
+      if (!value) return null;
+      const d = new Date(value);
+      if (!Number.isFinite(d.getTime())) return null;
+      d.setHours(23, 59, 59, 999);
+      return d;
+    };
+
+    function isGeneralInspectionArea(row) {
+      const area = t(getAny(row, ["inspection_area", "inspectionArea", "area"], ""));
+      return tkey(area).includes("общ");
+    }
+
+    function zoneClassKey(zone) {
+      const key = String(zone ?? "").toLowerCase();
+      return ["green", "yellow", "red"].includes(key) ? key : "gray";
+    }
+
+    function fioFromRow(row) {
+      return norm(getAny(row, ["fio", "name", "inspector", "user"], "")) || "—";
+    }
+
     function addressFromRow(row) {
       const branchId = norm(getAny(row, ["branch_id", "branchId"], ""));
       const branchRow = branchId ? findBranchById(branchId) : null;
       const branchName = norm(getAny(row, ["branch_name", "branchName"], getAddressLabel(branchRow || {})));
       const city = norm(getAny(row, ["city", "город"], getCity(branchRow || {})));
-      return [city, branchName].filter(Boolean).join(", ") || branchName || city || "—";
+      const branchLabel = [branchId, branchName].filter(Boolean).join(" ").trim();
+      return [city, branchLabel].filter(Boolean).join(", ") || branchLabel || city || "—";
+    }
+
+    function hasActiveFilters() {
+      return Object.values(filters).some(v => String(v || "").trim() !== "");
+    }
+
+    function applyFilters(list) {
+      let result = Array.isArray(list) ? [...list] : [];
+      const fromDate = toDayStart(filters.dateFrom);
+      const toDate = toDayEnd(filters.dateTo);
+      const nameNeedle = tkey(filters.name);
+      const minPercent = parsePercentFilterValue(filters.percentMin);
+      const maxPercent = parsePercentFilterValue(filters.percentMax);
+
+      if (fromDate || toDate) {
+        result = result.filter(item => {
+          const parsed = parsePossibleDate(item.submitted_at);
+          if (!parsed) return false;
+          if (fromDate && parsed < fromDate) return false;
+          if (toDate && parsed > toDate) return false;
+          return true;
+        });
+      }
+
+      if (nameNeedle) {
+        result = result.filter(item => tkey(getAny(item, ["fio", "name", "inspector", "user"], "")).includes(nameNeedle));
+      }
+
+      if (minPercent !== null || maxPercent !== null) {
+        result = result.filter(item => {
+          const pct = normalizePercentValue(item.percent);
+          if (pct === null) return false;
+          if (minPercent !== null && pct < minPercent) return false;
+          if (maxPercent !== null && pct > maxPercent) return false;
+          return true;
+        });
+      }
+
+      return result;
     }
 
     const openSubmission = async (submissionId, rowEl) => {
@@ -1531,17 +1652,30 @@
     };
 
     const renderTable = (items, total) => {
-      const list = Array.isArray(items) ? items : [];
+      const rawList = Array.isArray(items) ? items : [];
+      latestRawItems = rawList;
+      latestTotal = total || rawList.length;
       if (!tableWrap) return;
-      if (!list.length) {
-        tableWrap.innerHTML = `<div class="hint">Пока нет сохранённых проверок.</div>`;
-        renderStatus("Как только вы завершите проверку, она появится здесь.");
+      const generalList = rawList.filter(isGeneralInspectionArea);
+      if (!generalList.length) {
+        tableWrap.innerHTML = `<div class="hint">Нет проверок по зоне «Общая».</div>`;
+        renderStatus("Проверки появятся здесь после завершения общей оценки.");
         return;
       }
 
-      const totalText = total && total > list.length
-        ? `Показано ${list.length} из ${total}.`
-        : `Всего проверок: ${list.length}.`;
+      const list = applyFilters(generalList);
+      const baseCount = generalList.length;
+      const filteredCount = list.length;
+
+      if (!list.length) {
+        tableWrap.innerHTML = `<div class="hint">Нет результатов по выбранным фильтрам.</div>`;
+        renderStatus(`Проверок «Общая»: ${baseCount}. Попробуйте изменить фильтры.`);
+        return;
+      }
+
+      const totalText = hasActiveFilters() && filteredCount !== baseCount
+        ? `Показано ${filteredCount} из ${baseCount} проверок «Общая».`
+        : `Всего проверок «Общая»: ${baseCount}.`;
       renderStatus(`${totalText} Нажмите на строку, чтобы открыть результат.`);
 
       tableWrap.innerHTML = `
@@ -1549,7 +1683,9 @@
           <thead>
             <tr>
               <th style="width:140px;">Дата</th>
+              <th style="width:180px;">Имя</th>
               <th>Адрес</th>
+              <th style="width:140px;">Зона</th>
               <th style="width:140px;">% прохождения</th>
             </tr>
           </thead>
@@ -1557,13 +1693,18 @@
             ${list.map(item => {
               const submissionId = norm(item.submission_id);
               const submittedAt = formatDateSmart(item.submitted_at);
+              const fio = fioFromRow(item);
               const address = addressFromRow(item);
+              const zoneKey = zoneClassKey(item.zone);
               const percent = formatPercentDisplay(item.percent);
+              const zoneCellClass = `cabinetZoneCell cabinetZoneCell--${zoneKey}`;
 
               return `
-                <tr class="cabinetRow" data-open-submission="${escapeHtml(submissionId)}" tabindex="0" role="button" aria-label="Открыть проверку ${escapeHtml(submittedAt)}">
+                <tr class="cabinetRow" data-open-submission="${escapeHtml(submissionId)}" tabindex="0" role="button" aria-label="Открыть проверку ${escapeHtml(submittedAt)} • ${escapeHtml(fio)}">
                   <td>${escapeHtml(submittedAt)}</td>
+                  <td>${escapeHtml(fio)}</td>
                   <td>${escapeHtml(address)}</td>
+                  <td class="${escapeHtml(zoneCellClass)}">${zoneBadgeHtml(zoneKey)}</td>
                   <td>${escapeHtml(percent)}</td>
                 </tr>
               `;
@@ -1586,17 +1727,44 @@
 
     const renderLoading = () => {
       if (!tableWrap) return;
+      latestRawItems = [];
+      latestTotal = 0;
       tableWrap.innerHTML = `<div class="hint">Загружаю ваши проверки…</div>`;
       renderStatus("Запрашиваю данные из таблицы…");
     };
+
+    const rerenderFromFilters = () => {
+      renderTable(latestRawItems, latestTotal);
+    };
+
+    if (filtersWrap) {
+      const bindFilter = (inputEl, key) => {
+        if (!inputEl) return;
+        inputEl.value = filters[key];
+        inputEl.oninput = () => {
+          filters[key] = inputEl.value || "";
+          rerenderFromFilters();
+        };
+        inputEl.onchange = () => {
+          filters[key] = inputEl.value || "";
+          rerenderFromFilters();
+        };
+      };
+
+      bindFilter(dateFromInput, "dateFrom");
+      bindFilter(dateToInput, "dateTo");
+      bindFilter(nameInput, "name");
+      bindFilter(percentMinInput, "percentMin");
+      bindFilter(percentMaxInput, "percentMax");
+    }
 
     const loadItems = async () => {
       renderLoading();
       const cache = STATE.cabinetCache;
       const cacheAgeMs = cache?.fetchedAt ? (Date.now() - cache.fetchedAt) : Infinity;
       const cacheTtlMs = 60 * 1000;
-      if (!forceReload && cache?.items && cacheAgeMs < cacheTtlMs) {
-        renderTable(cache.items, cache.total);
+      if (!forceReload && cache?.rawItems && cacheAgeMs < cacheTtlMs) {
+        renderTable(cache.rawItems, cache.total);
         return;
       }
 
@@ -1604,9 +1772,9 @@
         const limit = (typeof MY_SUBMISSIONS_DEFAULT_LIMIT !== "undefined") ? MY_SUBMISSIONS_DEFAULT_LIMIT : 200;
         const res = await api.getMySubmissions(tgId, { limit });
         if (!res?.ok) throw new Error(res?.error || "Не удалось загрузить список");
-        const items = Array.isArray(res.items) ? res.items : [];
-        STATE.cabinetCache = { items, total: res.total || items.length, fetchedAt: Date.now() };
-        renderTable(items, res.total || items.length);
+        const rawItems = Array.isArray(res.items) ? res.items : [];
+        STATE.cabinetCache = { rawItems, total: res.total || rawItems.length, fetchedAt: Date.now() };
+        renderTable(rawItems, res.total || rawItems.length);
       } catch (err) {
         console.error(err);
         if (tableWrap) tableWrap.innerHTML = `<div class="hint">Не удалось загрузить список проверок 😕</div>`;
