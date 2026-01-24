@@ -227,6 +227,15 @@
       return await loadJsonp(url);
     },
 
+    // GET submissions list for current Telegram user
+    async getMySubmissions(tgUserId, { limit } = {}) {
+      const id = norm(tgUserId);
+      const params = { action: "my_submissions", tg_user_id: id };
+      if (limit !== undefined && limit !== null && limit !== "") params.limit = limit;
+      const url = buildUrlWithParams(DATA_JSONP_URL, params);
+      return await loadJsonp(url);
+    },
+
     // POST submit
     async submit(payloadObj, { usePostMessage = false } = {}) {
       return await iframePostSubmit(payloadObj, { usePostMessage });

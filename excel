@@ -70,6 +70,8 @@ const SETTINGS = {
   grey_zone_max_percent: "",
 };
 
+const MY_SUBMISSIONS_DEFAULT_LIMIT = 50;
+
 /***************
  * GET (data API)
  ***************/
@@ -95,6 +97,11 @@ function doGet(e) {
     else if (action === "checklist") payload = readSheetAsObjects_(ss, SHEET_NAMES.checklist);
     else if (action === "branches") payload = readSheetAsObjects_(ss, SHEET_NAMES.branches);
     else if (action === "settings") payload = SETTINGS;
+    else if (action === "my_submissions") {
+      const tgUserId = e?.parameter?.tg_user_id ? String(e.parameter.tg_user_id).trim() : "";
+      const limitRaw = e?.parameter?.limit ? String(e.parameter.limit).trim() : "";
+      payload = getMySubmissionsPayload_(ss, tgUserId, limitRaw);
+    }
     else if (action === "submission") {
       const submissionId = e?.parameter?.submission_id ? String(e.parameter.submission_id).trim() : "";
       payload = getSubmissionPayload_(ss, submissionId);
@@ -334,6 +341,45 @@ function parseFormUrlEncoded_(s) {
 /***************
  * Submission fetch helpers (for shareable result links)
  ***************/
+function getMySubmissionsPayload_(ss, tgUserId, limitRaw) {
+  const id = safe_(tgUserId);
+  if (!id) return { ok: false, error: "No tg_user_id", items: [] };
+
+  const sh = ss.getSheetByName(SHEET_NAMES.submissions);
+  if (!sh) return { ok: true, tg_user_id: id, items: [], total: 0 };
+
+  const values = sh.getDataRange().getValues();
+  if (values.length < 2) return { ok: true, tg_user_id: id, items: [], total: 0 };
+
+  const headers = values[0].map(h => String(h).trim());
+  const idCol = headers.indexOf("tg_user_id");
+  if (idCol < 0) return { ok: false, error: "tg_user_id column missing", items: [] };
+
+  const parsedLimit = Number.parseInt(String(limitRaw || ""), 10);
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : MY_SUBMISSIONS_DEFAULT_LIMIT;
+
+  const items = [];
+  let total = 0;
+
+  for (let i = values.length - 1; i >= 1; i -= 1) {
+    const rowId = safe_(values[i][idCol]);
+    if (rowId !== id) continue;
+    total += 1;
+    if (items.length >= limit) continue;
+    const obj = {};
+    headers.forEach((h, j) => obj[h] = values[i][j]);
+    items.push(obj);
+  }
+
+  return {
+    ok: true,
+    tg_user_id: id,
+    total,
+    items,
+    meta: { updatedAt: new Date().toISOString() }
+  };
+}
+
 function getSubmissionPayload_(ss, submissionId) {
   if (!submissionId) return { ok: false, error: "No submission_id" };
 
@@ -341,14 +387,73 @@ function getSubmissionPayload_(ss, submissionId) {
   if (!sub) return { ok: false, error: "Submission not found", submission_id: submissionId };
 
   const answers = findRowsById_(ss.getSheetByName(SHEET_NAMES.answers), "submission_id", submissionId);
+  const answersNormalized = normalizeAnswersRows_(answers);
+  const issues = buildIssuesFromAnswerRows_(answersNormalized);
 
   return {
     ok: true,
     submission_id: submissionId,
     submission: sub,
     answers,
+    answers_normalized: answersNormalized,
+    issues,
     meta: { updatedAt: new Date().toISOString() }
   };
+}
+
+function normalizeAnswersRows_(rows) {
+  return (rows || []).map(normalizeAnswerRow_);
+}
+
+function normalizeAnswerRow_(row) {
+  const scoreEarned = toNumberOrEmpty_(row?.score_earned);
+  const scoreMax = toNumberOrEmpty_(row?.score_max);
+  const hasScores = scoreEarned !== "" && scoreMax !== "";
+  const maxPositive = hasScores && Number(scoreMax) > 0;
+  const isIssue = maxPositive ? Number(scoreEarned) < Number(scoreMax) : false;
+
+  return {
+    ...row,
+    score_earned: scoreEarned,
+    score_max: scoreMax,
+    photos: parsePhotosJson_(row?.photos_json),
+    is_issue: isIssue,
+  };
+}
+
+function toNumberOrEmpty_(value) {
+  if (value === "" || value === null || value === undefined) return "";
+  const num = Number(String(value).replace(",", "."));
+  return Number.isFinite(num) ? num : "";
+}
+
+function parsePhotosJson_(value) {
+  const raw = safe_(value);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(safe_).filter(Boolean);
+  } catch (_) {}
+  return [raw];
+}
+
+function buildIssuesFromAnswerRows_(rows) {
+  const issues = [];
+  (rows || []).forEach(row => {
+    if (!row?.is_issue) return;
+    issues.push({
+      qid: safe_(row.question_id),
+      title: safe_(row.question_text),
+      sectionTitle: safe_(row.section_title),
+      severity: safe_(row.severity) || "noncritical",
+      score: row.score_earned,
+      score_earned: row.score_earned,
+      score_max: row.score_max,
+      comment: safe_(row.comment),
+      photos: row.photos || [],
+    });
+  });
+  return issues;
 }
 
 function findRowById_(sh, idHeader, idValue) {

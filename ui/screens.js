@@ -103,6 +103,27 @@
     return "серая зона";
   }
 
+  function normalizeNumberOrEmpty(value) {
+    if (value === "" || value === null || value === undefined) return "";
+    const num = Number(String(value).replace(",", "."));
+    return Number.isFinite(num) ? num : "";
+  }
+
+  function formatScoreDisplay(value) {
+    const num = normalizeNumberOrEmpty(value);
+    if (num === "") return "—";
+    if (Math.abs(num - Math.round(num)) < 1e-9) return String(Math.round(num));
+    return String(num.toFixed(2)).replace(/\.?0+$/, "").replace(".", ",");
+  }
+
+  function zoneBadgeHtml(zone) {
+    const key = String(zone ?? "").toLowerCase();
+    const label = zoneLabelLower(key);
+    const cap = label ? `${label[0].toUpperCase()}${label.slice(1)}` : "Серая зона";
+    const cls = ["green", "yellow", "red"].includes(key) ? key : "gray";
+    return `<span class="zoneBadge ${escapeHtml(cls)}">${escapeHtml(cap)}</span>`;
+  }
+
   function sendTelegramResultMessage(result, submissionId) {
     const tgApp = window.Telegram?.WebApp;
     const sendData = tgApp?.sendData;
@@ -603,13 +624,11 @@
         const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set();
         const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
         const anySelected = set.size > 0;
+        const scoreUnit = hasItems ? (anySelected ? 0 : 1) : (checked ? 1 : 0);
+        const earnedScore = isExcluded ? "" : scoreUnit * qScore;
 
         if (!isExcluded) {
-          if (hasItems) {
-            score += anySelected ? 0 : 1;
-          } else {
-            score += checked ? 1 : 0;
-          }
+          score += scoreUnit;
         }
 
         if ((hasItems && anySelected) || (!hasItems && !checked)) {
@@ -622,7 +641,10 @@
             title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity,
-            score: qScore,
+            score: earnedScore,
+            scoreEarned: earnedScore,
+            scoreMax: isExcluded ? "" : qScore,
+            scoreUnit,
             comment: norm(note.text),
             photos: notePhotos(qid),
           });
@@ -643,10 +665,11 @@
         else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
         else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
 
+        const scoreUnit = kind === "good" ? 1 : (kind === "ok" ? 0.5 : 0);
+        const earnedScore = isExcluded ? "" : scoreUnit * qScore;
+
         if (!isExcluded) {
-          if (kind === "good") score += 1;
-          else if (kind === "ok") score += 0.5;
-          else score += 0;
+          score += scoreUnit;
         }
 
         if ((selectedValue || selectedLabel) && kind !== "good") {
@@ -659,7 +682,10 @@
             title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity,
-            score: qScore,
+            score: earnedScore,
+            scoreEarned: earnedScore,
+            scoreMax: isExcluded ? "" : qScore,
+            scoreUnit,
             comment: norm(note.text),
             photos: notePhotos(qid),
           });
@@ -701,7 +727,93 @@
     return new Set();
   }
 
+  function buildQuestionMap() {
+    const map = new Map();
+    const sections = activeSections(DATA.sections);
+    sections.forEach(section => {
+      const qs = questionsForSection(DATA.checklist, section.id);
+      qs.forEach(q => map.set(q.id, { ...q, sectionTitle: section.title || "" }));
+    });
+    return map;
+  }
+
+  function normalizePhotosList(raw) {
+    if (Array.isArray(raw)) return raw.map(v => norm(v)).filter(Boolean);
+    const str = norm(raw);
+    if (!str) return [];
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) return parsed.map(v => norm(v)).filter(Boolean);
+    } catch {}
+    return [str];
+  }
+
+  function normalizeAnswerRows(rawRows) {
+    const rows = Array.isArray(rawRows) ? rawRows : [];
+    const questionMap = buildQuestionMap();
+
+    return rows.map(row => {
+      const qid = norm(getAny(row, ["question_id", "qid", "questionId"], ""));
+      const question = questionMap.get(qid);
+
+      const scoreEarned = normalizeNumberOrEmpty(getAny(row, [
+        "score_earned", "earned_score", "scoreEarned", "earned"
+      ], ""));
+      const scoreMax = normalizeNumberOrEmpty(getAny(row, [
+        "score_max", "max_score", "scoreMax", "max"
+      ], ""));
+      const hasScores = scoreEarned !== "" && scoreMax !== "";
+      const maxPositive = hasScores && Number(scoreMax) > 0;
+
+      let isIssue = false;
+      const isIssueRaw = getAny(row, ["is_issue", "issue", "has_issue"], "");
+      if (isIssueRaw !== "") {
+        isIssue = toBool(isIssueRaw);
+      } else if (maxPositive) {
+        isIssue = Number(scoreEarned) < Number(scoreMax);
+      }
+
+      const scoreUnit = maxPositive ? Number(scoreEarned) / Number(scoreMax) : "";
+      const severityRaw = norm(getAny(row, ["severity", "critikal", "criticality"], question?.severity || "noncritical")).toLowerCase();
+      const severity = severityRaw === "critical" ? "critical" : "noncritical";
+
+      return {
+        ...row,
+        qid,
+        question,
+        sectionTitle: norm(getAny(row, ["section_title", "section", "section_name"], question?.sectionTitle || "")),
+        title: norm(getAny(row, ["question_text", "title", "question"], question?.title_text || question?.title || question?.question || "")),
+        severity,
+        scoreEarned,
+        scoreMax,
+        scoreUnit,
+        isIssue,
+        comment: norm(getAny(row, ["comment", "note"], "")),
+        photos: normalizePhotosList(getAny(row, ["photos", "photos_json", "photosJson"], "")),
+      };
+    });
+  }
+
+  function buildIssuesFromAnswerRows(answerRows) {
+    const normalizedRows = normalizeAnswerRows(answerRows);
+    return normalizedRows
+      .filter(row => row.isIssue)
+      .map(row => ({
+        qid: row.qid,
+        title: row.title,
+        sectionTitle: row.sectionTitle,
+        severity: row.severity === "critical" ? "critical" : "noncritical",
+        score: row.scoreEarned,
+        scoreEarned: row.scoreEarned,
+        scoreMax: row.scoreMax,
+        scoreUnit: row.scoreUnit,
+        comment: row.comment,
+        photos: row.photos,
+      }));
+  }
+
   function buildIssuesFromAnswers(answers) {
+    if (Array.isArray(answers)) return buildIssuesFromAnswerRows(answers);
     const normalized = normalizeAnswersPayload(answers);
     const sections = activeSections(DATA.sections);
     const issues = [];
@@ -719,6 +831,8 @@
           const checked = (set.has("1") || set.has("true") || set.has("yes") || set.has("да"));
           const anySelected = set.size > 0;
           const isIssue = hasItems ? anySelected : !checked;
+          const scoreUnit = hasItems ? (anySelected ? 0 : 1) : (checked ? 1 : 0);
+          const earnedScore = scoreUnit * qScore;
 
           if (isIssue) {
             issues.push({
@@ -726,7 +840,10 @@
               title: norm(q.title_text || q.title || q.question || q.name),
               sectionTitle,
               severity: (q.severity === "critical") ? "critical" : "noncritical",
-              score: qScore,
+              score: earnedScore,
+              scoreEarned: earnedScore,
+              scoreMax: qScore,
+              scoreUnit,
               comment: "",
               photos: [],
             });
@@ -750,13 +867,19 @@
         else if (selectedLabel && ok && selectedLabel === ok) kind = "ok";
         else if (selectedLabel && bad && selectedLabel === bad) kind = "bad";
 
+        const scoreUnit = kind === "good" ? 1 : (kind === "ok" ? 0.5 : 0);
+        const earnedScore = scoreUnit * qScore;
+
         if (kind !== "good") {
           issues.push({
             qid,
             title: norm(q.title_text || q.title || q.question || q.name),
             sectionTitle,
             severity: (q.severity === "critical") ? "critical" : "noncritical",
-            score: qScore,
+            score: earnedScore,
+            scoreEarned: earnedScore,
+            scoreMax: qScore,
+            scoreUnit,
             comment: "",
             photos: [],
           });
@@ -805,11 +928,13 @@
                   const commentHtml = (it.comment && String(it.comment).trim())
                     ? escapeHtml(it.comment)
                     : `<span class="muted">—</span>`;
+                  const scoreValue = it.scoreEarned ?? it.score_earned ?? it.score;
+                  const scoreHtml = escapeHtml(formatScoreDisplay(scoreValue));
 
                   return `
                     <tr>
                       <td>${escapeHtml(it.title || "")}</td>
-                      <td>${escapeHtml(it.score ?? "")}</td>
+                      <td>${scoreHtml}</td>
                       <td>${escapeHtml(sevText(it.severity))}</td>
                       <td>${commentHtml}</td>
                       <td>${photoHtml}</td>
@@ -862,13 +987,15 @@
     const BRANCHES = getBranches();
 
     const oblasts = listOblasts(BRANCHES);
-    mount(tplStartScreen({ oblasts }));
+    mount(tplStartScreen({ oblasts, showCabinet: IS_TG }));
 
     const oblastSelect = document.getElementById("oblastSelect");
     const citySelect = document.getElementById("citySelect");
     const addressSelect = document.getElementById("addressSelect");
     const startBtn = document.getElementById("startBtn");
+    const myChecksBtn = document.getElementById("myChecksBtn");
     const hint = document.getElementById("startHint");
+    const cabinetHint = document.getElementById("cabinetHint");
     const lastCheckHint = document.getElementById("lastCheckHint");
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
@@ -939,6 +1066,25 @@
     updateUserCard();
     updateUserLine(!IS_TG ? norm(STATE.fio) : "");
 
+    if (myChecksBtn) {
+      const tgId = norm(tgUser?.id || "");
+      if (!tgId) {
+        myChecksBtn.disabled = true;
+        if (cabinetHint) {
+          cabinetHint.style.display = "";
+          cabinetHint.textContent = "Не удалось определить ваш Telegram ID.";
+        }
+      } else if (cabinetHint) {
+        cabinetHint.style.display = "none";
+        cabinetHint.textContent = "";
+      }
+
+      myChecksBtn.onclick = () => {
+        if (!tgId) return;
+        renderCabinetScreen(DATA);
+      };
+    }
+
     function draftExpiresAt(draft) {
       const savedAt = Number(draft?.savedAt || 0);
       if (!savedAt) return null;
@@ -972,6 +1118,8 @@
       STATE.lastResult = draft.lastResult || null;
       STATE.lastResultId = draft.lastResultId || null;
       STATE.lastSubmittedAt = draft.lastSubmittedAt || "";
+      STATE.lastBotSendStatus = draft.lastBotSendStatus || "";
+      STATE.lastBotSendError = draft.lastBotSendError || "";
 
       STATE.issueNotes = draft.issueNotes || {};
       STATE.noteOpen = draft.noteOpen || {};
@@ -1194,11 +1342,183 @@
       STATE.lastResult = null;
       STATE.lastResultId = null;
       STATE.lastSubmittedAt = "";
+      STATE.lastBotSendStatus = "";
+      STATE.lastBotSendError = "";
       STATE.singleAnswerLabels = {};
 
       saveDraft();
       renderChecklist(DATA);
     };
+  };
+
+  // ---------- Cabinet screen ----------
+  window.renderCabinetScreen = function renderCabinetScreen(data, { forceReload = false } = {}) {
+    DATA = data;
+    clearResultQuery();
+
+    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const tgId = norm(tgUser?.id || "");
+    if (!IS_TG || !tgId) {
+      alert("Личный кабинет доступен только из Telegram.");
+      renderStart(DATA);
+      return;
+    }
+
+    mount(`
+      <div class="container">
+        <div class="card">
+          <div class="cardHeader">
+            <div class="title">Личный кабинет</div>
+            <div class="subTitle">Мои проверки</div>
+          </div>
+          <div class="resultActions">
+            <button id="cabinetBackBtn" class="btn btnSecondary" type="button">К выбору филиала</button>
+            <button id="cabinetReloadBtn" class="btn primary" type="button">Обновить</button>
+          </div>
+          <div id="cabinetStatus" class="hint cabinetMeta"></div>
+        </div>
+
+        <div class="card">
+          <div class="cardHeader">
+            <div class="title">История проверок</div>
+          </div>
+          <div id="cabinetTableWrap" class="cabinetTableWrap"></div>
+        </div>
+      </div>
+    `);
+
+    const backBtn = document.getElementById("cabinetBackBtn");
+    const reloadBtn = document.getElementById("cabinetReloadBtn");
+    const statusEl = document.getElementById("cabinetStatus");
+    const tableWrap = document.getElementById("cabinetTableWrap");
+
+    const renderStatus = (text, isError = false) => {
+      if (!statusEl) return;
+      statusEl.textContent = text || "";
+      statusEl.style.color = isError ? "var(--danger)" : "";
+    };
+
+    const formatDateSmart = (value) => {
+      const formatted = formatRuDateTime(value);
+      return formatted || norm(value) || "—";
+    };
+
+    function addressFromRow(row) {
+      const branchId = norm(getAny(row, ["branch_id", "branchId"], ""));
+      const branchRow = branchId ? findBranchById(branchId) : null;
+      const branchName = norm(getAny(row, ["branch_name", "branchName"], getAddressLabel(branchRow || {})));
+      const city = norm(getAny(row, ["city", "город"], getCity(branchRow || {})));
+      return [city, branchName].filter(Boolean).join(", ") || branchName || city || "—";
+    }
+
+    const renderTable = (items, total) => {
+      const list = Array.isArray(items) ? items : [];
+      if (!list.length) {
+        tableWrap.innerHTML = `<div class="hint">Пока нет сохранённых проверок.</div>`;
+        renderStatus("Как только вы завершите проверку, она появится здесь.");
+        return;
+      }
+
+      const totalText = total && total > list.length ? `Показано ${list.length} из ${total}.` : `Всего проверок: ${list.length}.`;
+      renderStatus(totalText);
+
+      tableWrap.innerHTML = `
+        <table class="cabinetTable">
+          <thead>
+            <tr>
+              <th style="width:130px;">Дата</th>
+              <th>Адрес</th>
+              <th style="width:140px;">Зона</th>
+              <th style="width:110px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(item => {
+              const submissionId = norm(item.submission_id);
+              const submittedAt = formatDateSmart(item.submitted_at);
+              const address = addressFromRow(item);
+              const zone = zoneBadgeHtml(item.zone);
+
+              return `
+                <tr>
+                  <td>${escapeHtml(submittedAt)}</td>
+                  <td>${escapeHtml(address)}</td>
+                  <td>${zone}</td>
+                  <td class="cabinetRowAction">
+                    <button class="btn btnSecondary" type="button" data-open-submission="${escapeHtml(submissionId)}">Открыть</button>
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
+
+      tableWrap.querySelectorAll("[data-open-submission]").forEach(btn => {
+        btn.onclick = async () => {
+          const submissionId = norm(btn.getAttribute("data-open-submission"));
+          if (!submissionId) return;
+          btn.disabled = true;
+          const prevText = btn.textContent;
+          btn.textContent = "Открываю…";
+          try {
+            renderStatus("Открываю результат…");
+            const res = await api.getSubmission(submissionId);
+            if (!res?.ok) throw new Error(res?.error || "Не удалось открыть результат");
+            renderReadonlyResult(DATA, res, { backMode: "cabinet" });
+            return;
+          } catch (err) {
+            console.warn("Failed to open submission", err);
+            alert("Не удалось открыть результат. Попробуйте ещё раз.");
+            btn.disabled = false;
+            btn.textContent = prevText;
+            renderStatus("Не удалось открыть результат.", true);
+          }
+        };
+      });
+    };
+
+    const renderLoading = () => {
+      tableWrap.innerHTML = `<div class="hint">Загружаю ваши проверки…</div>`;
+      renderStatus("Запрашиваю данные из таблицы…");
+    };
+
+    const loadItems = async () => {
+      renderLoading();
+      const cache = STATE.cabinetCache;
+      const cacheAgeMs = cache?.fetchedAt ? (Date.now() - cache.fetchedAt) : Infinity;
+      const cacheTtlMs = 60 * 1000;
+      if (!forceReload && cache?.items && cacheAgeMs < cacheTtlMs) {
+        renderTable(cache.items, cache.total);
+        return;
+      }
+
+      try {
+        const limit = (typeof MY_SUBMISSIONS_DEFAULT_LIMIT !== "undefined") ? MY_SUBMISSIONS_DEFAULT_LIMIT : 50;
+        const res = await api.getMySubmissions(tgId, { limit });
+        if (!res?.ok) throw new Error(res?.error || "Не удалось загрузить список");
+        const items = Array.isArray(res.items) ? res.items : [];
+        STATE.cabinetCache = { items, total: res.total || items.length, fetchedAt: Date.now() };
+        renderTable(items, res.total || items.length);
+      } catch (err) {
+        console.error(err);
+        tableWrap.innerHTML = `<div class="hint">Не удалось загрузить список проверок 😕</div>`;
+        renderStatus("Попробуйте обновить список чуть позже.", true);
+      }
+    };
+
+    if (backBtn) {
+      backBtn.onclick = () => {
+        renderStart(DATA);
+      };
+    }
+    if (reloadBtn) {
+      reloadBtn.onclick = () => {
+        renderCabinetScreen(DATA, { forceReload: true });
+      };
+    }
+
+    loadItems();
   };
 
   // ---------- Checklist screen ----------
@@ -1519,6 +1839,8 @@
         // create submission payload for sheet
         STATE.lastResultId = submissionId;
         STATE.lastSubmittedAt = new Date().toISOString();
+        STATE.lastBotSendStatus = "";
+        STATE.lastBotSendError = "";
 
         const payload = buildSubmissionPayload(submissionId, result);
         saveDraft();
@@ -1536,6 +1858,26 @@
 
         const returnedId = norm(submitResult?.result_id || "");
         if (returnedId) STATE.lastResultId = returnedId;
+
+        // notify Telegram bot with result link (auto)
+        try {
+          const resultId = norm(STATE.lastResultId || submissionId);
+          if (IS_TG && resultId) {
+            const sent = sendTelegramResultMessage(result, resultId);
+            STATE.lastBotSendStatus = sent ? "sent" : "failed";
+            STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
+          } else {
+            STATE.lastBotSendStatus = "skipped";
+            STATE.lastBotSendError = "";
+          }
+        } catch (botErr) {
+          console.warn("Failed to auto-send result to Telegram bot", botErr);
+          STATE.lastBotSendStatus = "failed";
+          STATE.lastBotSendError = String(botErr);
+        }
+
+        // invalidate cabinet cache so new check appears immediately
+        STATE.cabinetCache = null;
 
         // last check meta for branch (local)
         setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
@@ -1967,6 +2309,7 @@
           },
         })}
         ${tplResultActions({ showShare: true })}
+        <div id="botSendHint" class="hint cabinetMeta"></div>
 
         <div class="card">
           <div class="cardHeader">
@@ -2001,7 +2344,33 @@
       renderStart(DATA);
     };
 
+    const botSendHint = document.getElementById("botSendHint");
     const sendBotBtn = document.getElementById("sendBotResultBtn");
+    const updateBotSendUi = () => {
+      const status = STATE.lastBotSendStatus;
+      const err = norm(STATE.lastBotSendError);
+      if (botSendHint) {
+        if (status === "sent") {
+          botSendHint.textContent = "Бот уведомлён ✅";
+          botSendHint.style.color = "";
+        } else if (status === "failed") {
+          botSendHint.textContent = err
+            ? `Не удалось уведомить бота: ${err}`
+            : "Не удалось уведомить бота автоматически. Попробуйте ещё раз.";
+          botSendHint.style.color = "var(--danger)";
+        } else {
+          botSendHint.textContent = "";
+          botSendHint.style.color = "";
+        }
+      }
+      if (sendBotBtn) {
+        sendBotBtn.disabled = false;
+        sendBotBtn.textContent = status === "sent" ? "Отправлено ✅ (повторить)" : "Сообщить боту";
+      }
+    };
+
+    updateBotSendUi();
+
     if (sendBotBtn) {
       sendBotBtn.onclick = () => {
         const id = norm(STATE.lastResultId);
@@ -2012,17 +2381,15 @@
 
         try {
           const sent = sendTelegramResultMessage(result, id);
-          if (!sent) {
-            sendBotBtn.disabled = false;
-            sendBotBtn.textContent = "Сообщить боту (закроет форму)";
-            return;
-          }
-          sendBotBtn.textContent = "Отправлено ✅";
+          STATE.lastBotSendStatus = sent ? "sent" : "failed";
+          STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
         } catch (err) {
           console.warn("Failed to send data to Telegram bot", err);
-          sendBotBtn.disabled = false;
-          sendBotBtn.textContent = "Сообщить боту (закроет форму)";
+          STATE.lastBotSendStatus = "failed";
+          STATE.lastBotSendError = String(err);
         }
+
+        updateBotSendUi();
       };
     }
 
@@ -2062,7 +2429,7 @@
   };
 
   // ---------- Readonly result by link ----------
-  window.renderReadonlyResult = function renderReadonlyResult(data, submissionPayload) {
+  window.renderReadonlyResult = function renderReadonlyResult(data, submissionPayload, opts = {}) {
     DATA = data;
 
     const sub = submissionPayload?.submission || {};
@@ -2072,6 +2439,9 @@
     const stored = submissionPayload?.payload || submissionPayload;
     const payloadIssues = stored?.issues || sub?.issues || [];
     const storedAnswers = stored?.answers || sub?.answers || {};
+    const answerRows = Array.isArray(submissionPayload?.answers_normalized)
+      ? submissionPayload.answers_normalized
+      : (Array.isArray(submissionPayload?.answers) ? submissionPayload.answers : []);
 
     const buildIssueKey = (item = {}) => {
       const id = norm(item.qid || item.id || "");
@@ -2087,33 +2457,52 @@
       if (!payloadIssueMap.has(key)) payloadIssueMap.set(key, it);
     });
 
-    const hasAnswers = (() => {
+    const hasAnswersPayload = (() => {
       if (!storedAnswers) return false;
       if (typeof storedAnswers === "string") return storedAnswers.trim().length > 0;
       return Object.keys(storedAnswers).length > 0;
     })();
 
+    const mergeIssue = (issue) => {
+      const match = payloadIssueMap.get(buildIssueKey(issue));
+      const severityRaw = norm(issue.severity || match?.severity || "").toLowerCase();
+      const severity = severityRaw === "critical" ? "critical" : "noncritical";
+      const scoreVal = issue.scoreEarned ?? issue.score ?? match?.scoreEarned ?? match?.score_earned ?? match?.score ?? "";
+      const scoreMax = issue.scoreMax ?? match?.scoreMax ?? match?.score_max ?? "";
+      const photos = (issue.photos && issue.photos.length) ? issue.photos : (match?.photos || []);
+      return {
+        ...issue,
+        severity,
+        score: scoreVal,
+        scoreEarned: scoreVal,
+        scoreMax,
+        comment: issue.comment || match?.comment || "",
+        photos,
+      };
+    };
+
     let issues = [];
-    if (hasAnswers) {
-      issues = buildIssuesFromAnswers(storedAnswers).map(issue => {
-        const match = payloadIssueMap.get(buildIssueKey(issue));
+    if (answerRows.length) {
+      issues = buildIssuesFromAnswerRows(answerRows).map(mergeIssue);
+    } else if (hasAnswersPayload) {
+      issues = buildIssuesFromAnswers(storedAnswers).map(mergeIssue);
+    } else if (payloadIssues.length) {
+      issues = payloadIssues.map(it => {
+        const scoreVal = it.scoreEarned ?? it.score_earned ?? it.score ?? "";
+        const scoreMax = it.scoreMax ?? it.score_max ?? "";
+        const severityRaw = norm(it.severity || "").toLowerCase();
+        const severity = severityRaw === "critical" ? "critical" : "noncritical";
         return {
-          ...issue,
-          severity: issue.severity || match?.severity || "noncritical",
-          score: issue.score ?? match?.score,
-          comment: issue.comment || match?.comment || "",
-          photos: (issue.photos && issue.photos.length) ? issue.photos : (match?.photos || []),
+          title: it.title || it.question || "",
+          sectionTitle: it.sectionTitle || it.section || it.section_title || "",
+          severity,
+          score: scoreVal,
+          scoreEarned: scoreVal,
+          scoreMax,
+          comment: it.comment || "",
+          photos: it.photos || [],
         };
       });
-    } else if (payloadIssues.length) {
-      issues = payloadIssues.map(it => ({
-        title: it.title || it.question || "",
-        sectionTitle: it.sectionTitle || it.section || it.section_title || "",
-        severity: it.severity || "noncritical",
-        score: it.score,
-        comment: it.comment || "",
-        photos: it.photos || [],
-      }));
     }
 
     const zone = sub.zone || stored.zone || "gray";
@@ -2124,7 +2513,9 @@
     const addr = norm(getAddressLabel(branchRow || {}));
     const addrLine = [norm(stored.city || sub.city || ""), addr].filter(Boolean).join(", ");
     const fio = norm(stored.fio || sub.fio || "");
-    const submittedAt = lastTs ? formatRuDateTime(lastTs) : "";
+    const submittedAt = lastTs ? (formatRuDateTime(lastTs) || norm(lastTs)) : "";
+    const backMode = opts?.backMode === "cabinet" ? "cabinet" : "start";
+    const backLabel = backMode === "cabinet" ? "К моим проверкам" : "К выбору филиала";
 
     mount(`
       <div class="container">
@@ -2139,7 +2530,7 @@
           },
         })}
         <div class="resultActions">
-          <button id="backToStartBtn" class="btn primary">К выбору филиала</button>
+          <button id="backToStartBtn" class="btn primary">${escapeHtml(backLabel)}</button>
         </div>
 
         <div class="card">
@@ -2165,14 +2556,20 @@
       });
     }
 
-    document.getElementById("backToStartBtn").onclick = async () => {
-      // reload start flow
-      clearResultQuery();
-      resetCheckKeepMeta();
-      STATE.branchId = "";
-      saveDraft();
-      renderStart(DATA);
-    };
+    const backBtn = document.getElementById("backToStartBtn");
+    if (backBtn) {
+      backBtn.onclick = () => {
+        clearResultQuery();
+        if (backMode === "cabinet") {
+          renderCabinetScreen(DATA);
+          return;
+        }
+        resetCheckKeepMeta();
+        STATE.branchId = "";
+        saveDraft();
+        renderStart(DATA);
+      };
+    }
   };
 
 })();
