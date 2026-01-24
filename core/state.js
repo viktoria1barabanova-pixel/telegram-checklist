@@ -21,6 +21,9 @@
     lastResult: null,
     lastResultId: null, // submission_id for share link
     lastSubmittedAt: "",
+    lastBotSendStatus: "", // "sent" | "failed" | "skipped"
+    lastBotSendError: "",
+    cabinetCache: null, // { items, fetchedAt }
 
     issueNotes: {}, // key -> { text: string, photos: string[] (dataURL) }
     noteOpen: {}, // key -> bool
@@ -153,6 +156,8 @@
           lastResult: STATE.lastResult,
           lastResultId: STATE.lastResultId,
           lastSubmittedAt: STATE.lastSubmittedAt,
+          lastBotSendStatus: STATE.lastBotSendStatus,
+          lastBotSendError: STATE.lastBotSendError,
 
           issueNotes: STATE.issueNotes,
           noteOpen: STATE.noteOpen,
@@ -183,6 +188,8 @@
       d.checkboxAnswers = restored;
       d.singleAnswerLabels = d.singleAnswerLabels || {};
       d.lastSubmittedAt = d.lastSubmittedAt || "";
+      d.lastBotSendStatus = d.lastBotSendStatus || "";
+      d.lastBotSendError = d.lastBotSendError || "";
       d.completedSections = d.completedSections || [];
 
       // migrate notes
@@ -226,6 +233,8 @@
     STATE.lastResult = null;
     STATE.lastResultId = null;
     STATE.lastSubmittedAt = "";
+    STATE.lastBotSendStatus = "";
+    STATE.lastBotSendError = "";
     STATE.issueNotes = {};
     STATE.noteOpen = {};
     // city/fio/branchId/enabledSections пусть останутся — это “контекст”
@@ -241,6 +250,8 @@
     STATE.lastResult = null;
     STATE.lastResultId = null;
     STATE.lastSubmittedAt = "";
+    STATE.lastBotSendStatus = "";
+    STATE.lastBotSendError = "";
     STATE.issueNotes = {};
     STATE.noteOpen = {};
   };
@@ -261,9 +272,12 @@
     STATE.lastResult = null;
     STATE.lastResultId = null;
     STATE.lastSubmittedAt = "";
+    STATE.lastBotSendStatus = "";
+    STATE.lastBotSendError = "";
     STATE.issueNotes = {};
     STATE.noteOpen = {};
     STATE.singleAnswerLabels = {};
+    STATE.cabinetCache = null;
   };
 
   // ---------- lastCheck (per branch) ----------

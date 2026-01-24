@@ -100,6 +100,10 @@
     const startText = (typeof UI_TEXT !== "undefined" && UI_TEXT && UI_TEXT.startButton)
       ? UI_TEXT.startButton
       : "Начать";
+    const showCabinet = !!opts.showCabinet;
+    const cabinetBtn = showCabinet
+      ? `<button id="myChecksBtn" class="btn btnSecondary" type="button">Мои проверки</button>`
+      : "";
     const appVersion = (typeof APP_VERSION !== "undefined" && APP_VERSION) ? `v${APP_VERSION}` : "";
     const versionLine = appVersion ? `<div class="muted" style="margin-top:6px;">Версия: ${h(appVersion)}</div>` : "";
 
@@ -158,11 +162,13 @@
             <div id="currentCheckHint" class="hint"></div>
           </div>
 
-          <div class="actions">
+          <div class="actions startActions">
             <button id="startBtn" class="btn primary" disabled>${h(startText)}</button>
+            ${cabinetBtn}
           </div>
 
           <div id="startHint" class="hint"></div>
+          <div id="cabinetHint" class="hint" style="display:none;"></div>
           <div id="draftActions" class="hint" style="display:none;"></div>
         </div>
       </div>
@@ -525,7 +531,7 @@
 
     return `
       <div class="resultActions">
-        ${canSendToBot ? `<button id="sendBotResultBtn" class="btn btnSecondary">Сообщить боту (закроет форму)</button>` : ``}
+        ${canSendToBot ? `<button id="sendBotResultBtn" class="btn btnSecondary">Сообщить боту</button>` : ``}
         ${showShare && shareEnabled ? `<button id="copyResultLinkBtn" class="btn ghost">Скопировать ссылку</button>` : ``}
         ${showShare && shareEnabled ? `<button id="shareResultLinkBtn" class="btn btnSecondary">Отправить в чат</button>` : ``}
         <button id="newCheckBtn" class="btn primary">Новая проверка</button>

@@ -751,6 +751,21 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   margin-top: 10px;
 }
 
+.startActions{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.startActions .btn{
+  width: 100%;
+  border-radius: 18px;
+}
+
+.startActions .btn:only-child{
+  grid-column: 1 / -1;
+}
+
 .resultActions{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -820,6 +835,77 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 .noticeText{
   font-size: 13px;
   line-height: 1.4;
+}
+
+.cabinetTableWrap{
+  overflow-x: auto;
+}
+
+.cabinetTable{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cabinetTable th,
+.cabinetTable td{
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(17,24,39,.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.cabinetTable tbody tr{
+  transition: background-color .18s ease;
+}
+
+.cabinetTable tbody tr:hover{
+  background: rgba(255,255,255,.55);
+}
+
+.cabinetRowAction{
+  text-align: right;
+  white-space: nowrap;
+}
+
+.zoneBadge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: .02em;
+  border: 1px solid transparent;
+}
+
+.zoneBadge.green{
+  color: #0F5132;
+  background: rgba(46,196,166,.18);
+  border-color: rgba(46,196,166,.38);
+}
+
+.zoneBadge.yellow{
+  color: #7A5900;
+  background: rgba(242,201,76,.22);
+  border-color: rgba(242,201,76,.42);
+}
+
+.zoneBadge.red{
+  color: #7A1F1F;
+  background: rgba(214,69,69,.16);
+  border-color: rgba(214,69,69,.34);
+}
+
+.zoneBadge.gray{
+  color: #374151;
+  background: rgba(107,114,128,.18);
+  border-color: rgba(107,114,128,.32);
+}
+
+.cabinetMeta{
+  margin-top: 6px;
 }
 
 .loadingPill{
