@@ -282,6 +282,7 @@ button {
 #finishBtn, .finishBtn,
 #newCheckBtn, .newCheckBtn,
 #resetDraftBtn, .resetDraftBtn,
+#shareResultLinkBtn, .shareResultLinkBtn,
 #copyResultLinkBtn, .copyResultLinkBtn,
 .btnPrimary {
   width: 100%;

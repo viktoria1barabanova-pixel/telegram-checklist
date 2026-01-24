@@ -245,6 +245,27 @@
     STATE.noteOpen = {};
   };
 
+  // “Новая проверка (с нуля)” — очищаем всё, включая город/филиал/ФИО
+  window.resetAllState = function resetAllState() {
+    STATE.oblast = "";
+    STATE.city = "";
+    STATE.fio = "";
+    STATE.branchId = "";
+    STATE.tgUser = null;
+    STATE.enabledSections = [];
+    STATE.activeSection = "";
+    STATE.completedSections = [];
+    STATE.singleAnswers = {};
+    STATE.checkboxAnswers = {};
+    STATE.isFinished = false;
+    STATE.lastResult = null;
+    STATE.lastResultId = null;
+    STATE.lastSubmittedAt = "";
+    STATE.issueNotes = {};
+    STATE.noteOpen = {};
+    STATE.singleAnswerLabels = {};
+  };
+
   // ---------- lastCheck (per branch) ----------
   window.setLastCheck = function setLastCheck(branchId, meta) {
     try {

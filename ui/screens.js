@@ -871,6 +871,7 @@
     const currentCheckBlock = document.getElementById("currentCheckBlock");
     const currentCheckBtn = document.getElementById("currentCheckBtn");
     const currentCheckHint = document.getElementById("currentCheckHint");
+    const draftActions = document.getElementById("draftActions");
     const userLine = document.getElementById("userNameLine");
     const userCard = document.getElementById("tgUserCard");
     const userCardName = document.getElementById("tgUserName");
@@ -1029,6 +1030,10 @@
       addressSelect.disabled = true;
       startBtn.disabled = true;
       if (lastCheckHint) lastCheckHint.innerHTML = "";
+      if (draftActions) {
+        draftActions.innerHTML = "";
+        draftActions.style.display = "none";
+      }
     }
 
     function refreshStartReady() {
@@ -1099,6 +1104,10 @@
 
     addressSelect.onchange = () => {
       refreshStartReady();
+      if (draftActions) {
+        draftActions.innerHTML = "";
+        draftActions.style.display = "none";
+      }
 
       // show last check for this address (stored locally)
       if (lastCheckHint) {
@@ -1118,16 +1127,34 @@
       const bid = norm(addressSelect.value);
       const d = loadDraft(bid);
       if (d) {
-        STATE.branchId = d.branchId || bid;
-        applyDraftToState(d);
         hint.innerHTML = draftHintText(d);
-        // if draft exists, keep last-check hint in sync with current selection
-        if (lastCheckHint && !lastCheckHint.textContent) {
-          const local = getLastCheck(STATE.branchId);
-          const server = getLastCheckFromServer(STATE.branchId);
-          const last = mergeLastChecks(local, server);
-          if (last && (last.ts || last.percent != null || last.fio || last.zone)) {
-            lastCheckHint.innerHTML = formatLastCheckHint(last) || "";
+        if (draftActions) {
+          draftActions.style.display = "";
+          draftActions.innerHTML = `
+            <div class="actions">
+              <button id="useDraftBtn" class="btn btnSecondary" type="button">Продолжить черновик</button>
+              <button id="resetDraftBtn" class="btn btnDanger" type="button">Сбросить данные</button>
+            </div>
+          `;
+          const useBtn = document.getElementById("useDraftBtn");
+          const resetBtn = document.getElementById("resetDraftBtn");
+          if (useBtn) {
+            useBtn.onclick = () => {
+              STATE.branchId = d.branchId || bid;
+              applyDraftToState(d);
+              renderChecklist(DATA);
+            };
+          }
+          if (resetBtn) {
+            resetBtn.onclick = () => {
+              clearDraftForBranch(bid);
+              hint.textContent = "Данные сброшены. Можно начать заново.";
+              if (draftActions) {
+                draftActions.innerHTML = "";
+                draftActions.style.display = "none";
+              }
+              refreshStartReady();
+            };
           }
         }
       }
@@ -1509,6 +1536,7 @@
         setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
 
         sendTelegramResultMessage(result, STATE.lastResultId || submissionId);
+        clearDraftStorageOnly(STATE.branchId);
 
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
       } catch (e) {
@@ -1963,9 +1991,10 @@
 
     const newBtn = document.getElementById("newCheckBtn");
     newBtn.onclick = () => {
-      resetCheckKeepMeta();
+      if (STATE.branchId) clearDraftStorageOnly(STATE.branchId);
+      resetAllState();
       saveDraft();
-      renderChecklist(DATA);
+      renderStart(DATA);
     };
 
     const copyBtn = document.getElementById("copyResultLinkBtn");
@@ -1978,6 +2007,27 @@
         const ok = await copyTextToClipboard(url);
         copyBtn.textContent = ok ? "Ссылка скопирована ✅" : "Не удалось скопировать";
         setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
+      };
+    }
+
+    const shareBtn = document.getElementById("shareResultLinkBtn");
+    if (shareBtn) {
+      shareBtn.onclick = () => {
+        const id = norm(STATE.lastResultId);
+        if (!id) return;
+        const url = buildResultLink(id);
+        const zone = zoneLabelLower(result.zone);
+        const text = `Результат проверки: ${zone}. ${url}`;
+        const tgApp = window.Telegram?.WebApp;
+        if (tgApp?.openTelegramLink) {
+          tgApp.openTelegramLink(
+            `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+          );
+        } else {
+          copyTextToClipboard(url);
+          shareBtn.textContent = "Ссылка скопирована ✅";
+          setTimeout(() => (shareBtn.textContent = "Отправить в чат"), 1500);
+        }
       };
     }
   };
