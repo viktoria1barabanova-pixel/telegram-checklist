@@ -134,6 +134,8 @@ h2 {
 /* Inputs */
 select,
 input[type="text"],
+input[type="date"],
+input[type="number"],
 textarea {
   width: 100%;
   padding: 12px 44px 12px 12px; /* right padding for select arrow */
@@ -151,6 +153,8 @@ textarea { resize: vertical; }
 
 select:focus,
 input[type="text"]:focus,
+input[type="date"]:focus,
+input[type="number"]:focus,
 textarea:focus {
   border-color: rgba(232, 90, 138, 0.35);
   box-shadow: 0 0 0 4px rgba(232, 90, 138, 0.12);
@@ -966,6 +970,42 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   padding-top: 10px;
 }
 
+.cabinetFilters{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: end;
+}
+
+.cabinetFilterField{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.cabinetFilterField span{
+  letter-spacing: .02em;
+}
+
+.cabinetFilterField input{
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.cabinetFilterField--grow{
+  grid-column: span 2;
+}
+
+@media (max-width: 720px) {
+  .cabinetFilterField--grow{
+    grid-column: span 1;
+  }
+}
+
 .cabinetTableWrap{
   overflow-x: auto;
 }
@@ -1012,6 +1052,26 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 .cabinetRow:focus-visible{
   outline: 2px solid rgba(232, 90, 138, 0.7);
   outline-offset: -2px;
+}
+
+.cabinetZoneCell{
+  font-weight: 800;
+}
+
+.cabinetZoneCell--green{
+  background: rgba(46,196,166,.16);
+}
+
+.cabinetZoneCell--yellow{
+  background: rgba(242,201,76,.24);
+}
+
+.cabinetZoneCell--red{
+  background: rgba(214,69,69,.16);
+}
+
+.cabinetZoneCell--gray{
+  background: rgba(107,114,128,.18);
 }
 
 .zoneBadge{
