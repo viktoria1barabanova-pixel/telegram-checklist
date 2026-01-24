@@ -521,9 +521,11 @@
     const showShare = (opts.showShare === undefined) ? true : !!opts.showShare;
 
     const shareEnabled = (typeof FEATURE_SHARE_LINK !== "undefined") ? !!FEATURE_SHARE_LINK : false;
+    const canSendToBot = Boolean(window.Telegram?.WebApp?.sendData);
 
     return `
       <div class="resultActions">
+        ${canSendToBot ? `<button id="sendBotResultBtn" class="btn btnSecondary">Сообщить боту (закроет форму)</button>` : ``}
         ${showShare && shareEnabled ? `<button id="copyResultLinkBtn" class="btn ghost">Скопировать ссылку</button>` : ``}
         ${showShare && shareEnabled ? `<button id="shareResultLinkBtn" class="btn btnSecondary">Отправить в чат</button>` : ``}
         <button id="newCheckBtn" class="btn primary">Новая проверка</button>
