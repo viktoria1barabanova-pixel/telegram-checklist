@@ -163,6 +163,7 @@
           </div>
 
           <div id="startHint" class="hint"></div>
+          <div id="draftActions" class="hint" style="display:none;"></div>
         </div>
       </div>
     `;
@@ -524,6 +525,7 @@
     return `
       <div class="resultActions">
         ${showShare && shareEnabled ? `<button id="copyResultLinkBtn" class="btn ghost">Скопировать ссылку</button>` : ``}
+        ${showShare && shareEnabled ? `<button id="shareResultLinkBtn" class="btn btnSecondary">Отправить в чат</button>` : ``}
         <button id="newCheckBtn" class="btn primary">Новая проверка</button>
       </div>
     `;
