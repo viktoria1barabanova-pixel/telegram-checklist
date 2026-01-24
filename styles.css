@@ -962,6 +962,10 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
 .cabinetHeader{
   margin-bottom: 6px;
 }
+.cabinetHeader .title{
+  font-size: 26px;
+  font-weight: 800;
+}
 .cabinetActions{
   grid-template-columns: 1fr;
   margin-top: 4px;
@@ -970,39 +974,38 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   padding-top: 10px;
 }
 
-.cabinetFilters{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
+.cabinetSortBar{
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 12px;
-  align-items: end;
 }
 
-.cabinetFilterField{
+.cabinetSortField{
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
   font-weight: 800;
   color: var(--muted);
+  min-width: 220px;
 }
 
-.cabinetFilterField span{
+.cabinetSortField span{
   letter-spacing: .02em;
 }
 
-.cabinetFilterField input{
+.cabinetSortField select{
   padding: 10px 12px;
   font-size: 14px;
 }
 
-.cabinetFilterField--grow{
-  grid-column: span 2;
-}
-
 @media (max-width: 720px) {
-  .cabinetFilterField--grow{
-    grid-column: span 1;
+  .cabinetSortBar{
+    justify-content: stretch;
+  }
+  .cabinetSortField{
+    width: 100%;
+    min-width: 0;
   }
 }
 

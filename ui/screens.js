@@ -1482,26 +1482,17 @@
         </div>
         <div id="cabinetStatus" class="hint cabinetMeta"></div>
         <div class="card cabinetCard">
-          <div class="cabinetFilters" id="cabinetFilters">
-            <label class="cabinetFilterField">
-              <span>Дата с</span>
-              <input id="cabinetDateFrom" type="date" inputmode="numeric" />
-            </label>
-            <label class="cabinetFilterField">
-              <span>Дата по</span>
-              <input id="cabinetDateTo" type="date" inputmode="numeric" />
-            </label>
-            <label class="cabinetFilterField cabinetFilterField--grow">
-              <span>Имя</span>
-              <input id="cabinetNameFilter" type="text" placeholder="ФИО проверяющего" />
-            </label>
-            <label class="cabinetFilterField">
-              <span>% от</span>
-              <input id="cabinetPercentMin" type="number" step="0.1" min="0" max="100" placeholder="0" />
-            </label>
-            <label class="cabinetFilterField">
-              <span>% до</span>
-              <input id="cabinetPercentMax" type="number" step="0.1" min="0" max="100" placeholder="100" />
+          <div class="cabinetSortBar" id="cabinetSortBar">
+            <label class="cabinetSortField" for="cabinetSortSelect">
+              <span>Сортировка</span>
+              <select id="cabinetSortSelect" class="select">
+                <option value="date_desc">Сначала новые</option>
+                <option value="date_asc">Сначала старые</option>
+                <option value="percent_desc">% по убыванию</option>
+                <option value="percent_asc">% по возрастанию</option>
+                <option value="zone_desc">Зона: лучше → хуже</option>
+                <option value="zone_asc">Зона: хуже → лучше</option>
+              </select>
             </label>
           </div>
           <div id="cabinetTableWrap" class="cabinetTableWrap"></div>
@@ -1516,20 +1507,9 @@
     const reloadBtn = document.getElementById("cabinetReloadBtn");
     const statusEl = document.getElementById("cabinetStatus");
     const tableWrap = document.getElementById("cabinetTableWrap");
-    const filtersWrap = document.getElementById("cabinetFilters");
-    const dateFromInput = document.getElementById("cabinetDateFrom");
-    const dateToInput = document.getElementById("cabinetDateTo");
-    const nameInput = document.getElementById("cabinetNameFilter");
-    const percentMinInput = document.getElementById("cabinetPercentMin");
-    const percentMaxInput = document.getElementById("cabinetPercentMax");
-
-    const filters = {
-      dateFrom: "",
-      dateTo: "",
-      name: "",
-      percentMin: "",
-      percentMax: "",
-    };
+    const sortBar = document.getElementById("cabinetSortBar");
+    const sortSelect = document.getElementById("cabinetSortSelect");
+    const sortState = { key: "date_desc" };
 
     let latestRawItems = [];
     let latestTotal = 0;
@@ -1545,28 +1525,43 @@
       return formatted || norm(value) || "—";
     };
 
-    const parsePercentFilterValue = (value) => {
-      if (value === null || value === undefined || value === "") return null;
-      const cleaned = String(value).replace("%", "").replace(",", ".").trim();
-      const num = Number(cleaned);
-      return Number.isFinite(num) ? num : null;
+    const SORT_LABELS = {
+      date_desc: "Сначала новые",
+      date_asc: "Сначала старые",
+      percent_desc: "% по убыванию",
+      percent_asc: "% по возрастанию",
+      zone_desc: "Зона: лучше → хуже",
+      zone_asc: "Зона: хуже → лучше",
     };
 
-    const toDayStart = (value) => {
-      if (!value) return null;
-      const d = new Date(value);
-      if (!Number.isFinite(d.getTime())) return null;
-      d.setHours(0, 0, 0, 0);
-      return d;
+    const zoneWeight = (zone) => {
+      const key = String(zone ?? "").toLowerCase();
+      if (key === "green") return 3;
+      if (key === "yellow") return 2;
+      if (key === "red") return 1;
+      return 0;
     };
 
-    const toDayEnd = (value) => {
-      if (!value) return null;
-      const d = new Date(value);
-      if (!Number.isFinite(d.getTime())) return null;
-      d.setHours(23, 59, 59, 999);
-      return d;
+    const dateValue = (row, fallback) => {
+      const d = parsePossibleDate(row?.submitted_at);
+      return d ? d.getTime() : fallback;
     };
+
+    const percentValue = (row, fallback) => {
+      const pct = normalizePercentValue(row?.percent);
+      return pct === null ? fallback : pct;
+    };
+
+    const sortComparators = {
+      date_desc: (a, b) => dateValue(b, Number.NEGATIVE_INFINITY) - dateValue(a, Number.NEGATIVE_INFINITY),
+      date_asc: (a, b) => dateValue(a, Number.POSITIVE_INFINITY) - dateValue(b, Number.POSITIVE_INFINITY),
+      percent_desc: (a, b) => percentValue(b, Number.NEGATIVE_INFINITY) - percentValue(a, Number.NEGATIVE_INFINITY),
+      percent_asc: (a, b) => percentValue(a, Number.POSITIVE_INFINITY) - percentValue(b, Number.POSITIVE_INFINITY),
+      zone_desc: (a, b) => zoneWeight(b.zone) - zoneWeight(a.zone),
+      zone_asc: (a, b) => zoneWeight(a.zone) - zoneWeight(b.zone),
+    };
+
+    const currentSortLabel = () => SORT_LABELS[sortState.key] || SORT_LABELS.date_desc;
 
     function isGeneralInspectionArea(row) {
       const area = t(getAny(row, ["inspection_area", "inspectionArea", "area"], ""));
@@ -1591,43 +1586,20 @@
       return [city, branchLabel].filter(Boolean).join(", ") || branchLabel || city || "—";
     }
 
-    function hasActiveFilters() {
-      return Object.values(filters).some(v => String(v || "").trim() !== "");
-    }
+    function sortItems(list) {
+      const base = Array.isArray(list) ? list : [];
+      const comparator = sortComparators[sortState.key] || sortComparators.date_desc;
+      const indexed = base.map((item, index) => ({ item, index }));
 
-    function applyFilters(list) {
-      let result = Array.isArray(list) ? [...list] : [];
-      const fromDate = toDayStart(filters.dateFrom);
-      const toDate = toDayEnd(filters.dateTo);
-      const nameNeedle = tkey(filters.name);
-      const minPercent = parsePercentFilterValue(filters.percentMin);
-      const maxPercent = parsePercentFilterValue(filters.percentMax);
+      indexed.sort((a, b) => {
+        const primary = comparator(a.item, b.item);
+        if (primary !== 0) return primary;
+        const tieByDate = sortComparators.date_desc(a.item, b.item);
+        if (tieByDate !== 0) return tieByDate;
+        return a.index - b.index;
+      });
 
-      if (fromDate || toDate) {
-        result = result.filter(item => {
-          const parsed = parsePossibleDate(item.submitted_at);
-          if (!parsed) return false;
-          if (fromDate && parsed < fromDate) return false;
-          if (toDate && parsed > toDate) return false;
-          return true;
-        });
-      }
-
-      if (nameNeedle) {
-        result = result.filter(item => tkey(getAny(item, ["fio", "name", "inspector", "user"], "")).includes(nameNeedle));
-      }
-
-      if (minPercent !== null || maxPercent !== null) {
-        result = result.filter(item => {
-          const pct = normalizePercentValue(item.percent);
-          if (pct === null) return false;
-          if (minPercent !== null && pct < minPercent) return false;
-          if (maxPercent !== null && pct > maxPercent) return false;
-          return true;
-        });
-      }
-
-      return result;
+      return indexed.map(entry => entry.item);
     }
 
     const openSubmission = async (submissionId, rowEl) => {
@@ -1656,6 +1628,11 @@
       latestRawItems = rawList;
       latestTotal = total || rawList.length;
       if (!tableWrap) return;
+      if (!rawList.length) {
+        tableWrap.innerHTML = `<div class="hint">Вы пока еще не провели ни одну проверку</div>`;
+        renderStatus("Как только вы завершите проверку, она появится здесь.");
+        return;
+      }
       const generalList = rawList.filter(isGeneralInspectionArea);
       if (!generalList.length) {
         tableWrap.innerHTML = `<div class="hint">Нет проверок по зоне «Общая».</div>`;
@@ -1663,20 +1640,9 @@
         return;
       }
 
-      const list = applyFilters(generalList);
+      const list = sortItems(generalList);
       const baseCount = generalList.length;
-      const filteredCount = list.length;
-
-      if (!list.length) {
-        tableWrap.innerHTML = `<div class="hint">Нет результатов по выбранным фильтрам.</div>`;
-        renderStatus(`Проверок «Общая»: ${baseCount}. Попробуйте изменить фильтры.`);
-        return;
-      }
-
-      const totalText = hasActiveFilters() && filteredCount !== baseCount
-        ? `Показано ${filteredCount} из ${baseCount} проверок «Общая».`
-        : `Всего проверок «Общая»: ${baseCount}.`;
-      renderStatus(`${totalText} Нажмите на строку, чтобы открыть результат.`);
+      renderStatus(`Всего проверок «Общая»: ${baseCount}. Сортировка: ${currentSortLabel()}. Нажмите на строку, чтобы открыть результат.`);
 
       tableWrap.innerHTML = `
         <table class="cabinetTable">
@@ -1733,29 +1699,16 @@
       renderStatus("Запрашиваю данные из таблицы…");
     };
 
-    const rerenderFromFilters = () => {
+    const rerenderFromSort = () => {
       renderTable(latestRawItems, latestTotal);
     };
 
-    if (filtersWrap) {
-      const bindFilter = (inputEl, key) => {
-        if (!inputEl) return;
-        inputEl.value = filters[key];
-        inputEl.oninput = () => {
-          filters[key] = inputEl.value || "";
-          rerenderFromFilters();
-        };
-        inputEl.onchange = () => {
-          filters[key] = inputEl.value || "";
-          rerenderFromFilters();
-        };
+    if (sortBar && sortSelect) {
+      sortSelect.value = sortState.key;
+      sortSelect.onchange = () => {
+        sortState.key = sortSelect.value || "date_desc";
+        rerenderFromSort();
       };
-
-      bindFilter(dateFromInput, "dateFrom");
-      bindFilter(dateToInput, "dateTo");
-      bindFilter(nameInput, "name");
-      bindFilter(percentMinInput, "percentMin");
-      bindFilter(percentMaxInput, "percentMax");
     }
 
     const loadItems = async () => {
@@ -2584,7 +2537,6 @@
           },
         })}
         ${tplResultActions({ showShare: true })}
-        <div id="botSendHint" class="hint cabinetMeta"></div>
 
         <div class="card">
           <div class="cardHeader">
@@ -2619,53 +2571,19 @@
       renderStart(DATA);
     };
 
-    const botSendHint = document.getElementById("botSendHint");
-    const sendBotBtn = document.getElementById("sendBotResultBtn");
-    const updateBotSendUi = () => {
-      const status = STATE.lastBotSendStatus;
-      const err = norm(STATE.lastBotSendError);
-      if (botSendHint) {
-        if (status === "sent") {
-          botSendHint.textContent = "Бот уведомлён ✅";
-          botSendHint.style.color = "";
-        } else if (status === "failed") {
-          botSendHint.textContent = err
-            ? `Не удалось уведомить бота: ${err}`
-            : "Не удалось уведомить бота автоматически. Попробуйте ещё раз.";
-          botSendHint.style.color = "var(--danger)";
-        } else {
-          botSendHint.textContent = "";
-          botSendHint.style.color = "";
-        }
+    const resultId = norm(STATE.lastResultId);
+    if (IS_TG && resultId && STATE.lastBotSendStatus !== "sent") {
+      try {
+        const sent = sendTelegramResultMessage(result, resultId);
+        STATE.lastBotSendStatus = sent ? "sent" : "failed";
+        STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
+        saveDraft();
+      } catch (err) {
+        console.warn("Failed to send data to Telegram bot", err);
+        STATE.lastBotSendStatus = "failed";
+        STATE.lastBotSendError = String(err);
+        saveDraft();
       }
-      if (sendBotBtn) {
-        sendBotBtn.disabled = false;
-        sendBotBtn.textContent = status === "sent" ? "Отправлено ✅ (повторить)" : "Сообщить боту";
-      }
-    };
-
-    updateBotSendUi();
-
-    if (sendBotBtn) {
-      sendBotBtn.onclick = () => {
-        const id = norm(STATE.lastResultId);
-        if (!id) return;
-
-        sendBotBtn.disabled = true;
-        sendBotBtn.textContent = "Отправляю боту…";
-
-        try {
-          const sent = sendTelegramResultMessage(result, id);
-          STATE.lastBotSendStatus = sent ? "sent" : "failed";
-          STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
-        } catch (err) {
-          console.warn("Failed to send data to Telegram bot", err);
-          STATE.lastBotSendStatus = "failed";
-          STATE.lastBotSendError = String(err);
-        }
-
-        updateBotSendUi();
-      };
     }
 
     const copyBtn = document.getElementById("copyResultLinkBtn");
@@ -2678,27 +2596,6 @@
         const ok = await copyTextToClipboard(url);
         copyBtn.textContent = ok ? "Ссылка скопирована ✅" : "Не удалось скопировать";
         setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
-      };
-    }
-
-    const shareBtn = document.getElementById("shareResultLinkBtn");
-    if (shareBtn) {
-      shareBtn.onclick = () => {
-        const id = norm(STATE.lastResultId);
-        if (!id) return;
-        const url = buildResultLink(id);
-        const zone = zoneLabelLower(result.zone);
-        const text = `Результат проверки: ${zone}. ${url}`;
-        const tgApp = window.Telegram?.WebApp;
-        if (tgApp?.openTelegramLink) {
-          tgApp.openTelegramLink(
-            `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
-          );
-        } else {
-          copyTextToClipboard(url);
-          shareBtn.textContent = "Ссылка скопирована ✅";
-          setTimeout(() => (shareBtn.textContent = "Отправить в чат"), 1500);
-        }
       };
     }
   };

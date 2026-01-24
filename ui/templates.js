@@ -142,10 +142,6 @@
     const startText = (typeof UI_TEXT !== "undefined" && UI_TEXT && UI_TEXT.startButton)
       ? UI_TEXT.startButton
       : "Начать";
-    const showCabinet = !!opts.showCabinet;
-    const cabinetBtn = showCabinet
-      ? `<button id="myChecksBtn" class="btn btnSecondary" type="button">Мои проверки</button>`
-      : "";
     const appVersion = (typeof APP_VERSION !== "undefined" && APP_VERSION) ? `v${APP_VERSION}` : "";
     const versionLine = appVersion ? `<div class="muted" style="margin-top:6px;">Версия: ${h(appVersion)}</div>` : "";
 
@@ -576,13 +572,10 @@
     const showShare = (opts.showShare === undefined) ? true : !!opts.showShare;
 
     const shareEnabled = (typeof FEATURE_SHARE_LINK !== "undefined") ? !!FEATURE_SHARE_LINK : false;
-    const canSendToBot = Boolean(window.Telegram?.WebApp?.sendData);
 
     return `
       <div class="resultActions">
-        ${canSendToBot ? `<button id="sendBotResultBtn" class="btn btnSecondary">Сообщить боту</button>` : ``}
         ${showShare && shareEnabled ? `<button id="copyResultLinkBtn" class="btn ghost">Скопировать ссылку</button>` : ``}
-        ${showShare && shareEnabled ? `<button id="shareResultLinkBtn" class="btn btnSecondary">Отправить в чат</button>` : ``}
         <button id="newCheckBtn" class="btn primary">Новая проверка</button>
       </div>
     `;
