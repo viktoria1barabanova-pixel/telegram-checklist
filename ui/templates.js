@@ -144,6 +144,7 @@
       : "Начать";
     const appVersion = (typeof APP_VERSION !== "undefined" && APP_VERSION) ? `v${APP_VERSION}` : "";
     const versionLine = appVersion ? `<div class="muted" style="margin-top:6px;">Версия: ${h(appVersion)}</div>` : "";
+    const cabinetBtn = "";
 
     return `
       <div class="container">
