@@ -1013,6 +1013,7 @@
     const citySelect = document.getElementById("citySelect");
     const addressSelect = document.getElementById("addressSelect");
     const startBtn = document.getElementById("startBtn");
+    const startDefaultText = startBtn?.textContent || "Начать";
     const myChecksBtn = document.getElementById("myChecksBtn");
     const hint = document.getElementById("startHint");
     const cabinetHint = document.getElementById("cabinetHint");
@@ -1207,15 +1208,6 @@
 
     function refreshStartReady() {
       if (!startBtn || !oblastSelect || !citySelect || !addressSelect || !fioInput) return;
-      if (!IS_TG) {
-        startBtn.disabled = true;
-        startBtn.textContent = "Откройте в Telegram";
-        oblastSelect.disabled = true;
-        citySelect.disabled = true;
-        addressSelect.disabled = true;
-        fioInput.disabled = true;
-        return;
-      }
 
       const oblast = norm(oblastSelect.value);
       const city = norm(citySelect.value);
@@ -1225,9 +1217,14 @@
       STATE.city = city;
       STATE.branchId = branchId;
 
-      if (!IS_TG) STATE.fio = norm(fioInput.value);
+      if (!IS_TG) {
+        fioInput.disabled = false;
+        STATE.fio = norm(fioInput.value);
+        if (startBtn.textContent !== startDefaultText) startBtn.textContent = startDefaultText;
+      }
 
-      startBtn.disabled = !(STATE.oblast && STATE.city && STATE.branchId && (IS_TG || STATE.fio));
+      const fioReady = IS_TG || STATE.fio;
+      startBtn.disabled = !(STATE.oblast && STATE.city && STATE.branchId && fioReady);
     }
 
     function fillCities(oblast) {
@@ -1356,8 +1353,12 @@
     if (startBtn) {
       startBtn.onclick = () => {
         if (!IS_TG) {
-          alert("Откройте проверку через Telegram, чтобы начать.");
-          return;
+          STATE.fio = norm(fioInput?.value || "");
+          if (!STATE.fio) {
+            alert("Введите ФИО, чтобы начать проверку.");
+            refreshStartReady();
+            return;
+          }
         }
         const secs = activeSections(DATA.sections);
         STATE.enabledSections = secs.map(s => s.id);
@@ -1420,10 +1421,9 @@
 
     if (nonTgBlock) nonTgBlock.style.display = IS_TG ? "none" : "";
 
-    const disableAll = !IS_TG;
-    if (newCheckBtn) newCheckBtn.disabled = disableAll;
-    if (historyBtn) historyBtn.disabled = disableAll || !tgId;
-    if (tasksBtn) tasksBtn.disabled = disableAll;
+    if (newCheckBtn) newCheckBtn.disabled = false;
+    if (historyBtn) historyBtn.disabled = !IS_TG || !tgId;
+    if (tasksBtn) tasksBtn.disabled = !IS_TG;
 
     if (cabinetHint) {
       if (!IS_TG) {
@@ -1440,7 +1440,6 @@
 
     if (newCheckBtn) {
       newCheckBtn.onclick = () => {
-        if (!IS_TG) return;
         renderBranchPickerScreen(DATA);
       };
     }
