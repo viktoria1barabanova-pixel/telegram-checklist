@@ -477,15 +477,8 @@
 
   function mergeLastChecks(local, server) {
     if (!local && !server) return null;
-    if (!local) return server;
-    if (!server) return local;
-
-    const localDate = parsePossibleDate(local.ts);
-    const serverDate = parsePossibleDate(server.ts);
-    if (localDate && serverDate) {
-      return serverDate.getTime() >= localDate.getTime() ? server : local;
-    }
-    return serverDate ? server : local;
+    if (server) return server;
+    return local || null;
   }
 
   function formatLastCheckHint(last) {
@@ -964,6 +957,34 @@
     return blocks.join("");
   }
 
+  function renderBotSendStatus({ status, error, hasResultId }) {
+    if (!IS_TG) return "";
+    const statusText = status === "sent"
+      ? "Сообщение отправлено боту."
+      : status === "failed"
+        ? "Сообщение боту не отправлено."
+        : "Сообщение боту ещё не отправлено.";
+    const errorText = error ? `Причина: ${escapeHtml(error)}` : "";
+    const retryDisabled = !hasResultId ? "disabled" : "";
+    const retryHint = hasResultId
+      ? ""
+      : "Ссылка на результат пока не сформирована, попробуйте позже.";
+
+    return `
+      <div class="card" id="botSendStatusCard">
+        <div class="cardHeader">
+          <div class="title">Отправка в бот</div>
+        </div>
+        <div class="hint" id="botSendStatusText">${escapeHtml(statusText)}</div>
+        ${errorText ? `<div class="hint muted" id="botSendErrorText">${errorText}</div>` : ""}
+        ${retryHint ? `<div class="hint muted" id="botSendRetryHint">${escapeHtml(retryHint)}</div>` : ""}
+        <div class="actions" style="margin-top:12px;">
+          <button id="sendBotAgainBtn" class="btn btnSecondary" type="button" ${retryDisabled}>Отправить боту</button>
+        </div>
+      </div>
+    `;
+  }
+
   // ---------- required validation ----------
   function isAnswered(q) {
     if (isCheckboxQuestion(q)) return true; // unchecked is a valid state
@@ -1286,8 +1307,8 @@
         // show last check for this address (stored locally)
         if (lastCheckHint) {
           const bidNow = norm(addressSelect.value);
-          const local = getLastCheck(bidNow);
           const server = getLastCheckFromServer(bidNow);
+          const local = getLastCheck(bidNow);
           const last = mergeLastChecks(local, server);
           if (last && (last.ts || last.percent != null || last.zone || last.fio)) {
             const hintHtml = formatLastCheckHint(last);
@@ -2109,8 +2130,7 @@
         // last check meta for branch (local)
         setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
 
-        clearDraftStorageOnly(STATE.branchId);
-
+        // keep draft data so results can be restored if the app reloads after submit
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
       } catch (e) {
         console.error(e);
@@ -2515,6 +2535,16 @@
   // ---------- Result screen ----------
   window.renderResultScreen = function renderResultScreen(data, result) {
     DATA = data;
+    let safeResult = result && typeof result === "object" ? result : null;
+    if (!safeResult) safeResult = STATE.lastResult;
+    if (!safeResult) {
+      try {
+        safeResult = computeResultFromState();
+      } catch (err) {
+        console.warn("Failed to compute fallback result", err);
+      }
+    }
+    if (!safeResult) safeResult = { zone: "gray", percent: null, issues: [] };
 
     const last = getLastCheck(STATE.branchId);
     const lastTs = last?.ts || null;
@@ -2526,8 +2556,8 @@
     mount(`
       <div class="container">
         ${tplResultHeader({
-          zone: result.zone,
-          percent: result.percent,
+          zone: safeResult.zone,
+          percent: safeResult.percent,
           lastTs,
           meta: {
             fio: norm(STATE.fio || ""),
@@ -2536,6 +2566,11 @@
           },
         })}
         ${tplResultActions({ showShare: true })}
+        ${renderBotSendStatus({
+          status: STATE.lastBotSendStatus,
+          error: STATE.lastBotSendError,
+          hasResultId: Boolean(norm(STATE.lastResultId)),
+        })}
 
         <div class="card">
           <div class="cardHeader">
@@ -2547,7 +2582,7 @@
     `);
 
     const list = document.getElementById("issuesList");
-    const issues = (result.issues || []).slice();
+    const issues = (safeResult.issues || []).slice();
 
     if (!issues.length) {
       list.innerHTML = `<div class="hint">Ошибок не найдено 🎉</div>`;
@@ -2573,7 +2608,7 @@
     const resultId = norm(STATE.lastResultId);
     if (IS_TG && resultId && STATE.lastBotSendStatus !== "sent") {
       try {
-        const sent = sendTelegramResultMessage(result, resultId);
+        const sent = sendTelegramResultMessage(safeResult, resultId);
         STATE.lastBotSendStatus = sent ? "sent" : "failed";
         STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
         saveDraft();
@@ -2583,6 +2618,35 @@
         STATE.lastBotSendError = String(err);
         saveDraft();
       }
+    }
+
+    const sendBotAgainBtn = document.getElementById("sendBotAgainBtn");
+    if (sendBotAgainBtn) {
+      sendBotAgainBtn.onclick = () => {
+        const id = norm(STATE.lastResultId);
+        if (!id) return;
+        let sent = false;
+        try {
+          sent = sendTelegramResultMessage(safeResult, id);
+          STATE.lastBotSendStatus = sent ? "sent" : "failed";
+          STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
+        } catch (err) {
+          console.warn("Failed to send data to Telegram bot", err);
+          STATE.lastBotSendStatus = "failed";
+          STATE.lastBotSendError = String(err);
+        }
+        saveDraft();
+        const statusEl = document.getElementById("botSendStatusText");
+        if (statusEl) {
+          statusEl.textContent = sent ? "Сообщение отправлено боту." : "Сообщение боту не отправлено.";
+        }
+        const errorEl = document.getElementById("botSendErrorText");
+        if (errorEl) {
+          errorEl.textContent = STATE.lastBotSendError
+            ? `Причина: ${STATE.lastBotSendError}`
+            : "";
+        }
+      };
     }
 
     const copyBtn = document.getElementById("copyResultLinkBtn");
