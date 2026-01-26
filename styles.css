@@ -271,11 +271,12 @@ button {
   padding: 14px 16px;
   border-radius: 18px;
   font-size: 16px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
-  color: var(--btnText);
-  background: linear-gradient(135deg, #0F1117, #1B1D26);
-  box-shadow: var(--sh-md);
+  color: var(--text);
+  background: #fff;
+  border: 2px solid rgba(15, 17, 23, 0.9);
+  box-shadow: none;
   transition: transform .06s ease, filter .15s ease, opacity .15s ease;
   font-family: inherit;
 }
@@ -292,20 +293,20 @@ button {
   width: 100%;
 }
 
-.btn:hover { filter: brightness(1.03); }
+.btn:hover { filter: none; background: rgba(255, 255, 255, 0.92); }
 .btn:active { transform: scale(.985); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 .btnSecondary {
-  background: rgba(255, 255, 255, 0.92);
+  background: #fff;
   color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: var(--sh-sm);
+  border: 2px solid rgba(15, 17, 23, 0.9);
+  box-shadow: none;
 }
 
 .btnOutline{
   width: 100%;
-  background: rgba(255, 255, 255, 0.78);
+  background: #fff;
   color: var(--text);
   border: 2px solid rgba(15, 17, 23, 0.9);
   box-shadow: none;
@@ -316,7 +317,12 @@ button {
   background: rgba(255, 255, 255, 0.92);
 }
 
-.btnDanger { background: linear-gradient(135deg, #7C2C2C, #C44747); }
+.btnDanger {
+  background: #fff;
+  color: #7C2C2C;
+  border: 2px solid #7C2C2C;
+  box-shadow: none;
+}
 
 /* Form layout */
 .row{
@@ -820,10 +826,29 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   flex-shrink: 0;
 }
 .homeActions{
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-top: 16px;
+}
+.homePrimaryActions,
+.homeSecondaryActions{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.homePrimaryActions .homeActionBtn:only-child{
+  grid-column: 1 / -1;
+}
+.homeActionWide{
+  grid-column: 1 / -1;
+}
+.homeCurrentCheck{
+  display: grid;
+  gap: 8px;
+}
+.homeResetBtn{
+  width: 100%;
 }
 .homeActionBtn{
   padding: 16px 18px;
