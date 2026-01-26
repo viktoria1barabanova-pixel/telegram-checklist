@@ -149,6 +149,9 @@
     const link = buildResultLink(submissionId) || "—";
 
     const text = `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
+    const tgUser = (window.getTgUser && typeof window.getTgUser === "function")
+      ? window.getTgUser()
+      : null;
     const payload = {
       type: "result_link",
       text,
@@ -156,6 +159,8 @@
       result_id: norm(submissionId),
       zone: zoneRaw || "unknown",
       zone_text: zoneText,
+      user_id: norm(tgUser?.id || ""),
+      username: norm(tgUser?.username || ""),
     };
 
     console.info("Sending Telegram result payload", payload);
@@ -1034,6 +1039,46 @@
       .join("") || "TG";
   }
 
+  function draftExpiresAt(draft) {
+    const savedAt = Number(draft?.savedAt || 0);
+    if (!savedAt) return null;
+    const ttl = typeof DRAFT_TTL_MS !== "undefined" ? DRAFT_TTL_MS : 5 * 60 * 60 * 1000;
+    return new Date(savedAt + ttl);
+  }
+
+  function applyDraftToState(draft) {
+    if (!draft) return;
+    STATE.oblast = draft.oblast || STATE.oblast;
+    STATE.city = draft.city || STATE.city;
+    STATE.fio = draft.fio || STATE.fio;
+    STATE.branchId = draft.branchId || STATE.branchId;
+
+    STATE.enabledSections = draft.enabledSections || [];
+    STATE.activeSection = draft.activeSection || "";
+    STATE.completedSections = draft.completedSections || [];
+
+    STATE.singleAnswers = draft.singleAnswers || {};
+    STATE.checkboxAnswers = draft.checkboxAnswers || {};
+    STATE.singleAnswerLabels = draft.singleAnswerLabels || {};
+    STATE.isFinished = !!draft.isFinished;
+    STATE.lastResult = draft.lastResult || null;
+    STATE.lastResultId = draft.lastResultId || null;
+    STATE.lastSubmittedAt = draft.lastSubmittedAt || "";
+    STATE.lastBotSendStatus = draft.lastBotSendStatus || "";
+    STATE.lastBotSendError = draft.lastBotSendError || "";
+
+    STATE.issueNotes = draft.issueNotes || {};
+    STATE.noteOpen = draft.noteOpen || {};
+    migrateAllNotes();
+
+    if (!STATE.enabledSections.length) {
+      const secs = activeSections(DATA.sections);
+      STATE.enabledSections = secs.map(s => s.id);
+      STATE.activeSection = secs[0]?.id || "";
+    }
+    if (!STATE.activeSection) STATE.activeSection = STATE.enabledSections?.[0] || "";
+  }
+
   function renderBranchPickerScreen(data) {
     DATA = data;
     clearResultQuery();
@@ -1055,9 +1100,6 @@
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
     const nonTgBlock = document.getElementById("nonTgBlock");
-    const currentCheckBlock = document.getElementById("currentCheckBlock");
-    const currentCheckBtn = document.getElementById("currentCheckBtn");
-    const currentCheckHint = document.getElementById("currentCheckHint");
     const draftActions = document.getElementById("draftActions");
     const userLine = document.getElementById("userNameLine");
     const userCard = document.getElementById("tgUserCard");
@@ -1138,93 +1180,12 @@
       };
     }
 
-    function draftExpiresAt(draft) {
-      const savedAt = Number(draft?.savedAt || 0);
-      if (!savedAt) return null;
-      const ttl = typeof DRAFT_TTL_MS !== "undefined" ? DRAFT_TTL_MS : 5 * 60 * 60 * 1000;
-      return new Date(savedAt + ttl);
-    }
-
     function draftHintText(draft) {
       const expiresAt = draftExpiresAt(draft);
       const untilTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
       return untilTxt
         ? `Есть черновик этого адреса (до ${untilTxt}).`
         : `Есть черновик этого адреса.`;
-    }
-
-    function applyDraftToState(draft) {
-      if (!draft) return;
-      STATE.oblast = draft.oblast || STATE.oblast;
-      STATE.city = draft.city || STATE.city;
-      STATE.fio = draft.fio || STATE.fio;
-      STATE.branchId = draft.branchId || STATE.branchId;
-
-      STATE.enabledSections = draft.enabledSections || [];
-      STATE.activeSection = draft.activeSection || "";
-      STATE.completedSections = draft.completedSections || [];
-
-      STATE.singleAnswers = draft.singleAnswers || {};
-      STATE.checkboxAnswers = draft.checkboxAnswers || {};
-      STATE.singleAnswerLabels = draft.singleAnswerLabels || {};
-      STATE.isFinished = !!draft.isFinished;
-      STATE.lastResult = draft.lastResult || null;
-      STATE.lastResultId = draft.lastResultId || null;
-      STATE.lastSubmittedAt = draft.lastSubmittedAt || "";
-      STATE.lastBotSendStatus = draft.lastBotSendStatus || "";
-      STATE.lastBotSendError = draft.lastBotSendError || "";
-
-      STATE.issueNotes = draft.issueNotes || {};
-      STATE.noteOpen = draft.noteOpen || {};
-      migrateAllNotes();
-
-      if (!STATE.enabledSections.length) {
-        const secs = activeSections(DATA.sections);
-        STATE.enabledSections = secs.map(s => s.id);
-        STATE.activeSection = secs[0]?.id || "";
-      }
-      if (!STATE.activeSection) STATE.activeSection = STATE.enabledSections?.[0] || "";
-    }
-
-    function updateCurrentCheck(draft) {
-      if (!currentCheckBlock || !currentCheckBtn) return;
-      if (!IS_TG) {
-        currentCheckBlock.style.display = "none";
-        if (currentCheckHint) currentCheckHint.textContent = "";
-        return;
-      }
-
-      const lastDraftBranchId = draft?.branchId || (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
-      const d = draft || (lastDraftBranchId ? loadDraft(lastDraftBranchId) : null);
-      if (!d) {
-        currentCheckBlock.style.display = "none";
-        if (currentCheckHint) currentCheckHint.textContent = "";
-        return;
-      }
-
-      const branchRow = findBranchById(d.branchId);
-      const city = norm(d.city || getCity(branchRow || {}));
-      const addr = norm(getAddressLabel(branchRow || {}));
-      const addrLine = [city, addr].filter(Boolean).join(", ");
-      currentCheckBlock.style.display = "";
-      currentCheckBtn.textContent = "Текущая проверка";
-      if (currentCheckHint) {
-        const expiresAt = draftExpiresAt(d);
-        const untilTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
-        currentCheckHint.innerHTML = [
-          addrLine ? `Адрес: ${escapeHtml(addrLine)}` : "",
-          untilTxt ? `Черновик хранится до ${escapeHtml(untilTxt)}` : "",
-        ].filter(Boolean).join("<br>");
-      }
-
-      currentCheckBtn.onclick = () => {
-        STATE.oblast = d.oblast || STATE.oblast;
-        STATE.city = d.city || STATE.city;
-        STATE.fio = d.fio || STATE.fio;
-        STATE.branchId = d.branchId || STATE.branchId;
-        applyDraftToState(d);
-        renderChecklist(DATA);
-      };
     }
 
     function resetCities() {
@@ -1342,27 +1303,14 @@
             draftActions.innerHTML = `
               <div class="actions">
                 <button id="useDraftBtn" class="btn btnSecondary" type="button">Продолжить черновик</button>
-                <button id="resetDraftBtn" class="btn btnDanger" type="button">Сбросить данные</button>
               </div>
             `;
             const useBtn = document.getElementById("useDraftBtn");
-            const resetBtn = document.getElementById("resetDraftBtn");
             if (useBtn) {
               useBtn.onclick = () => {
                 STATE.branchId = d.branchId || bid;
                 applyDraftToState(d);
                 renderChecklist(DATA);
-              };
-            }
-            if (resetBtn) {
-              resetBtn.onclick = () => {
-                clearDraftForBranch(bid);
-                if (hint) hint.textContent = "Данные сброшены. Можно начать заново.";
-                if (draftActions) {
-                  draftActions.innerHTML = "";
-                  draftActions.style.display = "none";
-                }
-                refreshStartReady();
               };
             }
           }
@@ -1380,10 +1328,6 @@
     // initial state
     resetCities();
     refreshStartReady();
-
-    const lastDraftBranchId = (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
-    const lastDraft = lastDraftBranchId ? loadDraft(lastDraftBranchId) : null;
-    updateCurrentCheck(lastDraft);
 
     if (startBtn) {
       startBtn.onclick = () => {
@@ -1432,6 +1376,10 @@
     const handleEl = document.getElementById("homeUserHandle");
     const avatarEl = document.getElementById("homeUserAvatar");
     const newCheckBtn = document.getElementById("homeNewCheckBtn");
+    const currentCheckBtn = document.getElementById("homeCurrentCheckBtn");
+    const currentCheckBlock = document.getElementById("homeCurrentCheckBlock");
+    const currentCheckHint = document.getElementById("homeCurrentCheckHint");
+    const resetDraftBtn = document.getElementById("homeResetDraftBtn");
     const historyBtn = document.getElementById("homeHistoryBtn");
     const tasksBtn = document.getElementById("homeTasksBtn");
     const cabinetHint = document.getElementById("homeCabinetHint");
@@ -1491,6 +1439,65 @@
         alert("Раздел «Мои задачи» пока в разработке.");
       };
     }
+
+    function updateHomeCurrentCheck() {
+      if (!IS_TG) {
+        if (currentCheckBtn) currentCheckBtn.style.display = "none";
+        if (currentCheckBlock) currentCheckBlock.style.display = "none";
+        if (currentCheckHint) currentCheckHint.textContent = "";
+        if (newCheckBtn) newCheckBtn.classList.add("homeActionWide");
+        return;
+      }
+
+      const lastDraftBranchId = (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
+      const draft = lastDraftBranchId ? loadDraft(lastDraftBranchId) : null;
+      if (!draft) {
+        if (currentCheckBtn) currentCheckBtn.style.display = "none";
+        if (currentCheckBlock) currentCheckBlock.style.display = "none";
+        if (currentCheckHint) currentCheckHint.textContent = "";
+        if (newCheckBtn) newCheckBtn.classList.add("homeActionWide");
+        return;
+      }
+
+      if (newCheckBtn) newCheckBtn.classList.remove("homeActionWide");
+      if (currentCheckBtn) currentCheckBtn.style.display = "";
+      if (currentCheckBlock) currentCheckBlock.style.display = "";
+
+      const branchRow = findBranchById(draft.branchId);
+      const city = norm(draft.city || getCity(branchRow || {}));
+      const addr = norm(getAddressLabel(branchRow || {}));
+      const addrLine = [city, addr].filter(Boolean).join(", ");
+      const expiresAt = draftExpiresAt(draft);
+      const untilTxt = expiresAt ? formatRuDateTime(expiresAt.toISOString()) : "";
+
+      if (currentCheckHint) {
+        currentCheckHint.innerHTML = [
+          addrLine ? `Адрес: ${escapeHtml(addrLine)}` : "",
+          untilTxt ? `Черновик хранится до ${escapeHtml(untilTxt)}` : "",
+        ].filter(Boolean).join("<br>");
+      }
+
+      if (currentCheckBtn) {
+        currentCheckBtn.onclick = () => {
+          STATE.oblast = draft.oblast || STATE.oblast;
+          STATE.city = draft.city || STATE.city;
+          STATE.fio = draft.fio || STATE.fio;
+          STATE.branchId = draft.branchId || STATE.branchId;
+          applyDraftToState(draft);
+          renderChecklist(DATA);
+        };
+      }
+
+      if (resetDraftBtn) {
+        resetDraftBtn.onclick = () => {
+          clearDraftForBranch(draft.branchId);
+          if (currentCheckHint) currentCheckHint.textContent = "Черновик сброшен. Можно начать новую проверку.";
+          updateHomeCurrentCheck();
+        };
+      }
+    }
+
+    updateHomeCurrentCheck();
   };
 
   // ---------- Cabinet screen ----------
@@ -2121,22 +2128,8 @@
         const returnedId = norm(submitResult?.result_id || "");
         if (returnedId) STATE.lastResultId = returnedId;
 
-        // notify Telegram bot with result link (auto)
-        try {
-          const resultId = norm(STATE.lastResultId || submissionId);
-          if (IS_TG && resultId) {
-            const sent = sendTelegramResultMessage(result, resultId);
-            STATE.lastBotSendStatus = sent ? "sent" : "failed";
-            STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
-          } else {
-            STATE.lastBotSendStatus = "skipped";
-            STATE.lastBotSendError = "";
-          }
-        } catch (botErr) {
-          console.warn("Failed to auto-send result to Telegram bot", botErr);
-          STATE.lastBotSendStatus = "failed";
-          STATE.lastBotSendError = String(botErr);
-        }
+        STATE.lastBotSendStatus = IS_TG ? "pending" : "skipped";
+        STATE.lastBotSendError = "";
 
         // invalidate cabinet cache so new check appears immediately
         STATE.cabinetCache = null;
@@ -2635,11 +2628,23 @@
         STATE.lastBotSendStatus = sent ? "sent" : "failed";
         STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
         saveDraft();
+        const statusEl = document.getElementById("botSendStatusText");
+        if (statusEl) {
+          statusEl.textContent = sent ? "Сообщение отправлено боту." : "Сообщение боту не отправлено.";
+        }
+        const errorEl = document.getElementById("botSendErrorText");
+        if (errorEl) {
+          errorEl.textContent = sent ? "" : `Причина: ${STATE.lastBotSendError}`;
+        }
       } catch (err) {
         console.warn("Failed to send data to Telegram bot", err);
         STATE.lastBotSendStatus = "failed";
         STATE.lastBotSendError = String(err);
         saveDraft();
+        const statusEl = document.getElementById("botSendStatusText");
+        if (statusEl) statusEl.textContent = "Сообщение боту не отправлено.";
+        const errorEl = document.getElementById("botSendErrorText");
+        if (errorEl) errorEl.textContent = `Причина: ${STATE.lastBotSendError}`;
       }
     }
 

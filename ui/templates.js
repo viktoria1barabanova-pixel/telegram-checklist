@@ -116,9 +116,18 @@
           </div>
 
           <div class="homeActions">
-            <button id="homeNewCheckBtn" class="btn btnOutline homeActionBtn" type="button">Новая проверка</button>
-            <button id="homeHistoryBtn" class="btn btnOutline homeActionBtn" type="button">История моих проверок</button>
-            <button id="homeTasksBtn" class="btn btnOutline homeActionBtn" type="button">Мои задачи</button>
+            <div class="homePrimaryActions" id="homePrimaryActions">
+              <button id="homeNewCheckBtn" class="btn btnOutline homeActionBtn" type="button">Новая проверка</button>
+              <button id="homeCurrentCheckBtn" class="btn btnOutline homeActionBtn" type="button" style="display:none;">Текущая проверка</button>
+            </div>
+            <div id="homeCurrentCheckBlock" class="homeCurrentCheck" style="display:none;">
+              <button id="homeResetDraftBtn" class="btn btnOutline homeActionBtn homeResetBtn" type="button">Сбросить</button>
+              <div id="homeCurrentCheckHint" class="hint"></div>
+            </div>
+            <div class="homeSecondaryActions">
+              <button id="homeHistoryBtn" class="btn btnOutline homeActionBtn" type="button">История моих проверок</button>
+              <button id="homeTasksBtn" class="btn btnOutline homeActionBtn" type="button">Мои задачи</button>
+            </div>
           </div>
 
           <div class="homeAnalytics">
@@ -201,11 +210,6 @@
           <div id="fioRow" class="formRow" style="display:none">
             <label class="label">ФИО</label>
             <input id="fioInput" class="input" placeholder="Введите ФИО" />
-          </div>
-
-          <div id="currentCheckBlock" class="actions" style="display:none;">
-            <button id="currentCheckBtn" class="btn btnSecondary" type="button">Текущая проверка</button>
-            <div id="currentCheckHint" class="hint"></div>
           </div>
 
           <div class="actions startActions">
