@@ -481,6 +481,19 @@
     return local || null;
   }
 
+  function normalizeLocalLastCheck(local, branchRow) {
+    if (!local) return null;
+    const branchName = norm(getAddressLabel(branchRow || {}));
+    const city = norm(getCity(branchRow || {}));
+    const storedName = norm(getAny(local, ["branch_name", "branchName", "branch"], ""));
+    const storedCity = norm(getAny(local, ["city", "город"], ""));
+
+    if (!storedName && !storedCity) return null;
+    if (storedName && branchName && tkey(storedName) !== tkey(branchName)) return null;
+    if (storedCity && city && tkey(storedCity) !== tkey(city)) return null;
+    return local;
+  }
+
   function formatLastCheckHint(last) {
     if (!last) return "";
     const pct = (last.percent != null && isFinite(Number(last.percent)))
@@ -1038,7 +1051,7 @@
     const myChecksBtn = document.getElementById("myChecksBtn");
     const hint = document.getElementById("startHint");
     const cabinetHint = document.getElementById("cabinetHint");
-    const lastCheckHint = document.getElementById("lastCheckHint");
+      const lastCheckHint = document.getElementById("lastCheckHint");
     const fioRow = document.getElementById("fioRow");
     const fioInput = document.getElementById("fioInput");
     const nonTgBlock = document.getElementById("nonTgBlock");
@@ -1307,8 +1320,9 @@
         // show last check for this address (stored locally)
         if (lastCheckHint) {
           const bidNow = norm(addressSelect.value);
+          const branchRow = findBranchById(bidNow);
           const server = getLastCheckFromServer(bidNow);
-          const local = getLastCheck(bidNow);
+          const local = normalizeLocalLastCheck(getLastCheck(bidNow), branchRow);
           const last = mergeLastChecks(local, server);
           if (last && (last.ts || last.percent != null || last.zone || last.fio)) {
             const hintHtml = formatLastCheckHint(last);
@@ -2128,7 +2142,16 @@
         STATE.cabinetCache = null;
 
         // last check meta for branch (local)
-        setLastCheck(STATE.branchId, { percent: result.percent, zone: result.zone, fio: STATE.fio || "" });
+        const branchRow = findBranchById(STATE.branchId);
+        const branchName = norm(getAddressLabel(branchRow || {}));
+        const city = norm(STATE.city || getCity(branchRow || {}));
+        setLastCheck(STATE.branchId, {
+          percent: result.percent,
+          zone: result.zone,
+          fio: STATE.fio || "",
+          branch_name: branchName,
+          city,
+        });
 
         // keep draft data so results can be restored if the app reloads after submit
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
@@ -2546,9 +2569,9 @@
     }
     if (!safeResult) safeResult = { zone: "gray", percent: null, issues: [] };
 
-    const last = getLastCheck(STATE.branchId);
-    const lastTs = last?.ts || null;
     const branchRow = findBranchById(STATE.branchId);
+    const last = normalizeLocalLastCheck(getLastCheck(STATE.branchId), branchRow);
+    const lastTs = last?.ts || null;
     const addr = norm(getAddressLabel(branchRow || {}));
     const addrLine = [norm(STATE.city || ""), addr].filter(Boolean).join(", ");
     const metaDate = STATE.lastSubmittedAt ? formatRuDateTime(STATE.lastSubmittedAt) : "";
