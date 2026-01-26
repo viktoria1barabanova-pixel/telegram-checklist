@@ -95,6 +95,14 @@
     return `${location.origin}${location.pathname}?result=${encodeURIComponent(id)}`;
   }
 
+  function getTelegramInitData() {
+    try {
+      return window.Telegram?.WebApp?.initData || "";
+    } catch {
+      return "";
+    }
+  }
+
   function zoneLabelLower(zone) {
     const v = String(zone ?? "").toLowerCase();
     if (v === "green") return "зелёная зона";
@@ -124,21 +132,7 @@
     return `<span class="zoneBadge ${escapeHtml(cls)}">${escapeHtml(cap)}</span>`;
   }
 
-  function sendTelegramResultMessage(result, submissionId) {
-    const tgApp = window.Telegram?.WebApp;
-    const sendData = tgApp?.sendData;
-    if (typeof sendData !== "function") {
-      console.warn("Telegram WebApp sendData is unavailable", {
-        hasTelegram: Boolean(window.Telegram),
-        hasWebApp: Boolean(window.Telegram?.WebApp),
-      });
-      return false;
-    }
-
-    try {
-      if (tgApp?.ready) tgApp.ready();
-    } catch {}
-
+  async function sendTelegramResultMessage(result, submissionId) {
     const zoneRaw = String(result?.zone ?? "").toLowerCase();
     const zoneText = (
       zoneRaw === "green" ? "зелёную зону" :
@@ -149,44 +143,35 @@
     const link = buildResultLink(submissionId) || "—";
 
     const text = `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
-    const tgUser = (window.getTgUser && typeof window.getTgUser === "function")
-      ? window.getTgUser()
-      : null;
     const payload = {
-      type: "result_link",
-      text,
-      link,
+      action: "send_message",
+      message_text: text,
+      result_link: link,
       result_id: norm(submissionId),
       zone: zoneRaw || "unknown",
       zone_text: zoneText,
-      user_id: norm(tgUser?.id || ""),
-      username: norm(tgUser?.username || ""),
+      init_data: getTelegramInitData(),
     };
 
+    if (!payload.init_data) {
+      console.warn("Telegram initData is missing; can't send message via backend.");
+      return false;
+    }
+
     console.info("Sending Telegram result payload", payload);
-    let sent = false;
     try {
-      sendData(JSON.stringify(payload));
-      console.info("Telegram sendData invoked");
-      sent = true;
-    } catch (err) {
-      console.warn("Failed to send Telegram payload, fallback to text", err);
-      try {
-        sendData(text);
-        console.info("Telegram sendData fallback invoked");
-        sent = true;
-      } catch (fallbackErr) {
-        console.warn("Failed to send Telegram text payload", fallbackErr);
+      await api.sendBotMessage(payload, { usePostMessage: false });
+      const tgApp = window.Telegram?.WebApp;
+      const shouldAutoClose = (typeof AUTO_CLOSE_AFTER_SUBMIT !== "undefined") ? AUTO_CLOSE_AFTER_SUBMIT : false;
+      if (shouldAutoClose && typeof tgApp?.close === "function") {
+        console.info("Auto-closing Telegram WebApp after submit");
+        setTimeout(() => tgApp.close(), 500);
       }
+      return true;
+    } catch (err) {
+      console.warn("Failed to send Telegram message via backend", err);
+      return false;
     }
-
-    const shouldAutoClose = (typeof AUTO_CLOSE_AFTER_SUBMIT !== "undefined") ? AUTO_CLOSE_AFTER_SUBMIT : false;
-    if (shouldAutoClose && typeof tgApp?.close === "function") {
-      console.info("Auto-closing Telegram WebApp after submit");
-      setTimeout(() => tgApp.close(), 500);
-    }
-
-    return sent;
   }
 
   function clearResultQuery() {
@@ -2425,6 +2410,8 @@
       action: "submit",
       submission_id: submissionId || "",
       submitted_at: ts,
+      init_data: getTelegramInitData(),
+      result_link: buildResultLink(submissionId || ""),
       partial: true,
       section_id: sectionId,
       section_title: sectionTitle,
@@ -2501,6 +2488,8 @@
       action: "submit",
       submission_id: submissionId,
       submitted_at: ts,
+      init_data: getTelegramInitData(),
+      result_link: buildResultLink(submissionId),
       zone_room: "общая",
       inspection_area: "Общая",
 
@@ -2623,41 +2612,43 @@
 
     const resultId = norm(STATE.lastResultId);
     if (IS_TG && resultId && STATE.lastBotSendStatus !== "sent") {
-      try {
-        const sent = sendTelegramResultMessage(safeResult, resultId);
-        STATE.lastBotSendStatus = sent ? "sent" : "failed";
-        STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
-        saveDraft();
-        const statusEl = document.getElementById("botSendStatusText");
-        if (statusEl) {
-          statusEl.textContent = sent ? "Сообщение отправлено боту." : "Сообщение боту не отправлено.";
+      (async () => {
+        try {
+          const sent = await sendTelegramResultMessage(safeResult, resultId);
+          STATE.lastBotSendStatus = sent ? "sent" : "failed";
+          STATE.lastBotSendError = sent ? "" : "initData отсутствует или сообщение не доставлено";
+          saveDraft();
+          const statusEl = document.getElementById("botSendStatusText");
+          if (statusEl) {
+            statusEl.textContent = sent ? "Сообщение отправлено боту." : "Сообщение боту не отправлено.";
+          }
+          const errorEl = document.getElementById("botSendErrorText");
+          if (errorEl) {
+            errorEl.textContent = sent ? "" : `Причина: ${STATE.lastBotSendError}`;
+          }
+        } catch (err) {
+          console.warn("Failed to send data to Telegram bot", err);
+          STATE.lastBotSendStatus = "failed";
+          STATE.lastBotSendError = String(err);
+          saveDraft();
+          const statusEl = document.getElementById("botSendStatusText");
+          if (statusEl) statusEl.textContent = "Сообщение боту не отправлено.";
+          const errorEl = document.getElementById("botSendErrorText");
+          if (errorEl) errorEl.textContent = `Причина: ${STATE.lastBotSendError}`;
         }
-        const errorEl = document.getElementById("botSendErrorText");
-        if (errorEl) {
-          errorEl.textContent = sent ? "" : `Причина: ${STATE.lastBotSendError}`;
-        }
-      } catch (err) {
-        console.warn("Failed to send data to Telegram bot", err);
-        STATE.lastBotSendStatus = "failed";
-        STATE.lastBotSendError = String(err);
-        saveDraft();
-        const statusEl = document.getElementById("botSendStatusText");
-        if (statusEl) statusEl.textContent = "Сообщение боту не отправлено.";
-        const errorEl = document.getElementById("botSendErrorText");
-        if (errorEl) errorEl.textContent = `Причина: ${STATE.lastBotSendError}`;
-      }
+      })();
     }
 
     const sendBotAgainBtn = document.getElementById("sendBotAgainBtn");
     if (sendBotAgainBtn) {
-      sendBotAgainBtn.onclick = () => {
+      sendBotAgainBtn.onclick = async () => {
         const id = norm(STATE.lastResultId);
         if (!id) return;
         let sent = false;
         try {
-          sent = sendTelegramResultMessage(safeResult, id);
+          sent = await sendTelegramResultMessage(safeResult, id);
           STATE.lastBotSendStatus = sent ? "sent" : "failed";
-          STATE.lastBotSendError = sent ? "" : "sendData недоступен или бот не ответил";
+          STATE.lastBotSendError = sent ? "" : "initData отсутствует или сообщение не доставлено";
         } catch (err) {
           console.warn("Failed to send data to Telegram bot", err);
           STATE.lastBotSendStatus = "failed";
