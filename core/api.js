@@ -135,15 +135,23 @@
     return { frame, form, payloadInput, actionInput, returnInput };
   }
 
-  function iframePostSubmit(payloadObj, { usePostMessage = false, timeoutMs = 20000, loadFallbackMs = 2500 } = {}) {
+  function iframePostSubmit(
+    payloadObj,
+    {
+      usePostMessage = false,
+      timeoutMs = 20000,
+      loadFallbackMs = 2500,
+      action = "submit",
+    } = {}
+  ) {
     return new Promise((resolve, reject) => {
       try {
         const { frame, form, payloadInput, actionInput, returnInput } = ensureSubmitPlumbing();
 
-        const actionUrl = buildUrlWithParams(SUBMIT_URL, { action: "submit" });
+        const actionUrl = buildUrlWithParams(SUBMIT_URL, { action });
         form.action = actionUrl;
 
-        actionInput.value = "submit";
+        actionInput.value = action;
         payloadInput.value = JSON.stringify(payloadObj);
         returnInput.value = usePostMessage ? "postMessage" : "";
 
@@ -238,7 +246,12 @@
 
     // POST submit
     async submit(payloadObj, { usePostMessage = false } = {}) {
-      return await iframePostSubmit(payloadObj, { usePostMessage });
+      return await iframePostSubmit(payloadObj, { usePostMessage, action: "submit" });
+    },
+
+    // POST send message to bot
+    async sendBotMessage(payloadObj, { usePostMessage = false } = {}) {
+      return await iframePostSubmit(payloadObj, { usePostMessage, action: "send_message" });
     },
 
     // Expose JSONP loader if needed

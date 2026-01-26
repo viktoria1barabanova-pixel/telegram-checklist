@@ -14,6 +14,10 @@ const SHEET_NAMES = {
 // IMPORTANT: set this to the ID of the Google Spreadsheet that contains your questions
 const SPREADSHEET_ID = "1Ln_cnU64l1NZRIDk2iAInkcFM1ACf6_2aiwqz7X8caw";
 
+// Telegram Bot (for sending messages after submit)
+// Set your bot token here. Without it, sendMessage will be skipped.
+const TELEGRAM_BOT_TOKEN = "";
+
 // Заголовки для листов с результатами
 const SUBMISSIONS_HEADERS = [
   "submission_id",
@@ -147,21 +151,21 @@ function doPost(e) {
     const params = (e && e.parameter) ? e.parameter : {};
     const action = params.action ? String(params.action) : "";
 
+    const raw = extractPayloadFromPost_(e, params);
+    if (!raw) throw new Error("Empty payload");
+
+    const payload = JSON.parse(raw);
+
+    if (action === "send_message") {
+      const sendRes = sendTelegramMessageFromPayload_(ss, payload, { action });
+      log_(ss, { event: "send_message", ok: sendRes.ok, info: sendRes.info || "" });
+      return text_("OK");
+    }
+
     if (action !== "submit") {
       log_(ss, { event: "post_unknown_action", action, params });
       return text_("OK");
     }
-
-    // payload может прийти как params.payload (form POST), либо внутри postData.contents
-    let raw = params.payload ? String(params.payload) : "";
-    if (!raw && e && e.postData && e.postData.contents) {
-      const parsed = parseFormUrlEncoded_(String(e.postData.contents));
-      raw = parsed.payload ? String(parsed.payload) : "";
-    }
-
-    if (!raw) throw new Error("Empty payload");
-
-    const payload = JSON.parse(raw);
 
     // Обновляем/добавляем проверяющего
     try {
@@ -227,7 +231,17 @@ function doPost(e) {
       appendObjectsRowsByHeaders_(shAns, rows);
     }
 
-    log_(ss, { event: "submit_ok", submission_id: payload.submission_id, answers: flat.length });
+    const shouldSendTelegram = !payload.partial;
+    const tgSendRes = shouldSendTelegram
+      ? sendTelegramMessageFromPayload_(ss, payload, { action })
+      : { ok: false, info: "skip_partial" };
+    log_(ss, {
+      event: "submit_ok",
+      submission_id: payload.submission_id,
+      answers: flat.length,
+      tg_send_ok: tgSendRes.ok,
+      tg_send_info: tgSendRes.info || "",
+    });
     return text_("OK");
 
   } catch (err) {
@@ -346,6 +360,131 @@ function parseFormUrlEncoded_(s) {
     out[decodeURIComponent(k)] = decodeURIComponent(String(v || "").replace(/\+/g, " "));
   });
   return out;
+}
+
+function extractPayloadFromPost_(e, params) {
+  let raw = params && params.payload ? String(params.payload) : "";
+  if (!raw && e && e.postData && e.postData.contents) {
+    const parsed = parseFormUrlEncoded_(String(e.postData.contents));
+    raw = parsed.payload ? String(parsed.payload) : "";
+  }
+  return raw;
+}
+
+function sendTelegramMessageFromPayload_(ss, payload, { action } = {}) {
+  if (!TELEGRAM_BOT_TOKEN) {
+    return { ok: false, info: "bot_token_missing" };
+  }
+
+  const initData = safe_(payload?.init_data || payload?.initData || "");
+  const tgUser = verifyInitData_(initData, TELEGRAM_BOT_TOKEN);
+  if (!tgUser) {
+    return { ok: false, info: "init_data_invalid" };
+  }
+
+  const chatId = tgUser.id;
+  if (!chatId) {
+    return { ok: false, info: "tg_user_id_missing" };
+  }
+
+  const text = buildTelegramMessageText_(payload, { action });
+  if (!text) {
+    return { ok: false, info: "message_text_empty" };
+  }
+
+  const sendRes = sendTelegramMessage_(chatId, text);
+  return sendRes;
+}
+
+function buildTelegramMessageText_(payload, { action } = {}) {
+  const direct = safe_(payload?.message_text || payload?.text || "");
+  if (direct) return String(direct);
+
+  const zoneRaw = String(payload?.zone || "").toLowerCase();
+  const zoneText = (
+    zoneRaw === "green" ? "зелёную зону" :
+    zoneRaw === "yellow" ? "жёлтую зону" :
+    zoneRaw === "red" ? "красную зону" :
+    zoneRaw ? "серую зону" : ""
+  );
+  const link = safe_(payload?.result_link || payload?.link || "");
+
+  let text = zoneText
+    ? `Проверка завершена. Вы прошли на ${zoneText}.`
+    : "Проверка завершена.";
+  if (link) text += ` Ссылка на проверку: ${link}`;
+  if (!text && action) text = `Проверка завершена (${action}).`;
+  return text;
+}
+
+function sendTelegramMessage_(chatId, text) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  const payload = {
+    chat_id: chatId,
+    text: String(text || ""),
+    disable_web_page_preview: false,
+  };
+
+  try {
+    const resp = UrlFetchApp.fetch(url, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+    const status = resp.getResponseCode();
+    const body = resp.getContentText();
+    const ok = status >= 200 && status < 300;
+    return { ok, info: ok ? "sent" : `status_${status}`, response: body };
+  } catch (err) {
+    return { ok: false, info: String(err) };
+  }
+}
+
+function verifyInitData_(initData, botToken) {
+  if (!initData || !botToken) return null;
+
+  const data = parseInitData_(initData);
+  if (!data || !data.hash) return null;
+
+  const checkString = buildDataCheckString_(data);
+  const secretKey = Utilities.computeHmacSha256Signature("WebAppData", botToken);
+  const hash = Utilities.computeHmacSha256Signature(checkString, secretKey);
+  const hex = bytesToHex_(hash);
+
+  if (hex !== String(data.hash).toLowerCase()) return null;
+
+  try {
+    return data.user ? JSON.parse(data.user) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function parseInitData_(initData) {
+  const out = {};
+  String(initData || "").split("&").forEach(pair => {
+    const idx = pair.indexOf("=");
+    const key = idx >= 0 ? pair.slice(0, idx) : pair;
+    const val = idx >= 0 ? pair.slice(idx + 1) : "";
+    if (!key) return;
+    out[decodeURIComponent(key)] = decodeURIComponent(String(val || "").replace(/\+/g, " "));
+  });
+  return out;
+}
+
+function buildDataCheckString_(data) {
+  const keys = Object.keys(data || {}).filter(k => k !== "hash").sort();
+  return keys.map(key => `${key}=${data[key]}`).join("\n");
+}
+
+function bytesToHex_(bytes) {
+  return (bytes || [])
+    .map(b => {
+      const v = b < 0 ? b + 256 : b;
+      return ("0" + v.toString(16)).slice(-2);
+    })
+    .join("");
 }
 
 /***************
