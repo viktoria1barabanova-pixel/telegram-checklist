@@ -142,7 +142,15 @@
     );
     const link = buildResultLink(submissionId) || "—";
 
-    const text = `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
+    const template = (typeof TELEGRAM_RESULT_MESSAGE_TEMPLATE !== "undefined")
+      ? String(TELEGRAM_RESULT_MESSAGE_TEMPLATE || "").trim()
+      : "";
+    const text = template
+      ? template
+        .replace(/\{zoneText\}/g, zoneText)
+        .replace(/\{zone\}/g, zoneRaw || "unknown")
+        .replace(/\{link\}/g, link)
+      : `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
     const payload = {
       action: "send_message",
       message_text: text,
