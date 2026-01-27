@@ -451,7 +451,7 @@ label{
 
 /* Softer “into white” gradients */
 .zoneBanner.green  { background: linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(46,196,166,.92) 55%, #1E7D6A 100%); color: #FFFFFF; }
-.zoneBanner.yellow { background: linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(242,155,100,.92) 55%, #D8B44A 100%); color: #241A00; }
+.zoneBanner.yellow { background: linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(242,201,76,.92) 55%, #F2C94C 100%); color: #241A00; }
 .zoneBanner.red    { background: linear-gradient(135deg, rgba(255,255,255,.94) 0%, rgba(185,75,75,.92) 55%, #6F2A2A 100%); color: #FFFFFF; }
 .zoneBanner.gray   { background: linear-gradient(135deg, rgba(255,255,255,.9) 0%, rgba(140,140,148,.92) 55%, #2F2F35 100%); color: #FFFFFF; }
 
@@ -1251,7 +1251,8 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   color: var(--muted);
 }
 .numberSelect,
-.numberInput{
+.numberInput,
+.numberSearch{
   width: 100%;
   padding: 12px 12px;
   border-radius: 14px;
@@ -1263,8 +1264,20 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   box-shadow: 0 10px 22px rgba(17,24,39,.06);
 }
 .numberSelect:disabled,
-.numberInput:disabled{
+.numberInput:disabled,
+.numberSearch:disabled{
   opacity: 0.6;
+}
+.numberInputRow{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.numberInputRow .numberInput{
+  flex: 1;
+}
+.numberInputRow .numberHideBtn{
+  white-space: nowrap;
 }
 .numberMeta{
   display: flex;

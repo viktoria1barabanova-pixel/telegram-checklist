@@ -457,6 +457,10 @@
     return `
       <div class="optCol number" data-kind="number">
         <label class="numberField">
+          <span class="numberLabel">Поиск ролла</span>
+          <input class="numberSearch" data-role="roll-search" type="text" placeholder="Начните ввод" value="" />
+        </label>
+        <label class="numberField">
           <span class="numberLabel">Ролл</span>
           <select class="numberSelect" data-role="roll">
             <option value="">Выберите ролл</option>
@@ -465,18 +469,17 @@
               const label = norm(opt.name || opt.label || opt.title || value);
               const weight = (opt.weight ?? opt.planned_weight ?? opt.plannedWeight ?? "");
               const active = value && value === rollValue ? "selected" : "";
-              const weightText = (weight !== "" && weight !== null && weight !== undefined) ? ` • ${weight} г` : "";
-              return `<option value="${h(value)}" data-name="${h(label)}" data-weight="${h(weight)}" ${active}>${h(label)}${h(weightText)}</option>`;
+              return `<option value="${h(value)}" data-name="${h(label)}" data-weight="${h(weight)}" ${active}>${h(label)}</option>`;
             }).join("")}
           </select>
         </label>
         <label class="numberField">
           <span class="numberLabel">Факт, г</span>
-          <input class="numberInput" data-role="actual" type="number" inputmode="decimal" min="0" step="1" placeholder="Введите вес" value="${h(actualValue)}" />
+          <div class="numberInputRow">
+            <input class="numberInput" data-role="actual" type="number" inputmode="decimal" min="0" step="1" placeholder="Введите вес" value="${h(actualValue)}" />
+            <button type="button" class="btn btnSecondary numberHideBtn">Готово</button>
+          </div>
         </label>
-        <div class="numberActions">
-          <button type="button" class="btn btnSecondary numberHideBtn">Готово</button>
-        </div>
         <div class="numberMeta">
           <span class="numberMetaItem">План: <strong data-role="plan">${h(planText)}</strong></span>
           <span class="numberMetaItem">Отклонение: <strong data-role="diff">${h(diffText)}</strong></span>
