@@ -1508,7 +1508,7 @@
         // restore draft for this address (branchId)
         const bid = norm(addressSelect.value);
         const d = loadDraft(bid);
-        if (d) {
+        if (d && !d.isFinished) {
           if (hint) hint.innerHTML = draftHintText(d);
           if (draftActions) {
             draftActions.style.display = "";
