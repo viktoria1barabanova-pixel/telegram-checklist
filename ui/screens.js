@@ -208,6 +208,16 @@
     return String(num.toFixed(2)).replace(/\.?0+$/, "").replace(".", ",");
   }
 
+  function formatScorePair(earned, max) {
+    const earnedNorm = normalizeNumberOrEmpty(earned);
+    const maxNorm = normalizeNumberOrEmpty(max);
+    if (earnedNorm === "" && maxNorm === "") return "—";
+    if (earnedNorm !== "" && maxNorm !== "") {
+      return `${formatScoreDisplay(earnedNorm)}/${formatScoreDisplay(maxNorm)}`;
+    }
+    return formatScoreDisplay(earnedNorm !== "" ? earnedNorm : maxNorm);
+  }
+
   function zoneBadgeHtml(zone) {
     const key = String(zone ?? "").toLowerCase();
     const label = zoneLabelLower(key);
@@ -1142,8 +1152,8 @@
             <table class="issueTable">
               <thead>
                 <tr>
-                  <th>Ошибка</th>
-                  <th style="width:70px">Баллы</th>
+                  <th style="width:260px">Ошибка</th>
+                  <th style="width:90px">Баллы</th>
                   <th style="width:140px">Критичность</th>
                   <th>Комментарий</th>
                   <th style="width:90px">Фото</th>
@@ -1160,7 +1170,8 @@
                     ? escapeHtml(it.comment)
                     : `<span class="muted">—</span>`;
                   const scoreValue = it.scoreEarned ?? it.score_earned ?? it.score;
-                  const scoreHtml = escapeHtml(formatScoreDisplay(scoreValue));
+                  const scoreMax = it.scoreMax ?? it.score_max ?? "";
+                  const scoreHtml = escapeHtml(formatScorePair(scoreValue, scoreMax));
 
                   return `
                     <tr>
@@ -1180,34 +1191,6 @@
     }
 
     return blocks.join("");
-  }
-
-  function renderBotSendStatus({ status, error, hasResultId }) {
-    if (!IS_TG) return "";
-    const statusText = status === "sent"
-      ? "Сообщение отправлено боту."
-      : status === "failed"
-        ? "Сообщение боту не отправлено."
-        : "Сообщение боту ещё не отправлено.";
-    const errorText = error ? `Причина: ${escapeHtml(error)}` : "";
-    const retryDisabled = !hasResultId ? "disabled" : "";
-    const retryHint = hasResultId
-      ? ""
-      : "Ссылка на результат пока не сформирована, попробуйте позже.";
-
-    return `
-      <div class="card" id="botSendStatusCard">
-        <div class="cardHeader">
-          <div class="title">Отправка в бот</div>
-        </div>
-        <div class="hint" id="botSendStatusText">${escapeHtml(statusText)}</div>
-        ${errorText ? `<div class="hint muted" id="botSendErrorText">${errorText}</div>` : ""}
-        ${retryHint ? `<div class="hint muted" id="botSendRetryHint">${escapeHtml(retryHint)}</div>` : ""}
-        <div class="actions" style="margin-top:12px;">
-          <button id="sendBotAgainBtn" class="btn btnSecondary" type="button" ${retryDisabled}>Отправить боту</button>
-        </div>
-      </div>
-    `;
   }
 
   // ---------- required validation ----------
@@ -2189,6 +2172,7 @@
       const card = col.closest(".qCard");
       const qid = card.getAttribute("data-qid");
       const rollSelect = col.querySelector(".numberSelect");
+      const rollSearch = col.querySelector(".numberSearch");
       const actualInput = col.querySelector(".numberInput");
       const hideBtn = col.querySelector(".numberHideBtn");
       const planEl = col.querySelector('[data-role="plan"]');
@@ -2204,6 +2188,21 @@
           const diffText = meta.diff !== "" ? `${formatWeightDisplay(meta.diff, { signed: true })} г` : "—";
           diffEl.textContent = diffText;
         }
+      };
+
+      const filterRollOptions = () => {
+        if (!rollSelect || !rollSearch) return;
+        const query = tkey(rollSearch.value || "");
+        const options = Array.from(rollSelect.options || []);
+        options.forEach((opt, idx) => {
+          if (idx === 0 || !query) {
+            opt.hidden = false;
+            return;
+          }
+          const label = tkey(opt.getAttribute("data-name") || opt.textContent || "");
+          const isSelected = opt.selected;
+          opt.hidden = !(label.includes(query) || isSelected);
+        });
       };
 
       const updateFromInputs = (shouldSave = true) => {
@@ -2248,10 +2247,12 @@
 
       if (isLockedSection) {
         if (rollSelect) rollSelect.disabled = true;
+        if (rollSearch) rollSearch.disabled = true;
         if (actualInput) actualInput.disabled = true;
         if (hideBtn) hideBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
+        if (rollSearch) rollSearch.oninput = () => filterRollOptions();
         if (actualInput) actualInput.oninput = () => updateFromInputs(true);
         if (hideBtn) {
           hideBtn.onclick = () => {
@@ -2261,6 +2262,7 @@
         }
       }
 
+      filterRollOptions();
       updateFromInputs(false);
     });
 
@@ -2901,11 +2903,6 @@
           },
         })}
         ${tplResultActions({ showShare: true })}
-        ${renderBotSendStatus({
-          status: STATE.lastBotSendStatus,
-          error: STATE.lastBotSendError,
-          hasResultId: Boolean(norm(STATE.lastResultId)),
-        })}
 
         <div class="card">
           <div class="cardHeader">

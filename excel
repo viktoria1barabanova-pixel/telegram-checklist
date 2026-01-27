@@ -451,7 +451,8 @@ function verifyInitData_(initData, botToken) {
 
   const checkString = buildDataCheckString_(data);
   const secretKey = Utilities.computeHmacSha256Signature("WebAppData", botToken);
-  const hash = Utilities.computeHmacSha256Signature(checkString, secretKey);
+  const checkBytes = Utilities.newBlob(checkString).getBytes();
+  const hash = Utilities.computeHmacSha256Signature(checkBytes, secretKey);
   const hex = bytesToHex_(hash);
 
   if (hex !== String(data.hash).toLowerCase()) return null;
