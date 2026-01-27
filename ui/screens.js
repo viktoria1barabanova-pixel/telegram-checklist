@@ -128,6 +128,14 @@
     return base;
   }
 
+  function formatWeightComparison(meta) {
+    if (!meta || meta.plannedWeight === "" || meta.actualWeight === "" || meta.diff === "") return "";
+    const planned = formatWeightDisplay(meta.plannedWeight);
+    const actual = formatWeightDisplay(meta.actualWeight);
+    const diff = formatWeightDisplay(meta.diff, { signed: true });
+    return `${planned}/${actual} (${diff} гр)`;
+  }
+
   function getRollWeightRows() {
     if (!DATA) return [];
     return (
@@ -2638,12 +2646,7 @@
           const hasAnswer = meta.hasAnswer;
           const scoreUnit = hasAnswer && meta.withinTolerance ? 1 : 0;
           const earned = isExcluded ? "" : scoreUnit * qScore;
-          const labelParts = [];
-          if (meta.rollName || meta.rollId) labelParts.push(`Ролл: ${meta.rollName || meta.rollId}`);
-          if (meta.plannedWeight !== "") labelParts.push(`План: ${formatWeightDisplay(meta.plannedWeight)} г`);
-          if (meta.actualWeight !== "") labelParts.push(`Факт: ${formatWeightDisplay(meta.actualWeight)} г`);
-          if (meta.diff !== "") labelParts.push(`Δ: ${formatWeightDisplay(meta.diff, { signed: true })} г`);
-          const labelText = labelParts.join(", ");
+          const labelText = formatWeightComparison(meta);
           baseRow.answer_value = meta.actualWeight !== "" ? String(meta.actualWeight) : "";
           baseRow.answer_label = labelText;
           baseRow.answer_key = meta.rollId || meta.rollName || "";
@@ -2726,12 +2729,8 @@
     sectionQs.forEach(q => {
       if (!isNumberQuestion(q)) return;
       const meta = computeNumberAnswerMeta(STATE.numberAnswers?.[q.id] || {}, getRollWeightsCatalog());
-      const labelParts = [];
-      if (meta.rollName || meta.rollId) labelParts.push(`Ролл: ${meta.rollName || meta.rollId}`);
-      if (meta.plannedWeight !== "") labelParts.push(`План: ${formatWeightDisplay(meta.plannedWeight)} г`);
-      if (meta.actualWeight !== "") labelParts.push(`Факт: ${formatWeightDisplay(meta.actualWeight)} г`);
-      if (meta.diff !== "") labelParts.push(`Δ: ${formatWeightDisplay(meta.diff, { signed: true })} г`);
-      if (labelParts.length) number_labels[q.id] = labelParts.join(", ");
+      const labelText = formatWeightComparison(meta);
+      if (labelText) number_labels[q.id] = labelText;
     });
 
     const checker = getCheckerMeta();
@@ -2816,12 +2815,8 @@
       questionsForSection(DATA.checklist, section.id).forEach(q => {
         if (!isNumberQuestion(q)) return;
         const meta = computeNumberAnswerMeta(STATE.numberAnswers?.[q.id] || {}, getRollWeightsCatalog());
-        const labelParts = [];
-        if (meta.rollName || meta.rollId) labelParts.push(`Ролл: ${meta.rollName || meta.rollId}`);
-        if (meta.plannedWeight !== "") labelParts.push(`План: ${formatWeightDisplay(meta.plannedWeight)} г`);
-        if (meta.actualWeight !== "") labelParts.push(`Факт: ${formatWeightDisplay(meta.actualWeight)} г`);
-        if (meta.diff !== "") labelParts.push(`Δ: ${formatWeightDisplay(meta.diff, { signed: true })} г`);
-        if (labelParts.length) number_labels[q.id] = labelParts.join(", ");
+        const labelText = formatWeightComparison(meta);
+        if (labelText) number_labels[q.id] = labelText;
       });
     });
 
