@@ -317,9 +317,16 @@
       qType.indexOf("галоч") >= 0 || qType.indexOf("чек") >= 0
     );
 
-    const optionsHtml = isCheckboxType
-      ? tplCheckboxOptions(q, answerState)
-      : tplSingleOptions(q, answerState);
+    const isNumberType = (
+      qType.indexOf("number") >= 0 || qType.indexOf("numeric") >= 0 ||
+      qType.indexOf("числ") >= 0
+    );
+
+    const optionsHtml = isNumberType
+      ? tplNumberOptions(q, answerState, opts)
+      : isCheckboxType
+        ? tplCheckboxOptions(q, answerState)
+        : tplSingleOptions(q, answerState);
 
     const notesHtml = showNotes ? tplIssueNotesBlock(q) : "";
 
@@ -428,6 +435,50 @@
     return `
       <div class="optRow single ${rowCls}" data-kind="single">
         ${labels.map((t, i) => btn(vals[i] || "ok", t, clss[i] || "ok")).join("")}
+      </div>
+    `;
+  }
+
+  // ---------- number options (roll weight input) ----------
+  function tplNumberOptions(q, answerState, opts) {
+    const state = answerState && typeof answerState === "object" ? answerState : {};
+    const rollValue = norm(state.roll_id || state.rollId || state.roll || state.roll_name || state.rollName || "");
+    const actualValue = (state.actual_weight ?? state.actualWeight ?? "");
+    const plannedWeight = (state.planned_weight ?? state.plannedWeight ?? "");
+    const diff = (state.diff ?? "");
+    const rollOptions = Array.isArray(opts?.rollOptions) ? opts.rollOptions : [];
+    const tolerance = Number.isFinite(Number(opts?.tolerance)) ? Number(opts.tolerance) : 5;
+
+    const planText = plannedWeight !== "" ? `${plannedWeight} г` : "—";
+    const diffText = diff !== ""
+      ? `${Number(diff) > 0 ? "+" : ""}${diff} г`
+      : "—";
+
+    return `
+      <div class="optCol number" data-kind="number">
+        <label class="numberField">
+          <span class="numberLabel">Ролл</span>
+          <select class="numberSelect" data-role="roll">
+            <option value="">Выберите ролл</option>
+            ${rollOptions.map(opt => {
+              const value = norm(opt.id || opt.value || opt.name || "");
+              const label = norm(opt.name || opt.label || opt.title || value);
+              const weight = (opt.weight ?? opt.planned_weight ?? opt.plannedWeight ?? "");
+              const active = value && value === rollValue ? "selected" : "";
+              const weightText = (weight !== "" && weight !== null && weight !== undefined) ? ` • ${weight} г` : "";
+              return `<option value="${h(value)}" data-name="${h(label)}" data-weight="${h(weight)}" ${active}>${h(label)}${h(weightText)}</option>`;
+            }).join("")}
+          </select>
+        </label>
+        <label class="numberField">
+          <span class="numberLabel">Факт, г</span>
+          <input class="numberInput" data-role="actual" type="number" inputmode="decimal" min="0" step="1" placeholder="Введите вес" value="${h(actualValue)}" />
+        </label>
+        <div class="numberMeta">
+          <span class="numberMetaItem">План: <strong data-role="plan">${h(planText)}</strong></span>
+          <span class="numberMetaItem">Отклонение: <strong data-role="diff">${h(diffText)}</strong></span>
+          <span class="numberMetaItem">Допуск: ±${h(tolerance)} г</span>
+        </div>
       </div>
     `;
   }

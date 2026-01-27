@@ -1225,6 +1225,50 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   border-color: rgba(46,196,166,.86) !important;
 }
 
+/* Number input (roll weight) */
+.optCol.number{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.numberField{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.numberLabel{
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.numberSelect,
+.numberInput{
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(17,24,39,.12);
+  background: rgba(255,255,255,0.95);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  box-shadow: 0 10px 22px rgba(17,24,39,.06);
+}
+.numberSelect:disabled,
+.numberInput:disabled{
+  opacity: 0.6;
+}
+.numberMeta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.numberMetaItem strong{
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* Mobile */
 @media (max-width: 480px) {
   body { padding: 12px; }

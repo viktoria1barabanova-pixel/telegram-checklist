@@ -117,6 +117,86 @@
     return Number.isFinite(num) ? num : "";
   }
 
+  const WEIGHT_TOLERANCE_GRAMS = 5;
+
+  function formatWeightDisplay(value, { signed = false } = {}) {
+    const num = normalizeNumberOrEmpty(value);
+    if (num === "") return "—";
+    const rounded = Math.round(num * 10) / 10;
+    const base = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.0$/, "");
+    if (signed && rounded > 0) return `+${base}`;
+    return base;
+  }
+
+  function formatWeightComparison(meta) {
+    if (!meta || meta.plannedWeight === "" || meta.actualWeight === "" || meta.diff === "") return "";
+    const planned = formatWeightDisplay(meta.plannedWeight);
+    const actual = formatWeightDisplay(meta.actualWeight);
+    const diff = formatWeightDisplay(meta.diff, { signed: true });
+    return `${planned}/${actual} (${diff} гр)`;
+  }
+
+  function getRollWeightRows() {
+    if (!DATA) return [];
+    return (
+      DATA.roll_weights ||
+      DATA.rollWeights ||
+      DATA.rolls_weights ||
+      DATA.rollsWeights ||
+      DATA.rolls ||
+      []
+    );
+  }
+
+  function buildRollWeightsCatalog(rows) {
+    const options = [];
+    const map = new Map();
+
+    (rows || []).forEach((row, idx) => {
+      const name = norm(getAny(row, [
+        "roll",
+        "roll_name",
+        "name",
+        "roll_title",
+        "ролл",
+        "ролл_название",
+        "название",
+        "наименование"
+      ], ""));
+      const weight = normalizeNumberOrEmpty(getAny(row, [
+        "weight",
+        "weight_g",
+        "grams",
+        "gram",
+        "грамм",
+        "граммы",
+        "вес"
+      ], ""));
+      if (!name) return;
+      const id = norm(getAny(row, [
+        "roll_id",
+        "id",
+        "код",
+        "code"
+      ], name)) || name || `roll_${idx + 1}`;
+
+      const entry = { id, name, weight };
+      options.push(entry);
+
+      const idKey = tkey(id);
+      const nameKey = tkey(name);
+      if (!map.has(idKey)) map.set(idKey, entry);
+      if (!map.has(nameKey)) map.set(nameKey, entry);
+    });
+
+    options.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    return { options, map };
+  }
+
+  function getRollWeightsCatalog() {
+    return buildRollWeightsCatalog(getRollWeightRows());
+  }
+
   function formatScoreDisplay(value) {
     const num = normalizeNumberOrEmpty(value);
     if (num === "") return "—";
@@ -200,12 +280,17 @@
   function normalizeQuestionType(raw) {
     const t0 = String(raw ?? "single").trim();
     const t = t0.toLowerCase();
+    const isNumber = (
+      t.includes("number") || t.includes("numeric") ||
+      t.includes("числ")
+    );
     const isCb = (
       t.includes("checkbox") || t.includes("check") ||
       t.includes("bool") || t.includes("boolean") ||
       t.includes("multi") || t.includes("multiple") ||
       t.includes("галоч") || t.includes("чек")
     );
+    if (isNumber) return "number";
     return isCb ? "checkbox" : "single";
   }
 
@@ -215,6 +300,14 @@
       "type", "answer_type", "kind",
       "тип", "тип_ответа"
     ], "single")) === "checkbox";
+  }
+
+  function isNumberQuestion(q) {
+    return normalizeQuestionType(getAny(q, [
+      "question_type",
+      "type", "answer_type", "kind",
+      "тип", "тип_ответа"
+    ], "single")) === "number";
   }
 
   function checkboxHasItems(q) {
@@ -601,6 +694,39 @@
     return zone;
   }
 
+  function resolveRollEntry(catalog, rollId, rollName) {
+    const map = catalog?.map instanceof Map ? catalog.map : new Map();
+    const idKey = tkey(rollId);
+    const nameKey = tkey(rollName);
+    return map.get(idKey) || map.get(nameKey) || null;
+  }
+
+  function computeNumberAnswerMeta(answer, catalog) {
+    const rollId = norm(answer?.roll_id || answer?.rollId || answer?.roll || "");
+    const rollName = norm(answer?.roll_name || answer?.rollName || "");
+    const actualWeight = normalizeNumberOrEmpty(answer?.actual_weight ?? answer?.actualWeight ?? answer?.actual ?? answer?.weight ?? "");
+    const entry = resolveRollEntry(catalog, rollId, rollName);
+    const plannedWeight = normalizeNumberOrEmpty(
+      answer?.planned_weight ?? answer?.plannedWeight ?? entry?.weight ?? ""
+    );
+    const hasAnswer = Boolean(rollId || rollName) && actualWeight !== "";
+    const diff = (actualWeight !== "" && plannedWeight !== "")
+      ? Math.round((actualWeight - plannedWeight) * 10) / 10
+      : "";
+    const withinTolerance = (actualWeight !== "" && plannedWeight !== "")
+      ? Math.abs(actualWeight - plannedWeight) <= WEIGHT_TOLERANCE_GRAMS
+      : false;
+    return {
+      rollId,
+      rollName: rollName || entry?.name || "",
+      actualWeight,
+      plannedWeight,
+      diff,
+      hasAnswer,
+      withinTolerance,
+    };
+  }
+
   // ---------- scoring model ----------
   // Single question: good=1, ok=0.5, bad=0
   // Checkbox: “не стоит галочка” = ок (то есть ошибка не выбрана).
@@ -610,6 +736,7 @@
     // percent = total / max * 100
     const sections = activeSections(DATA.sections);
     const allQs = sections.flatMap(s => questionsForSection(DATA.checklist, s.id));
+    const rollCatalog = getRollWeightsCatalog();
 
     // maxScore counts all questions except those explicitly excluded from max
     const targetSectionId = sectionId ? norm(sectionId) : "";
@@ -649,6 +776,34 @@
         }
 
         if ((hasItems && anySelected) || (!hasItems && !checked)) {
+          const severity = (q.severity === "critical") ? "critical" : "noncritical";
+          if (severity === "critical") hasCritical = true;
+
+          const note = safeEnsureNote(qid);
+          issues.push({
+            qid,
+            title: norm(q.title_text || q.title || q.question || q.name),
+            sectionTitle,
+            severity,
+            score: earnedScore,
+            scoreEarned: earnedScore,
+            scoreMax: isExcluded ? "" : qScore,
+            scoreUnit,
+            comment: norm(note.text),
+            photos: notePhotos(qid),
+          });
+        }
+      } else if (isNumberQuestion(q)) {
+        const answer = STATE.numberAnswers?.[qid] || {};
+        const meta = computeNumberAnswerMeta(answer, rollCatalog);
+        const scoreUnit = meta.hasAnswer && meta.withinTolerance ? 1 : 0;
+        const earnedScore = isExcluded ? "" : scoreUnit * qScore;
+
+        if (!isExcluded) {
+          score += scoreUnit;
+        }
+
+        if (meta.hasAnswer && !meta.withinTolerance) {
           const severity = (q.severity === "critical") ? "critical" : "noncritical";
           if (severity === "critical") hasCritical = true;
 
@@ -729,6 +884,31 @@
       single: payload.single || payload.single_answers || {},
       single_labels: payload.single_labels || payload.singleLabels || {},
       checkbox: payload.checkbox || payload.checkbox_answers || {},
+      number: payload.number || payload.number_answers || {},
+      number_labels: payload.number_labels || payload.numberLabels || {},
+    };
+  }
+
+  function normalizeNumberAnswer(raw) {
+    if (!raw) return { rollId: "", rollName: "", actualWeight: "", plannedWeight: "" };
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") raw = parsed;
+      } catch {
+        const num = normalizeNumberOrEmpty(raw);
+        return { rollId: "", rollName: "", actualWeight: num, plannedWeight: "" };
+      }
+    }
+    if (typeof raw === "number") {
+      return { rollId: "", rollName: "", actualWeight: raw, plannedWeight: "" };
+    }
+    if (typeof raw !== "object") return { rollId: "", rollName: "", actualWeight: "", plannedWeight: "" };
+    return {
+      rollId: norm(raw.roll_id || raw.rollId || raw.roll || raw.roll_name || raw.rollName || ""),
+      rollName: norm(raw.roll_name || raw.rollName || raw.rollLabel || ""),
+      actualWeight: normalizeNumberOrEmpty(raw.actual_weight ?? raw.actualWeight ?? raw.actual ?? raw.weight ?? ""),
+      plannedWeight: normalizeNumberOrEmpty(raw.planned_weight ?? raw.plannedWeight ?? raw.plan ?? raw.expected ?? ""),
     };
   }
 
@@ -852,6 +1032,36 @@
           const earnedScore = scoreUnit * qScore;
 
           if (isIssue) {
+            issues.push({
+              qid,
+              title: norm(q.title_text || q.title || q.question || q.name),
+              sectionTitle,
+              severity: (q.severity === "critical") ? "critical" : "noncritical",
+              score: earnedScore,
+              scoreEarned: earnedScore,
+              scoreMax: qScore,
+              scoreUnit,
+              comment: "",
+              photos: [],
+            });
+          }
+          return;
+        }
+
+        if (isNumberQuestion(q)) {
+          const raw = normalized.number?.[qid];
+          const answer = normalizeNumberAnswer(raw);
+          const rollCatalog = getRollWeightsCatalog();
+          const meta = computeNumberAnswerMeta({
+            roll_id: answer.rollId,
+            roll_name: answer.rollName,
+            actual_weight: answer.actualWeight,
+            planned_weight: answer.plannedWeight,
+          }, rollCatalog);
+          if (!meta.hasAnswer) return;
+          const scoreUnit = meta.withinTolerance ? 1 : 0;
+          const earnedScore = scoreUnit * qScore;
+          if (!meta.withinTolerance) {
             issues.push({
               qid,
               title: norm(q.title_text || q.title || q.question || q.name),
@@ -999,6 +1209,10 @@
   // ---------- required validation ----------
   function isAnswered(q) {
     if (isCheckboxQuestion(q)) return true; // unchecked is a valid state
+    if (isNumberQuestion(q)) {
+      const meta = computeNumberAnswerMeta(STATE.numberAnswers?.[q.id] || {}, getRollWeightsCatalog());
+      return meta.hasAnswer;
+    }
     return !!norm(STATE.singleAnswers[q.id]);
   }
 
@@ -1053,6 +1267,7 @@
     STATE.singleAnswers = draft.singleAnswers || {};
     STATE.checkboxAnswers = draft.checkboxAnswers || {};
     STATE.singleAnswerLabels = draft.singleAnswerLabels || {};
+    STATE.numberAnswers = draft.numberAnswers || {};
     STATE.isFinished = !!draft.isFinished;
     STATE.lastResult = draft.lastResult || null;
     STATE.lastResultId = draft.lastResultId || null;
@@ -1857,13 +2072,23 @@
     let qs = questionsForSection(DATA.checklist, STATE.activeSection);
 
     const qList = document.getElementById("qList");
+    const rollCatalog = getRollWeightsCatalog();
     qList.innerHTML = qs.map(q => {
       const qWithSection = { ...q, section_title: activeTitle };
       const isCheckbox = isCheckboxQuestion(qWithSection);
+      const isNumber = isNumberQuestion(qWithSection);
       const state = isCheckbox
         ? (STATE.checkboxAnswers[qWithSection.id] instanceof Set ? STATE.checkboxAnswers[qWithSection.id] : new Set())
-        : norm(STATE.singleAnswers[qWithSection.id]);
-      return tplQuestionCard(qWithSection, { answerState: state, showRightToggle: true, showNotes: !isCheckbox });
+        : isNumber
+          ? (STATE.numberAnswers?.[qWithSection.id] || {})
+          : norm(STATE.singleAnswers[qWithSection.id]);
+      return tplQuestionCard(qWithSection, {
+        answerState: state,
+        showRightToggle: true,
+        showNotes: !isCheckbox,
+        rollOptions: isNumber ? rollCatalog.options : [],
+        tolerance: WEIGHT_TOLERANCE_GRAMS,
+      });
     }).join("");
 
     const sectionLoadingPill = document.getElementById("sectionLoadingPill");
@@ -1976,6 +2201,78 @@
 
       // initial notes visibility
       updateNotes();
+    });
+
+    // wire number options
+    document.querySelectorAll(".qCard .optCol.number").forEach(col => {
+      const card = col.closest(".qCard");
+      const qid = card.getAttribute("data-qid");
+      const rollSelect = col.querySelector(".numberSelect");
+      const actualInput = col.querySelector(".numberInput");
+      const planEl = col.querySelector('[data-role="plan"]');
+      const diffEl = col.querySelector('[data-role="diff"]');
+      const rollCatalog = getRollWeightsCatalog();
+
+      const applyMeta = (meta) => {
+        if (planEl) {
+          const planText = meta.plannedWeight !== "" ? `${formatWeightDisplay(meta.plannedWeight)} г` : "—";
+          planEl.textContent = planText;
+        }
+        if (diffEl) {
+          const diffText = meta.diff !== "" ? `${formatWeightDisplay(meta.diff, { signed: true })} г` : "—";
+          diffEl.textContent = diffText;
+        }
+      };
+
+      const updateFromInputs = (shouldSave = true) => {
+        const rollId = norm(rollSelect?.value || "");
+        const selectedOption = rollSelect?.options?.[rollSelect.selectedIndex];
+        const rollName = norm(selectedOption?.getAttribute("data-name") || selectedOption?.textContent || "");
+        const plannedAttr = selectedOption?.getAttribute("data-weight") || "";
+        const plannedWeight = normalizeNumberOrEmpty(plannedAttr);
+        const actualWeight = normalizeNumberOrEmpty(actualInput?.value ?? "");
+
+        const meta = computeNumberAnswerMeta({
+          roll_id: rollId,
+          roll_name: rollName,
+          actual_weight: actualWeight,
+          planned_weight: plannedWeight,
+        }, rollCatalog);
+
+        STATE.numberAnswers ??= {};
+        STATE.numberAnswers[qid] = {
+          roll_id: meta.rollId,
+          roll_name: meta.rollName,
+          actual_weight: meta.actualWeight,
+          planned_weight: meta.plannedWeight,
+          diff: meta.diff,
+          within_tolerance: meta.withinTolerance,
+        };
+
+        applyMeta(meta);
+
+        if (meta.hasAnswer) {
+          toggleNotesByAnswer(qid, meta.withinTolerance ? "good" : "bad");
+          markRequired(card, true);
+        } else {
+          toggleNotesByAnswer(qid, "");
+        }
+
+        if (shouldSave) {
+          saveDraft();
+          refreshFinishState();
+        }
+      };
+
+      if (isLockedSection) {
+        if (rollSelect) rollSelect.disabled = true;
+        if (actualInput) actualInput.disabled = true;
+      } else {
+        if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
+        if (actualInput) actualInput.oninput = () => updateFromInputs(true);
+      }
+
+      updateFromInputs(false);
     });
 
     // wire notes UI
@@ -2287,6 +2584,7 @@
         const questionText = norm(q.title_text || q.title || q.question || q.name);
         const note = safeEnsureNote(qid);
         const isCheckbox = isCheckboxQuestion(q);
+        const isNumber = isNumberQuestion(q);
         const qScore = Number(getAny(q, ["score", "баллы", "points"], 1)) || 1;
         const ex = String(getAny(q, ["exclude_from_max", "exclude", "skip_max", "исключить_из_макс"], false) ?? "").trim().toLowerCase();
         const isExcluded = (ex === "true" || ex === "1" || ex === "yes" || ex === "да");
@@ -2299,7 +2597,7 @@
           section_title: section.title || "",
           question_id: qid,
           question_text: questionText,
-          question_type: isCheckbox ? "checkbox" : "single",
+          question_type: isCheckbox ? "checkbox" : (isNumber ? "number" : "single"),
           severity,
           answer_key: "",
           answer_text: "",
@@ -2340,6 +2638,20 @@
           baseRow.answer_key = baseRow.answer_value;
           baseRow.answer_text = baseRow.answer_label;
           baseRow.is_issue = isIssue;
+          baseRow.score_earned = earned;
+        } else if (isNumber) {
+          const rollCatalog = getRollWeightsCatalog();
+          const answer = STATE.numberAnswers?.[qid] || {};
+          const meta = computeNumberAnswerMeta(answer, rollCatalog);
+          const hasAnswer = meta.hasAnswer;
+          const scoreUnit = hasAnswer && meta.withinTolerance ? 1 : 0;
+          const earned = isExcluded ? "" : scoreUnit * qScore;
+          const labelText = formatWeightComparison(meta);
+          baseRow.answer_value = meta.actualWeight !== "" ? String(meta.actualWeight) : "";
+          baseRow.answer_label = labelText;
+          baseRow.answer_key = meta.rollId || meta.rollName || "";
+          baseRow.answer_text = labelText;
+          baseRow.is_issue = hasAnswer ? !meta.withinTolerance : false;
           baseRow.score_earned = earned;
         } else {
           const selectedValue = norm(STATE.singleAnswers[qid] || "");
@@ -2397,11 +2709,14 @@
     const single_labels = {};
     const checkbox = {};
     const checkbox_labels = {};
+    const number = {};
+    const number_labels = {};
 
     for (const qid of qids) {
       if (STATE.singleAnswers[qid] !== undefined) single[qid] = STATE.singleAnswers[qid];
       if (STATE.singleAnswerLabels?.[qid]) single_labels[qid] = STATE.singleAnswerLabels[qid];
       if (STATE.checkboxAnswers[qid]) checkbox[qid] = [...(STATE.checkboxAnswers[qid] || [])];
+      if (STATE.numberAnswers?.[qid]) number[qid] = STATE.numberAnswers[qid];
     }
 
     sectionQs.forEach(q => {
@@ -2409,6 +2724,13 @@
       const set = STATE.checkboxAnswers[q.id] instanceof Set ? STATE.checkboxAnswers[q.id] : new Set();
       const labels = getCheckboxAnswerLabels(q, set);
       if (labels.length) checkbox_labels[q.id] = labels;
+    });
+
+    sectionQs.forEach(q => {
+      if (!isNumberQuestion(q)) return;
+      const meta = computeNumberAnswerMeta(STATE.numberAnswers?.[q.id] || {}, getRollWeightsCatalog());
+      const labelText = formatWeightComparison(meta);
+      if (labelText) number_labels[q.id] = labelText;
     });
 
     const checker = getCheckerMeta();
@@ -2448,7 +2770,7 @@
       has_critical: result.hasCritical,
 
       issues: result.issues,
-      answers: { single, single_labels, checkbox, checkbox_labels },
+      answers: { single, single_labels, checkbox, checkbox_labels, number, number_labels },
       meta: {
         app_version: (typeof APP_VERSION !== "undefined" ? APP_VERSION : ""),
         is_tg: IS_TG,
@@ -2476,6 +2798,8 @@
     const single_labels = { ...(STATE.singleAnswerLabels || {}) };
     const checkbox = {};
     const checkbox_labels = {};
+    const number = { ...(STATE.numberAnswers || {}) };
+    const number_labels = {};
     for (const [k, set] of Object.entries(STATE.checkboxAnswers || {})) checkbox[k] = [...(set || [])];
     const allSections = activeSections(DATA.sections);
     allSections.forEach(section => {
@@ -2484,6 +2808,15 @@
         const set = STATE.checkboxAnswers[q.id] instanceof Set ? STATE.checkboxAnswers[q.id] : new Set();
         const labels = getCheckboxAnswerLabels(q, set);
         if (labels.length) checkbox_labels[q.id] = labels;
+      });
+    });
+
+    allSections.forEach(section => {
+      questionsForSection(DATA.checklist, section.id).forEach(q => {
+        if (!isNumberQuestion(q)) return;
+        const meta = computeNumberAnswerMeta(STATE.numberAnswers?.[q.id] || {}, getRollWeightsCatalog());
+        const labelText = formatWeightComparison(meta);
+        if (labelText) number_labels[q.id] = labelText;
       });
     });
 
@@ -2524,7 +2857,7 @@
 
       issues: result.issues, // already includes notes/photos
 
-      answers: { single, single_labels, checkbox, checkbox_labels },
+      answers: { single, single_labels, checkbox, checkbox_labels, number, number_labels },
       answers_rows,
       answers_rows_count,
       meta: {

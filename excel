@@ -5,6 +5,7 @@ const SHEET_NAMES = {
   sections: "Разделы",
   checklist: "Вопросы",
   branches: "Адреса",
+  roll_weights: "Вес роллов",
   inspectors: "Проверяющие",
   submissions: "Результаты",
   answers: "Ответы",
@@ -94,6 +95,7 @@ function doGet(e) {
         sections: readSheetAsObjects_(ss, SHEET_NAMES.sections),
         checklist: readSheetAsObjects_(ss, SHEET_NAMES.checklist),
         branches: readSheetAsObjects_(ss, SHEET_NAMES.branches),
+        roll_weights: readSheetAsObjects_(ss, SHEET_NAMES.roll_weights),
         settings: SETTINGS,
         meta: { updatedAt: new Date().toISOString() },
       };

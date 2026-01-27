@@ -16,6 +16,7 @@
 
     singleAnswers: {}, // key -> "ideal" | "acceptable" | "bad"
     checkboxAnswers: {}, // "_items" -> Set(keys)
+    numberAnswers: {}, // key -> { roll_id, roll_name, actual_weight, planned_weight }
 
     isFinished: false,
     lastResult: null,
@@ -149,6 +150,7 @@
           singleAnswers: STATE.singleAnswers,
           checkboxAnswers: serialCheckbox,
           singleAnswerLabels: STATE.singleAnswerLabels,
+          numberAnswers: STATE.numberAnswers,
 
           savedAt: Date.now(),
 
@@ -187,6 +189,7 @@
       for (const [k, arr] of Object.entries(d.checkboxAnswers || {})) restored[k] = new Set(arr);
       d.checkboxAnswers = restored;
       d.singleAnswerLabels = d.singleAnswerLabels || {};
+      d.numberAnswers = d.numberAnswers || {};
       d.lastSubmittedAt = d.lastSubmittedAt || "";
       d.lastBotSendStatus = d.lastBotSendStatus || "";
       d.lastBotSendError = d.lastBotSendError || "";
@@ -227,6 +230,7 @@
 
     STATE.singleAnswers = {};
     STATE.checkboxAnswers = {};
+    STATE.numberAnswers = {};
     STATE.activeSection = "";
     STATE.completedSections = [];
     STATE.isFinished = false;
@@ -244,6 +248,7 @@
   window.resetCheckKeepMeta = function resetCheckKeepMeta() {
     STATE.singleAnswers = {};
     STATE.checkboxAnswers = {};
+    STATE.numberAnswers = {};
     STATE.activeSection = STATE.enabledSections?.[0] || "";
     STATE.completedSections = [];
     STATE.isFinished = false;
@@ -268,6 +273,7 @@
     STATE.completedSections = [];
     STATE.singleAnswers = {};
     STATE.checkboxAnswers = {};
+    STATE.numberAnswers = {};
     STATE.isFinished = false;
     STATE.lastResult = null;
     STATE.lastResultId = null;
