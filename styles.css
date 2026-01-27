@@ -1236,6 +1236,15 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   flex-direction: column;
   gap: 6px;
 }
+.numberActions{
+  display: flex;
+  justify-content: flex-end;
+}
+.numberHideBtn{
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+}
 .numberLabel{
   font-size: 13px;
   font-weight: 600;
