@@ -1251,8 +1251,7 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   color: var(--muted);
 }
 .numberSelect,
-.numberInput,
-.numberSearch{
+.numberInput{
   width: 100%;
   padding: 12px 12px;
   border-radius: 14px;
@@ -1264,8 +1263,7 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   box-shadow: 0 10px 22px rgba(17,24,39,.06);
 }
 .numberSelect:disabled,
-.numberInput:disabled,
-.numberSearch:disabled{
+.numberInput:disabled{
   opacity: 0.6;
 }
 .numberInputRow{
