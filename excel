@@ -373,6 +373,22 @@ function extractPayloadFromPost_(e, params) {
   return raw;
 }
 
+function extractTelegramUserId_(payload, initData) {
+  const direct = safe_(payload?.tg_user_id || payload?.tg_id || payload?.tg?.user_id || payload?.tg?.id || "");
+  if (direct !== null && direct !== undefined && String(direct).trim() !== "") return direct;
+
+  if (!initData) return "";
+  try {
+    const parsed = parseInitData_(initData);
+    const userRaw = parsed?.user;
+    if (!userRaw) return "";
+    const user = JSON.parse(userRaw);
+    return user?.id || "";
+  } catch (err) {
+    return "";
+  }
+}
+
 function sendTelegramMessageFromPayload_(ss, payload, { action } = {}) {
   if (!TELEGRAM_BOT_TOKEN) {
     return { ok: false, info: "bot_token_missing" };
@@ -383,7 +399,7 @@ function sendTelegramMessageFromPayload_(ss, payload, { action } = {}) {
   let chatId = tgUser?.id || "";
   let infoHint = "";
   if (!chatId) {
-    const fallbackId = safe_(payload?.tg_user_id || payload?.tg_id || payload?.tg?.user_id || payload?.tg?.id || "");
+    const fallbackId = extractTelegramUserId_(payload, initData);
     if (fallbackId) {
       chatId = fallbackId;
       infoHint = "init_data_invalid_fallback";

@@ -107,6 +107,19 @@
     }
   }
 
+  function getTelegramUserIdFromInitData(initData) {
+    if (!initData) return "";
+    try {
+      const params = new URLSearchParams(String(initData || ""));
+      const userRaw = params.get("user");
+      if (!userRaw) return "";
+      const user = JSON.parse(userRaw);
+      return user?.id || "";
+    } catch {
+      return "";
+    }
+  }
+
   function zoneLabelLower(zone) {
     const v = String(zone ?? "").toLowerCase();
     if (v === "green") return "зелёная зона";
@@ -245,6 +258,10 @@
         .replace(/\{zone\}/g, zoneRaw || "unknown")
         .replace(/\{link\}/g, link)
       : `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
+    const initData = getTelegramInitData();
+    const checker = getCheckerMeta();
+    const fallbackUserId = getTelegramUserIdFromInitData(initData);
+    const tgUserId = checker.tg_user_id || checker.tg_id || fallbackUserId || "";
     const payload = {
       action: "send_message",
       message_text: text,
@@ -252,8 +269,8 @@
       result_id: norm(submissionId),
       zone: zoneRaw || "unknown",
       zone_text: zoneText,
-      init_data: getTelegramInitData(),
-      tg_user_id: window.Telegram?.WebApp?.initDataUnsafe?.user?.id || "",
+      init_data: initData,
+      tg_user_id: tgUserId,
     };
 
     if (!payload.init_data) {
@@ -2236,7 +2253,14 @@
         if (hideBtn) hideBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
-        if (actualInput) actualInput.oninput = () => updateFromInputs(true);
+        if (actualInput) {
+          actualInput.oninput = () => updateFromInputs(true);
+          actualInput.addEventListener("focus", () => {
+            requestAnimationFrame(() => {
+              actualInput.scrollIntoView({ behavior: "smooth", block: "center" });
+            });
+          });
+        }
         if (hideBtn) {
           hideBtn.onclick = () => {
             updateFromInputs(true);
