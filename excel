@@ -380,13 +380,16 @@ function sendTelegramMessageFromPayload_(ss, payload, { action } = {}) {
 
   const initData = safe_(payload?.init_data || payload?.initData || "");
   const tgUser = verifyInitData_(initData, TELEGRAM_BOT_TOKEN);
-  if (!tgUser) {
-    return { ok: false, info: "init_data_invalid" };
-  }
-
-  const chatId = tgUser.id;
+  let chatId = tgUser?.id || "";
+  let infoHint = "";
   if (!chatId) {
-    return { ok: false, info: "tg_user_id_missing" };
+    const fallbackId = safe_(payload?.tg_user_id || payload?.tg_id || payload?.tg?.user_id || payload?.tg?.id || "");
+    if (fallbackId) {
+      chatId = fallbackId;
+      infoHint = "init_data_invalid_fallback";
+    } else {
+      return { ok: false, info: tgUser ? "tg_user_id_missing" : "init_data_invalid" };
+    }
   }
 
   const text = buildTelegramMessageText_(payload, { action });
@@ -395,6 +398,9 @@ function sendTelegramMessageFromPayload_(ss, payload, { action } = {}) {
   }
 
   const sendRes = sendTelegramMessage_(chatId, text);
+  if (sendRes.ok && infoHint) {
+    return { ...sendRes, info: infoHint };
+  }
   return sendRes;
 }
 

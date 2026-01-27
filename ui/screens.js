@@ -253,6 +253,7 @@
       zone: zoneRaw || "unknown",
       zone_text: zoneText,
       init_data: getTelegramInitData(),
+      tg_user_id: window.Telegram?.WebApp?.initDataUnsafe?.user?.id || "",
     };
 
     if (!payload.init_data) {
@@ -2172,7 +2173,6 @@
       const card = col.closest(".qCard");
       const qid = card.getAttribute("data-qid");
       const rollSelect = col.querySelector(".numberSelect");
-      const rollSearch = col.querySelector(".numberSearch");
       const actualInput = col.querySelector(".numberInput");
       const hideBtn = col.querySelector(".numberHideBtn");
       const planEl = col.querySelector('[data-role="plan"]');
@@ -2188,21 +2188,6 @@
           const diffText = meta.diff !== "" ? `${formatWeightDisplay(meta.diff, { signed: true })} г` : "—";
           diffEl.textContent = diffText;
         }
-      };
-
-      const filterRollOptions = () => {
-        if (!rollSelect || !rollSearch) return;
-        const query = tkey(rollSearch.value || "");
-        const options = Array.from(rollSelect.options || []);
-        options.forEach((opt, idx) => {
-          if (idx === 0 || !query) {
-            opt.hidden = false;
-            return;
-          }
-          const label = tkey(opt.getAttribute("data-name") || opt.textContent || "");
-          const isSelected = opt.selected;
-          opt.hidden = !(label.includes(query) || isSelected);
-        });
       };
 
       const updateFromInputs = (shouldSave = true) => {
@@ -2247,12 +2232,10 @@
 
       if (isLockedSection) {
         if (rollSelect) rollSelect.disabled = true;
-        if (rollSearch) rollSearch.disabled = true;
         if (actualInput) actualInput.disabled = true;
         if (hideBtn) hideBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
-        if (rollSearch) rollSearch.oninput = () => filterRollOptions();
         if (actualInput) actualInput.oninput = () => updateFromInputs(true);
         if (hideBtn) {
           hideBtn.onclick = () => {
@@ -2262,7 +2245,6 @@
         }
       }
 
-      filterRollOptions();
       updateFromInputs(false);
     });
 

@@ -457,10 +457,6 @@
     return `
       <div class="optCol number" data-kind="number">
         <label class="numberField">
-          <span class="numberLabel">Поиск ролла</span>
-          <input class="numberSearch" data-role="roll-search" type="text" placeholder="Начните ввод" value="" />
-        </label>
-        <label class="numberField">
           <span class="numberLabel">Ролл</span>
           <select class="numberSelect" data-role="roll">
             <option value="">Выберите ролл</option>
