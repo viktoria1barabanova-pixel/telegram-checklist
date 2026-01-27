@@ -474,6 +474,9 @@
           <span class="numberLabel">Факт, г</span>
           <input class="numberInput" data-role="actual" type="number" inputmode="decimal" min="0" step="1" placeholder="Введите вес" value="${h(actualValue)}" />
         </label>
+        <div class="numberActions">
+          <button type="button" class="btn btnSecondary numberHideBtn">Готово</button>
+        </div>
         <div class="numberMeta">
           <span class="numberMetaItem">План: <strong data-role="plan">${h(planText)}</strong></span>
           <span class="numberMetaItem">Отклонение: <strong data-role="diff">${h(diffText)}</strong></span>
