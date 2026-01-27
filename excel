@@ -17,7 +17,7 @@ const SPREADSHEET_ID = "1Ln_cnU64l1NZRIDk2iAInkcFM1ACf6_2aiwqz7X8caw";
 
 // Telegram Bot (for sending messages after submit)
 // Set your bot token here. Without it, sendMessage will be skipped.
-const TELEGRAM_BOT_TOKEN = "";
+const TELEGRAM_BOT_TOKEN = "8477123859:AAEzpqN8tPNm9AUuuhJql-uoDS6ijX2lzgQ";
 
 // Заголовки для листов с результатами
 const SUBMISSIONS_HEADERS = [

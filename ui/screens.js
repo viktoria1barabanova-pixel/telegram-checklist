@@ -37,6 +37,10 @@
         } catch { return ""; }
       };
 
+  const formatRuDateTimeMsk = (window.formatRuDateTimeMsk && typeof window.formatRuDateTimeMsk === "function")
+    ? window.formatRuDateTimeMsk
+    : (value) => formatRuDateTime(value);
+
   const truncateText = (window.truncateText && typeof window.truncateText === "function")
     ? window.truncateText
     : (value, maxLen = 1000) => {
@@ -1504,7 +1508,7 @@
         // restore draft for this address (branchId)
         const bid = norm(addressSelect.value);
         const d = loadDraft(bid);
-        if (d) {
+        if (d && !d.isFinished) {
           if (hint) hint.innerHTML = draftHintText(d);
           if (draftActions) {
             draftActions.style.display = "";
@@ -1659,7 +1663,7 @@
 
       const lastDraftBranchId = (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
       const draft = lastDraftBranchId ? loadDraft(lastDraftBranchId) : null;
-      if (!draft) {
+      if (!draft || draft.isFinished) {
         if (currentCheckBtn) currentCheckBtn.style.display = "none";
         if (currentCheckBlock) currentCheckBlock.style.display = "none";
         if (currentCheckHint) currentCheckHint.textContent = "";
@@ -1730,6 +1734,7 @@
           <button id="cabinetBackBtn" class="iconBtn cabinetBackBtn" type="button" aria-label="Назад">←</button>
         </div>
         <div id="cabinetStatus" class="hint cabinetMeta"></div>
+        <div id="cabinetTimeHint" class="hint cabinetMeta">Время указано по Москве (МСК).</div>
         <div class="card cabinetCard">
           <div class="cabinetSortBar" id="cabinetSortBar">
             <label class="cabinetSortField" for="cabinetSortSelect">
@@ -1739,8 +1744,6 @@
                 <option value="date_asc">Сначала старые</option>
                 <option value="percent_desc">% по убыванию</option>
                 <option value="percent_asc">% по возрастанию</option>
-                <option value="zone_desc">Зона: лучше → хуже</option>
-                <option value="zone_asc">Зона: хуже → лучше</option>
               </select>
             </label>
           </div>
@@ -1770,7 +1773,7 @@
     };
 
     const formatDateSmart = (value) => {
-      const formatted = formatRuDateTime(value);
+      const formatted = formatRuDateTimeMsk(value);
       return formatted || norm(value) || "—";
     };
 
@@ -1779,16 +1782,6 @@
       date_asc: "Сначала старые",
       percent_desc: "% по убыванию",
       percent_asc: "% по возрастанию",
-      zone_desc: "Зона: лучше → хуже",
-      zone_asc: "Зона: хуже → лучше",
-    };
-
-    const zoneWeight = (zone) => {
-      const key = String(zone ?? "").toLowerCase();
-      if (key === "green") return 3;
-      if (key === "yellow") return 2;
-      if (key === "red") return 1;
-      return 0;
     };
 
     const dateValue = (row, fallback) => {
@@ -1806,8 +1799,6 @@
       date_asc: (a, b) => dateValue(a, Number.POSITIVE_INFINITY) - dateValue(b, Number.POSITIVE_INFINITY),
       percent_desc: (a, b) => percentValue(b, Number.NEGATIVE_INFINITY) - percentValue(a, Number.NEGATIVE_INFINITY),
       percent_asc: (a, b) => percentValue(a, Number.POSITIVE_INFINITY) - percentValue(b, Number.POSITIVE_INFINITY),
-      zone_desc: (a, b) => zoneWeight(b.zone) - zoneWeight(a.zone),
-      zone_asc: (a, b) => zoneWeight(a.zone) - zoneWeight(b.zone),
     };
 
     const currentSortLabel = () => SORT_LABELS[sortState.key] || SORT_LABELS.date_desc;
@@ -1822,17 +1813,12 @@
       return ["green", "yellow", "red"].includes(key) ? key : "gray";
     }
 
-    function fioFromRow(row) {
-      return norm(getAny(row, ["fio", "name", "inspector", "user"], "")) || "—";
-    }
-
     function addressFromRow(row) {
+      const branchName = norm(getAny(row, ["branch_name", "branchName"], ""));
+      if (branchName) return branchName;
       const branchId = norm(getAny(row, ["branch_id", "branchId"], ""));
       const branchRow = branchId ? findBranchById(branchId) : null;
-      const branchName = norm(getAny(row, ["branch_name", "branchName"], getAddressLabel(branchRow || {})));
-      const city = norm(getAny(row, ["city", "город"], getCity(branchRow || {})));
-      const branchLabel = [branchId, branchName].filter(Boolean).join(" ").trim();
-      return [city, branchLabel].filter(Boolean).join(", ") || branchLabel || city || "—";
+      return norm(getAddressLabel(branchRow || {})) || "—";
     }
 
     function sortItems(list) {
@@ -1898,9 +1884,7 @@
           <thead>
             <tr>
               <th style="width:140px;">Дата</th>
-              <th style="width:180px;">Имя</th>
               <th>Адрес</th>
-              <th style="width:140px;">Зона</th>
               <th style="width:140px;">% прохождения</th>
             </tr>
           </thead>
@@ -1908,19 +1892,16 @@
             ${list.map(item => {
               const submissionId = norm(item.submission_id);
               const submittedAt = formatDateSmart(item.submitted_at);
-              const fio = fioFromRow(item);
               const address = addressFromRow(item);
               const zoneKey = zoneClassKey(item.zone);
               const percent = formatPercentDisplay(item.percent);
-              const zoneCellClass = `cabinetZoneCell cabinetZoneCell--${zoneKey}`;
+              const percentCellClass = `cabinetZoneCell cabinetZoneCell--${zoneKey}`;
 
               return `
-                <tr class="cabinetRow" data-open-submission="${escapeHtml(submissionId)}" tabindex="0" role="button" aria-label="Открыть проверку ${escapeHtml(submittedAt)} • ${escapeHtml(fio)}">
+                <tr class="cabinetRow" data-open-submission="${escapeHtml(submissionId)}" tabindex="0" role="button" aria-label="Открыть проверку ${escapeHtml(submittedAt)} • ${escapeHtml(address)}">
                   <td>${escapeHtml(submittedAt)}</td>
-                  <td>${escapeHtml(fio)}</td>
                   <td>${escapeHtml(address)}</td>
-                  <td class="${escapeHtml(zoneCellClass)}">${zoneBadgeHtml(zoneKey)}</td>
-                  <td>${escapeHtml(percent)}</td>
+                  <td class="${escapeHtml(percentCellClass)}">${escapeHtml(percent)}</td>
                 </tr>
               `;
             }).join("")}
@@ -2209,6 +2190,7 @@
       const qid = card.getAttribute("data-qid");
       const rollSelect = col.querySelector(".numberSelect");
       const actualInput = col.querySelector(".numberInput");
+      const hideBtn = col.querySelector(".numberHideBtn");
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
@@ -2267,9 +2249,16 @@
       if (isLockedSection) {
         if (rollSelect) rollSelect.disabled = true;
         if (actualInput) actualInput.disabled = true;
+        if (hideBtn) hideBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
         if (actualInput) actualInput.oninput = () => updateFromInputs(true);
+        if (hideBtn) {
+          hideBtn.onclick = () => {
+            updateFromInputs(true);
+            if (actualInput) actualInput.blur();
+          };
+        }
       }
 
       updateFromInputs(false);
