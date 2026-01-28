@@ -240,6 +240,7 @@
   }
 
   async function sendTelegramResultMessage(result, submissionId) {
+    if (!STATE.isFinished) return false;
     const zoneRaw = String(result?.zone ?? "").toLowerCase();
     const zoneText = (
       zoneRaw === "green" ? "зелёную зону" :
@@ -247,7 +248,24 @@
       zoneRaw === "red" ? "красную зону" :
       "серую зону"
     );
+    const zoneLabel = (
+      zoneRaw === "green" ? "зелёная" :
+      zoneRaw === "yellow" ? "жёлтая" :
+      zoneRaw === "red" ? "красная" :
+      "серая"
+    );
+    const zoneEmoji = (
+      zoneRaw === "green" ? "🟢" :
+      zoneRaw === "yellow" ? "🟡" :
+      zoneRaw === "red" ? "🔴" :
+      "⚪️"
+    );
     const link = buildResultLink(submissionId) || "—";
+    const { branchName } = getBranchMeta();
+    const branchLine = [norm(STATE.city || ""), branchName].filter(Boolean).join(", ");
+    const checker = getCheckerMeta();
+    const percentText = formatPercentDisplay(result?.percent);
+    const submittedAtText = STATE.lastSubmittedAt ? formatRuDateTime(STATE.lastSubmittedAt) : "";
 
     const template = (typeof TELEGRAM_RESULT_MESSAGE_TEMPLATE !== "undefined")
       ? String(TELEGRAM_RESULT_MESSAGE_TEMPLATE || "").trim()
@@ -256,10 +274,25 @@
       ? template
         .replace(/\{zoneText\}/g, zoneText)
         .replace(/\{zone\}/g, zoneRaw || "unknown")
+        .replace(/\{zoneLabel\}/g, zoneLabel)
+        .replace(/\{zoneEmoji\}/g, zoneEmoji)
+        .replace(/\{branch\}/g, branchLine || "—")
+        .replace(/\{checker\}/g, checker.fio || "—")
+        .replace(/\{percent\}/g, percentText || "—")
+        .replace(/\{date\}/g, submittedAtText || "—")
         .replace(/\{link\}/g, link)
-      : `Поздравляем вы прошли проверку на ${zoneText}. Ссылка на проверку ${link}`;
+      : [
+          "Проверка завершена 🤝",
+          "",
+          `Филиал: ${branchLine || "—"}`,
+          `Проверяющий: ${checker.fio || "—"}`,
+          `Зона: ${zoneEmoji} ${zoneLabel}${percentText && percentText !== "—" ? ` ${percentText}` : ""}`,
+          `Дата проверки: ${submittedAtText || "—"}`,
+          "",
+          "Ссылка на проверку",
+          link,
+        ].join("\n");
     const initData = getTelegramInitData();
-    const checker = getCheckerMeta();
     const fallbackUserId = getTelegramUserIdFromInitData(initData);
     const tgUserId = checker.tg_user_id || checker.tg_id || fallbackUserId || "";
     const payload = {
@@ -269,6 +302,13 @@
       result_id: norm(submissionId),
       zone: zoneRaw || "unknown",
       zone_text: zoneText,
+      zone_label: zoneLabel,
+      zone_emoji: zoneEmoji,
+      inspection_area: "Общая",
+      branch_name: branchLine || branchName || "",
+      checker_fio: checker.fio || "",
+      percent: percentText || "",
+      submitted_at: submittedAtText || "",
       init_data: initData,
       tg_user_id: tgUserId,
     };
@@ -517,11 +557,10 @@
   }
 
   function formatPercentForSheet(value) {
-    if (value === null || value === undefined || value === "") return "";
-    const cleaned = String(value).replace("%", "").replace(",", ".").trim();
-    const num = Number(cleaned);
-    if (!Number.isFinite(num)) return "";
-    return `${num.toFixed(1).replace(".", ",")}%`;
+    const num = normalizePercentValue(value);
+    if (num === null) return "";
+    const decimal = num / 100;
+    return Number(decimal.toFixed(4));
   }
 
   function formatPercentDisplay(value) {
@@ -1738,19 +1777,8 @@
           <button id="cabinetBackBtn" class="iconBtn cabinetBackBtn" type="button" aria-label="Назад">←</button>
         </div>
         <div id="cabinetStatus" class="hint cabinetMeta"></div>
-        <div id="cabinetTimeHint" class="hint cabinetMeta">Время указано по Москве (МСК).</div>
+        <div id="cabinetTimeHint" class="hint cabinetMeta">Время указано по часовому поясу устройства.</div>
         <div class="card cabinetCard">
-          <div class="cabinetSortBar" id="cabinetSortBar">
-            <label class="cabinetSortField" for="cabinetSortSelect">
-              <span>Сортировка</span>
-              <select id="cabinetSortSelect" class="select">
-                <option value="date_desc">Сначала новые</option>
-                <option value="date_asc">Сначала старые</option>
-                <option value="percent_desc">% по убыванию</option>
-                <option value="percent_asc">% по возрастанию</option>
-              </select>
-            </label>
-          </div>
           <div id="cabinetTableWrap" class="cabinetTableWrap"></div>
         </div>
         <div class="resultActions cabinetActions">
@@ -1763,9 +1791,7 @@
     const reloadBtn = document.getElementById("cabinetReloadBtn");
     const statusEl = document.getElementById("cabinetStatus");
     const tableWrap = document.getElementById("cabinetTableWrap");
-    const sortBar = document.getElementById("cabinetSortBar");
-    const sortSelect = document.getElementById("cabinetSortSelect");
-    const sortState = { key: "date_desc" };
+    const sortState = { key: "date", dir: "desc", showAll: false };
 
     let latestRawItems = [];
     let latestTotal = 0;
@@ -1777,15 +1803,15 @@
     };
 
     const formatDateSmart = (value) => {
-      const formatted = formatRuDateTimeMsk(value);
+      const parsed = parsePossibleDate(value);
+      const formatted = parsed ? formatRuDateTime(parsed.toISOString()) : "";
       return formatted || norm(value) || "—";
     };
 
     const SORT_LABELS = {
-      date_desc: "Сначала новые",
-      date_asc: "Сначала старые",
-      percent_desc: "% по убыванию",
-      percent_asc: "% по возрастанию",
+      date: "Дата",
+      address: "Адрес",
+      percent: "% прохождения",
     };
 
     const dateValue = (row, fallback) => {
@@ -1799,13 +1825,16 @@
     };
 
     const sortComparators = {
-      date_desc: (a, b) => dateValue(b, Number.NEGATIVE_INFINITY) - dateValue(a, Number.NEGATIVE_INFINITY),
-      date_asc: (a, b) => dateValue(a, Number.POSITIVE_INFINITY) - dateValue(b, Number.POSITIVE_INFINITY),
-      percent_desc: (a, b) => percentValue(b, Number.NEGATIVE_INFINITY) - percentValue(a, Number.NEGATIVE_INFINITY),
-      percent_asc: (a, b) => percentValue(a, Number.POSITIVE_INFINITY) - percentValue(b, Number.POSITIVE_INFINITY),
+      date: (a, b) => dateValue(a, Number.POSITIVE_INFINITY) - dateValue(b, Number.POSITIVE_INFINITY),
+      percent: (a, b) => percentValue(a, Number.POSITIVE_INFINITY) - percentValue(b, Number.POSITIVE_INFINITY),
+      address: (a, b) => addressFromRow(a).localeCompare(addressFromRow(b), "ru"),
     };
 
-    const currentSortLabel = () => SORT_LABELS[sortState.key] || SORT_LABELS.date_desc;
+    const currentSortLabel = () => {
+      const keyLabel = SORT_LABELS[sortState.key] || SORT_LABELS.date;
+      const dirLabel = sortState.dir === "asc" ? "↑" : "↓";
+      return `${keyLabel} ${dirLabel}`;
+    };
 
     function isGeneralInspectionArea(row) {
       const area = t(getAny(row, ["inspection_area", "inspectionArea", "area"], ""));
@@ -1827,13 +1856,14 @@
 
     function sortItems(list) {
       const base = Array.isArray(list) ? list : [];
-      const comparator = sortComparators[sortState.key] || sortComparators.date_desc;
+      const comparator = sortComparators[sortState.key] || sortComparators.date;
+      const dir = sortState.dir === "asc" ? 1 : -1;
       const indexed = base.map((item, index) => ({ item, index }));
 
       indexed.sort((a, b) => {
-        const primary = comparator(a.item, b.item);
+        const primary = comparator(a.item, b.item) * dir;
         if (primary !== 0) return primary;
-        const tieByDate = sortComparators.date_desc(a.item, b.item);
+        const tieByDate = sortComparators.date(a.item, b.item) * -1;
         if (tieByDate !== 0) return tieByDate;
         return a.index - b.index;
       });
@@ -1880,19 +1910,57 @@
 
       const list = sortItems(generalList);
       const baseCount = generalList.length;
-      renderStatus(`Всего проверок «Общая»: ${baseCount}. Сортировка: ${currentSortLabel()}. Нажмите на строку, чтобы открыть результат.`);
+      const previewLimit = 5;
+      const showAll = sortState.showAll;
+      const visibleList = showAll ? list : list.slice(0, previewLimit);
+      const hiddenCount = Math.max(0, list.length - visibleList.length);
+      const shownCount = visibleList.length;
+      const previewLabel = showAll
+        ? `Показаны все ${shownCount} из ${baseCount}.`
+        : `Показаны последние ${shownCount} из ${baseCount}.`;
+      renderStatus(`Всего проверок «Общая»: ${baseCount}. ${previewLabel} Сортировка: ${currentSortLabel()}. Нажмите на строку, чтобы открыть результат.`);
 
       tableWrap.innerHTML = `
         <table class="cabinetTable">
           <thead>
             <tr>
-              <th style="width:140px;">Дата</th>
-              <th>Адрес</th>
-              <th style="width:140px;">% прохождения</th>
+              <th style="width:140px;">
+                <button class="cabinetSortBtn ${sortState.key === "date" ? "is-active" : ""}" data-sort="date" data-dir="${sortState.key === "date" ? sortState.dir : "desc"}" type="button">
+                  <span class="cabinetSortLabel">Дата</span>
+                  <span class="cabinetSortIndicator" aria-hidden="true">
+                    <svg class="cabinetSortIcon" viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M3 4h14l-5.5 6.2v4.8l-3 2v-6.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="cabinetSortDirection"></span>
+                  </span>
+                </button>
+              </th>
+              <th>
+                <button class="cabinetSortBtn ${sortState.key === "address" ? "is-active" : ""}" data-sort="address" data-dir="${sortState.key === "address" ? sortState.dir : "asc"}" type="button">
+                  <span class="cabinetSortLabel">Адрес</span>
+                  <span class="cabinetSortIndicator" aria-hidden="true">
+                    <svg class="cabinetSortIcon" viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M3 4h14l-5.5 6.2v4.8l-3 2v-6.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="cabinetSortDirection"></span>
+                  </span>
+                </button>
+              </th>
+              <th style="width:140px;">
+                <button class="cabinetSortBtn ${sortState.key === "percent" ? "is-active" : ""}" data-sort="percent" data-dir="${sortState.key === "percent" ? sortState.dir : "desc"}" type="button">
+                  <span class="cabinetSortLabel">% прохождения</span>
+                  <span class="cabinetSortIndicator" aria-hidden="true">
+                    <svg class="cabinetSortIcon" viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M3 4h14l-5.5 6.2v4.8l-3 2v-6.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="cabinetSortDirection"></span>
+                  </span>
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
-            ${list.map(item => {
+            ${visibleList.map(item => {
               const submissionId = norm(item.submission_id);
               const submittedAt = formatDateSmart(item.submitted_at);
               const address = addressFromRow(item);
@@ -1910,6 +1978,13 @@
             }).join("")}
           </tbody>
         </table>
+        ${hiddenCount > 0 || showAll ? `
+          <div class="cabinetShowMore">
+            <button id="cabinetShowMoreBtn" class="btn btnSecondary" type="button">
+              ${showAll ? "Показать 5 последних" : `Показать ещё ${hiddenCount}`}
+            </button>
+          </div>
+        ` : ""}
       `;
 
       tableWrap.querySelectorAll("[data-open-submission]").forEach(row => {
@@ -1922,6 +1997,26 @@
           }
         };
       });
+
+      tableWrap.querySelectorAll(".cabinetSortBtn").forEach(btn => {
+        btn.onclick = () => {
+          const key = btn.getAttribute("data-sort") || "date";
+          const isSame = sortState.key === key;
+          const defaultDir = key === "address" ? "asc" : "desc";
+          const nextDir = isSame ? (sortState.dir === "asc" ? "desc" : "asc") : defaultDir;
+          sortState.key = key;
+          sortState.dir = nextDir;
+          renderTable(latestRawItems, latestTotal);
+        };
+      });
+
+      const showMoreBtn = document.getElementById("cabinetShowMoreBtn");
+      if (showMoreBtn) {
+        showMoreBtn.onclick = () => {
+          sortState.showAll = !sortState.showAll;
+          renderTable(latestRawItems, latestTotal);
+        };
+      }
     };
 
     const renderLoading = () => {
@@ -1931,18 +2026,6 @@
       tableWrap.innerHTML = `<div class="hint">Загружаю ваши проверки…</div>`;
       renderStatus("Запрашиваю данные из таблицы…");
     };
-
-    const rerenderFromSort = () => {
-      renderTable(latestRawItems, latestTotal);
-    };
-
-    if (sortBar && sortSelect) {
-      sortSelect.value = sortState.key;
-      sortSelect.onchange = () => {
-        sortState.key = sortSelect.value || "date_desc";
-        rerenderFromSort();
-      };
-    }
 
     const loadItems = async () => {
       renderLoading();
@@ -2011,16 +2094,16 @@
     // base layout
     mount(`
       <div class="container">
-        <div class="stickyHeader">
-          <div class="card" style="margin-bottom:12px;">
-            <div class="cardHeader">
-              <div class="title">Проверка</div>
-              <div class="subTitle" id="ctxLine">${escapeHtml(ctxLine || "")}</div>
-              ${fio ? `<div class="subTitle">Проверяет: <span class="userGlow">${escapeHtml(fio)}</span></div>` : ``}
-              <div class="subTitle" id="sectionLine">${activeTitle ? `Раздел: ${escapeHtml(activeTitle)}` : ``}</div>
-            </div>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="cardHeader">
+            <div class="title">Проверка</div>
+            <div class="subTitle" id="ctxLine">${escapeHtml(ctxLine || "")}</div>
+            ${fio ? `<div class="subTitle">Проверяет: <span class="userGlow">${escapeHtml(fio)}</span></div>` : ``}
+            <div class="subTitle" id="sectionLine">${activeTitle ? `Раздел: ${escapeHtml(activeTitle)}` : ``}</div>
           </div>
+        </div>
 
+        <div class="stickyHeader stickyTabsHeader">
           ${tplSectionTabs({ sections: orderedSecs, active: STATE.activeSection, completed: STATE.completedSections || [] })}
         </div>
         <div id="qList"></div>
@@ -2733,7 +2816,7 @@
   }
 
   function buildSectionPayload(sectionId, result, submissionId) {
-    const ts = formatRuDateTimeMsk(new Date());
+    const ts = formatRuDateTime(new Date());
     const sections = activeSections(DATA.sections);
     const sectionTitle = sections.find(s => s.id === sectionId)?.title || "";
     const sectionQs = questionsForSection(DATA.checklist, sectionId);
@@ -2824,7 +2907,7 @@
   }
 
   function buildSubmissionPayload(submissionId, result) {
-    const ts = formatRuDateTimeMsk(new Date());
+    const ts = formatRuDateTime(new Date());
 
     // You can expand with more columns expected by Apps Script doPost.
     // Keep it self-contained: result + answers + notes.
