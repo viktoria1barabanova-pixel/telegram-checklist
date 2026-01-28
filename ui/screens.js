@@ -274,22 +274,27 @@
     };
 
     if (!payload.init_data) {
-      console.warn("Telegram initData is missing; can't send message via backend.");
       return false;
     }
 
-    console.info("Sending Telegram result payload", payload);
     try {
       await api.sendBotMessage(payload, { usePostMessage: false });
       const tgApp = window.Telegram?.WebApp;
       const shouldAutoClose = (typeof AUTO_CLOSE_AFTER_SUBMIT !== "undefined") ? AUTO_CLOSE_AFTER_SUBMIT : false;
       if (shouldAutoClose && typeof tgApp?.close === "function") {
-        console.info("Auto-closing Telegram WebApp after submit");
         setTimeout(() => tgApp.close(), 500);
       }
+      console.info("Telegram message sent", {
+        result_id: payload.result_id,
+        tg_user_id: payload.tg_user_id,
+      });
       return true;
     } catch (err) {
-      console.warn("Failed to send Telegram message via backend", err);
+      console.info("Telegram message failed", {
+        result_id: payload.result_id,
+        tg_user_id: payload.tg_user_id,
+        error: String(err),
+      });
       return false;
     }
   }
@@ -302,9 +307,7 @@
       const search = url.searchParams.toString();
       const next = `${url.origin}${url.pathname}${search ? `?${search}` : ""}${url.hash}`;
       window.history.replaceState(null, "", next);
-    } catch (e) {
-      console.warn("Failed to clear result param", e);
-    }
+    } catch (e) {}
   }
 
   // ---------- normalize branches (адреса) & sections ----------
@@ -1852,7 +1855,6 @@
         renderReadonlyResult(DATA, res, { backMode: "cabinet" });
         return;
       } catch (err) {
-        console.warn("Failed to open submission", err);
         alert("Не удалось открыть результат. Попробуйте ещё раз.");
         rowEl.dataset.loading = "false";
         renderStatus("Не удалось открыть результат.", true);
@@ -1960,7 +1962,6 @@
         STATE.cabinetCache = { rawItems, total: res.total || rawItems.length, fetchedAt: Date.now() };
         renderTable(rawItems, res.total || rawItems.length);
       } catch (err) {
-        console.error(err);
         if (tableWrap) tableWrap.innerHTML = `<div class="hint">Не удалось загрузить список проверок 😕</div>`;
         renderStatus("Попробуйте обновить список чуть позже.", true);
       }
@@ -2192,9 +2193,38 @@
       const rollSelect = col.querySelector(".numberSelect");
       const actualInput = col.querySelector(".numberInput");
       const hideBtn = col.querySelector(".numberHideBtn");
+      const inputRow = col.querySelector(".numberInputRow");
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
+      const clearStickyState = () => {
+        document.querySelectorAll(".numberInputRow.is-active").forEach(row => row.classList.remove("is-active"));
+        document.querySelectorAll(".numberHideBtn.is-sticky").forEach(btn => btn.classList.remove("is-sticky"));
+      };
+      const refreshEditingState = () => {
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.classList.contains("numberInput")) {
+          return;
+        }
+        document.body.classList.remove("is-number-editing");
+        clearStickyState();
+      };
+      const setStickyState = () => {
+        clearStickyState();
+        if (inputRow) inputRow.classList.add("is-active");
+        if (hideBtn) hideBtn.classList.add("is-sticky");
+        document.body.classList.add("is-number-editing");
+      };
+      const ensureInputInView = () => {
+        if (!actualInput) return;
+        const rect = actualInput.getBoundingClientRect();
+        const viewportHeight = window.visualViewport?.height || window.innerHeight;
+        const safeTop = 96;
+        const safeBottom = viewportHeight * 0.6;
+        if (rect.top < safeTop || rect.bottom > safeBottom) {
+          actualInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      };
 
       const applyMeta = (meta) => {
         if (planEl) {
@@ -2256,15 +2286,25 @@
         if (actualInput) {
           actualInput.oninput = () => updateFromInputs(true);
           actualInput.addEventListener("focus", () => {
+            setStickyState();
             requestAnimationFrame(() => {
-              actualInput.scrollIntoView({ behavior: "smooth", block: "center" });
+              ensureInputInView();
             });
+            setTimeout(() => {
+              if (actualInput.isConnected) ensureInputInView();
+            }, 300);
+          });
+          actualInput.addEventListener("blur", () => {
+            setTimeout(() => {
+              refreshEditingState();
+            }, 0);
           });
         }
         if (hideBtn) {
           hideBtn.onclick = () => {
             updateFromInputs(true);
             if (actualInput) actualInput.blur();
+            refreshEditingState();
           };
         }
       }
@@ -2341,7 +2381,6 @@
           await api.submit(payload, { usePostMessage: false });
           sendZoneBtn.textContent = UI_TEXT?.submitOk || "Отправлено ✅";
         } catch (e) {
-          console.error(e);
           alert(UI_TEXT?.submitFail || "Не удалось отправить результаты в таблицу. Попробуй ещё раз");
           sendZoneBtn.disabled = false;
           sendZoneBtn.textContent = "Отправить зону";
@@ -2408,7 +2447,6 @@
         try {
           submitResult = await api.submit(payload, { usePostMessage: true });
         } catch (err) {
-          console.warn("postMessage submit failed, fallback to load", err);
           submitResult = await api.submit(payload, { usePostMessage: false });
         }
 
@@ -2436,7 +2474,6 @@
         // keep draft data so results can be restored if the app reloads after submit
         finishBtn.textContent = UI_TEXT?.submitOk || "Готово ✅";
       } catch (e) {
-        console.error(e);
         alert(UI_TEXT?.submitFail || "Не удалось отправить результаты в таблицу. Попробуй ещё раз");
         finishBtn.disabled = false;
         finishBtn.textContent = "Завершить";
@@ -2883,9 +2920,7 @@
     if (!safeResult) {
       try {
         safeResult = computeResultFromState();
-      } catch (err) {
-        console.warn("Failed to compute fallback result", err);
-      }
+      } catch (err) {}
     }
     if (!safeResult) safeResult = { zone: "gray", percent: null, issues: [] };
 
@@ -2960,7 +2995,6 @@
             errorEl.textContent = sent ? "" : `Причина: ${STATE.lastBotSendError}`;
           }
         } catch (err) {
-          console.warn("Failed to send data to Telegram bot", err);
           STATE.lastBotSendStatus = "failed";
           STATE.lastBotSendError = String(err);
           saveDraft();
@@ -2983,7 +3017,6 @@
           STATE.lastBotSendStatus = sent ? "sent" : "failed";
           STATE.lastBotSendError = sent ? "" : "initData отсутствует или сообщение не доставлено";
         } catch (err) {
-          console.warn("Failed to send data to Telegram bot", err);
           STATE.lastBotSendStatus = "failed";
           STATE.lastBotSendError = String(err);
         }
