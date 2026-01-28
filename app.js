@@ -41,7 +41,6 @@
 
   async function boot() {
     if (window.Telegram?.WebApp && !hasTelegramUserInfo()) {
-      console.warn("Telegram user data missing or incomplete");
     }
 
     setLoading((UI_TEXT?.loading || "Загружаю данные…") + (typeof APP_VERSION !== "undefined" ? ` (v${APP_VERSION})` : ""));
@@ -50,7 +49,6 @@
     try {
       data = await api.getAll();
     } catch (e) {
-      console.error(e);
       setLoading("Не получилось загрузить данные из таблицы 😕\nОбнови страницу и попробуй ещё раз.");
       return;
     }
@@ -69,12 +67,10 @@
         }
 
         // fallback
-        console.warn("Result not found:", res);
         setLoading("Результат не найден или ссылка устарела 😕");
         return;
 
       } catch (e) {
-        console.error(e);
         setLoading("Не получилось открыть результат 😕");
         return;
       }
@@ -88,7 +84,6 @@
   try {
     await boot();
   } catch (e) {
-    console.error(e);
     setLoading("Что-то пошло не так 😕");
   }
 })();

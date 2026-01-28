@@ -768,6 +768,10 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   border-top: 1px solid rgba(17,24,39,0.06);
 }
 
+body.is-number-editing .bottomBar{
+  display: none;
+}
+
 .bottomActions{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1262,6 +1266,7 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   font-family: inherit;
   color: var(--text);
   box-shadow: 0 10px 22px rgba(17,24,39,.06);
+  scroll-margin-bottom: 160px;
 }
 .numberSelect:disabled,
 .numberInput:disabled{
@@ -1272,11 +1277,24 @@ textarea.comment::placeholder{ color: rgba(107, 114, 128, 0.75); }
   gap: 10px;
   align-items: center;
 }
+.numberInputRow.is-active{
+  margin-bottom: 64px;
+}
 .numberInputRow .numberInput{
   flex: 1;
 }
 .numberInputRow .numberHideBtn{
   white-space: nowrap;
+}
+.numberHideBtn.is-sticky{
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0));
+  z-index: 140;
+  width: auto;
+  text-align: center;
+  box-shadow: 0 12px 24px rgba(17,24,39,0.2);
 }
 .numberMeta{
   display: flex;
