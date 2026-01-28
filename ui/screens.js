@@ -260,7 +260,8 @@
       zoneRaw === "red" ? "🔴" :
       "⚪️"
     );
-    const link = buildResultLink(submissionId) || "—";
+    const link = buildResultLink(submissionId) || "";
+    const linkHtml = link ? `<a href="${escapeHtml(link)}">Открыть проверку</a>` : "—";
     const { branchName } = getBranchMeta();
     const branchLine = [norm(STATE.city || ""), branchName].filter(Boolean).join(", ");
     const checker = getCheckerMeta();
@@ -270,27 +271,38 @@
     const template = (typeof TELEGRAM_RESULT_MESSAGE_TEMPLATE !== "undefined")
       ? String(TELEGRAM_RESULT_MESSAGE_TEMPLATE || "").trim()
       : "";
+    const placeholderValues = {
+      zoneText: escapeHtml(zoneText),
+      zone: escapeHtml(zoneRaw || "unknown"),
+      zoneLabel: escapeHtml(zoneLabel),
+      zoneEmoji,
+      branch: escapeHtml(branchLine || "—"),
+      checker: escapeHtml(checker.fio || "—"),
+      percent: escapeHtml(percentText || "—"),
+      date: escapeHtml(submittedAtText || "—"),
+      link: linkHtml,
+    };
     const text = template
       ? template
-        .replace(/\{zoneText\}/g, zoneText)
-        .replace(/\{zone\}/g, zoneRaw || "unknown")
-        .replace(/\{zoneLabel\}/g, zoneLabel)
-        .replace(/\{zoneEmoji\}/g, zoneEmoji)
-        .replace(/\{branch\}/g, branchLine || "—")
-        .replace(/\{checker\}/g, checker.fio || "—")
-        .replace(/\{percent\}/g, percentText || "—")
-        .replace(/\{date\}/g, submittedAtText || "—")
-        .replace(/\{link\}/g, link)
+        .replace(/\{zoneText\}/g, placeholderValues.zoneText)
+        .replace(/\{zone\}/g, placeholderValues.zone)
+        .replace(/\{zoneLabel\}/g, placeholderValues.zoneLabel)
+        .replace(/\{zoneEmoji\}/g, placeholderValues.zoneEmoji)
+        .replace(/\{branch\}/g, placeholderValues.branch)
+        .replace(/\{checker\}/g, placeholderValues.checker)
+        .replace(/\{percent\}/g, placeholderValues.percent)
+        .replace(/\{date\}/g, placeholderValues.date)
+        .replace(/\{link\}/g, placeholderValues.link)
       : [
           "Проверка завершена 🤝",
           "",
-          `Филиал: ${branchLine || "—"}`,
-          `Проверяющий: ${checker.fio || "—"}`,
-          `Зона: ${zoneEmoji} ${zoneLabel}${percentText && percentText !== "—" ? ` ${percentText}` : ""}`,
-          `Дата проверки: ${submittedAtText || "—"}`,
+          `Филиал: ${escapeHtml(branchLine || "—")}`,
+          `Проверяющий: ${escapeHtml(checker.fio || "—")}`,
+          `Зона: ${zoneEmoji} ${escapeHtml(zoneLabel)}${percentText && percentText !== "—" ? ` ${escapeHtml(percentText)}` : ""}`,
+          `Дата проверки: ${escapeHtml(submittedAtText || "—")}`,
           "",
           "Ссылка на проверку",
-          link,
+          linkHtml,
         ].join("\n");
     const initData = getTelegramInitData();
     const fallbackUserId = getTelegramUserIdFromInitData(initData);
@@ -312,10 +324,6 @@
       init_data: initData,
       tg_user_id: tgUserId,
     };
-
-    if (!payload.init_data) {
-      return false;
-    }
 
     try {
       await api.sendBotMessage(payload, { usePostMessage: false });
@@ -2900,9 +2908,6 @@
       }),
     };
 
-    const maxLogChars = (typeof LOG_PREVIEW_MAX_CHARS !== "undefined") ? LOG_PREVIEW_MAX_CHARS : 1000;
-    payload.payload_log = truncateText(JSON.stringify(payload), maxLogChars);
-
     return payload;
   }
 
@@ -2988,9 +2993,6 @@
         checker,
       }),
     };
-
-    const maxLogChars = (typeof LOG_PREVIEW_MAX_CHARS !== "undefined") ? LOG_PREVIEW_MAX_CHARS : 1000;
-    payload.payload_log = truncateText(JSON.stringify(payload), maxLogChars);
 
     return payload;
   }

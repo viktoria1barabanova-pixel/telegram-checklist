@@ -9,7 +9,6 @@ const SHEET_NAMES = {
   inspectors: "Проверяющие",
   submissions: "Результаты",
   answers: "Ответы",
-  log: "Log",
 };
 
 // IMPORTANT: set this to the ID of the Google Spreadsheet that contains your questions
@@ -130,24 +129,6 @@ function doPost(e) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
   try {
-    // железный лог: что реально прилетает
-    const logSh = ss.getSheetByName(SHEET_NAMES.log) || ss.insertSheet(SHEET_NAMES.log);
-    if (logSh.getLastRow() === 0) logSh.appendRow(["ts", "event", "data"]);
-    logSh.appendRow([
-      new Date().toISOString(),
-      "doPost_hit",
-      JSON.stringify({
-        param: e && e.parameter ? e.parameter : null,
-        postType: e && e.postData ? e.postData.type : null,
-        postData: e && e.postData && e.postData.contents ? String(e.postData.contents).slice(0, 300) : ""
-      })
-    ]);
-    logSh.appendRow([
-      new Date().toISOString(),
-      "target_spreadsheet",
-      JSON.stringify({ id: ss.getId(), name: ss.getName() })
-    ]);
-
     // Apps Script WebApp обычно кладёт form fields в e.parameter,
     // но на всякий случай поддержим e.postData.contents
     const params = (e && e.parameter) ? e.parameter : {};
@@ -160,12 +141,10 @@ function doPost(e) {
 
     if (action === "send_message") {
       const sendRes = sendTelegramMessageFromPayload_(ss, payload, { action });
-      log_(ss, { event: "send_message", ok: sendRes.ok, info: sendRes.info || "" });
       return text_("OK");
     }
 
     if (action !== "submit") {
-      log_(ss, { event: "post_unknown_action", action, params });
       return text_("OK");
     }
 
@@ -173,7 +152,6 @@ function doPost(e) {
     try {
       upsertInspector_(ss, payload);
     } catch (inspectorErr) {
-      log_(ss, { event: "inspector_upsert_error", error: String(inspectorErr) });
     }
 
     // Ensure output sheets exist & have headers
@@ -237,19 +215,9 @@ function doPost(e) {
     const tgSendRes = shouldSendTelegram
       ? sendTelegramMessageFromPayload_(ss, payload, { action })
       : { ok: false, info: "skip_partial" };
-    log_(ss, {
-      event: "submit_ok",
-      submission_id: payload.submission_id,
-      answers: flat.length,
-      tg_send_ok: tgSendRes.ok,
-      tg_send_info: tgSendRes.info || "",
-    });
     return text_("OK");
 
   } catch (err) {
-    try {
-      log_(ss, { event: "submit_error", error: String(err), stack: err && err.stack ? err.stack : "" });
-    } catch (_) {}
     // Всё равно отдаём OK, чтобы iframe не ломал UX
     return text_("OK");
   }
@@ -325,11 +293,6 @@ function getOrCreateSheet_(ss, name, headers) {
   }
 
   return sh;
-}
-
-function log_(ss, obj) {
-  const sh = getOrCreateSheet_(ss, SHEET_NAMES.log, ["ts", "event", "data"]);
-  sh.appendRow([new Date().toISOString(), obj?.event || "", JSON.stringify(obj || {})]);
 }
 
 function safe_(v) {
@@ -432,11 +395,14 @@ function buildTelegramMessageText_(payload, { action } = {}) {
     zoneRaw ? "серую зону" : ""
   );
   const link = safe_(payload?.result_link || payload?.link || "");
+  const linkHtml = link
+    ? `<a href="${escapeHtml_(link)}">Открыть проверку</a>`
+    : "";
 
   let text = zoneText
     ? `Проверка завершена. Вы прошли на ${zoneText}.`
     : "Проверка завершена.";
-  if (link) text += ` Ссылка на проверку: ${link}`;
+  if (linkHtml) text += ` Ссылка на проверку: ${linkHtml}`;
   if (!text && action) text = `Проверка завершена (${action}).`;
   return text;
 }
@@ -446,6 +412,7 @@ function sendTelegramMessage_(chatId, text) {
   const payload = {
     chat_id: chatId,
     text: String(text || ""),
+    parse_mode: "HTML",
     disable_web_page_preview: false,
   };
 
@@ -510,6 +477,15 @@ function bytesToHex_(bytes) {
       return ("0" + v.toString(16)).slice(-2);
     })
     .join("");
+}
+
+function escapeHtml_(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /***************

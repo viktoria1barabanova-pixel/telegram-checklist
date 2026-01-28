@@ -39,7 +39,6 @@ const MAX_PHOTO_SIZE_BYTES = 4 * 1024 * 1024;   // 4MB
 
 // ====== NETWORK ======
 const JSONP_TIMEOUT_MS = 20000; // 20 секунд на загрузку JSONP
-const LOG_PREVIEW_MAX_CHARS = 1000; // длина логов (payload_log) — только первые 1000 символов
 
 // ====== HISTORY ======
 const MY_SUBMISSIONS_DEFAULT_LIMIT = 200; // сколько последних проверок загружать в историю
