@@ -88,6 +88,16 @@ body {
   margin: 0 0 8px;
 }
 
+.stickyTabsHeader{
+  padding: 0;
+  margin: 0 0 8px;
+  border-bottom: 0;
+}
+
+.stickyTabsHeader .tabsCard{
+  margin-top: 0;
+}
+
 /* Typography */
 h1 {
   font-size: 34px;
@@ -1062,6 +1072,67 @@ body.is-number-editing .bottomBar{
 .cabinetTable thead th{
   font-weight: 800;
   background: rgba(255,255,255,.92);
+  padding: 0;
+}
+
+.cabinetSortBtn{
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 10px;
+  cursor: pointer;
+}
+
+.cabinetSortBtn:focus-visible{
+  outline: 2px solid rgba(232, 90, 138, 0.7);
+  outline-offset: -2px;
+}
+
+.cabinetSortLabel{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cabinetSortIndicator{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(17,24,39,.55);
+  font-size: 11px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.cabinetSortIcon{
+  width: 14px;
+  height: 14px;
+  color: rgba(17,24,39,.65);
+}
+
+.cabinetSortDirection::before{
+  content: "↕";
+}
+
+.cabinetSortBtn.is-active .cabinetSortDirection::before{
+  content: "↑";
+}
+
+.cabinetSortBtn.is-active[data-dir="desc"] .cabinetSortDirection::before{
+  content: "↓";
+}
+
+.cabinetShowMore{
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 
 .cabinetRow{
@@ -1262,7 +1333,7 @@ body.is-number-editing .bottomBar{
   border-radius: 14px;
   border: 1px solid rgba(17,24,39,.12);
   background: rgba(255,255,255,0.95);
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
   color: var(--text);
   box-shadow: 0 10px 22px rgba(17,24,39,.06);

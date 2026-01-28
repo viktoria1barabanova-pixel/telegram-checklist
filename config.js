@@ -59,6 +59,7 @@ const UI_TEXT = {
 // По умолчанию оставляем открытым, чтобы пользователь увидел экран результата.
 const AUTO_CLOSE_AFTER_SUBMIT = false;
 // Шаблон сообщения, которое отправляется ботом после проверки.
-// Поддерживаемые плейсхолдеры: {zoneText}, {zone}, {link}.
+// Поддерживаемые плейсхолдеры:
+// {zoneText}, {zone}, {zoneLabel}, {zoneEmoji}, {branch}, {checker}, {percent}, {date}, {link}.
 // Оставьте пустым, чтобы использовать стандартный текст.
 const TELEGRAM_RESULT_MESSAGE_TEMPLATE = "";
