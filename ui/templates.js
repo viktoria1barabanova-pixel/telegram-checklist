@@ -283,7 +283,7 @@
 
     const desc = norm(getAny(q, [
       // EN
-      "description", "desc", "help", "hint",
+      "description", "desc", "help", "hint", "question_description", "questionDescription", "question_desc",
       // RU
       "описание", "подсказка", "пояснение"
     ], ""));
