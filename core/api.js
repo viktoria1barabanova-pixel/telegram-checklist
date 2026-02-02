@@ -244,6 +244,23 @@
       return await loadJsonp(url);
     },
 
+    // GET Telegram Login Widget verification
+    async verifyTelegramLogin(loginData) {
+      const payload = loginData && typeof loginData === "object" ? loginData : {};
+      const params = {
+        action: "telegram_login",
+        id: payload.id ?? "",
+        first_name: payload.first_name ?? "",
+        last_name: payload.last_name ?? "",
+        username: payload.username ?? "",
+        photo_url: payload.photo_url ?? "",
+        auth_date: payload.auth_date ?? "",
+        hash: payload.hash ?? "",
+      };
+      const url = buildUrlWithParams(DATA_JSONP_URL, params);
+      return await loadJsonp(url);
+    },
+
     // POST submit
     async submit(payloadObj, { usePostMessage = false } = {}) {
       return await iframePostSubmit(payloadObj, { usePostMessage, action: "submit" });

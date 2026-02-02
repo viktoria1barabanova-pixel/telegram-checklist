@@ -894,6 +894,15 @@ body.is-number-editing .bottomBar{
   margin-top: 14px;
   text-align: center;
 }
+.authWidgetWrap{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.authWidget{
+  min-height: 52px;
+}
 
 .screenHeader{
   display: flex;
@@ -1338,6 +1347,43 @@ body.is-number-editing .bottomBar{
   display: flex;
   gap: 10px;
   align-items: center;
+}
+.numberOkBtn{
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(17,24,39,.16);
+  background: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(17,24,39,.08);
+}
+.numberOkBtn:active{
+  transform: translateY(1px);
+}
+.numberOkBtn:disabled{
+  opacity: 0.6;
+  cursor: default;
+}
+.numberStatus{
+  min-width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  background: rgba(17,24,39,.08);
+  color: rgba(17,24,39,.5);
+}
+.numberStatus.is-ok{
+  background: rgba(46,196,166,.2);
+  color: #1f9d7f;
+}
+.numberStatus.is-bad{
+  background: rgba(214,69,69,.2);
+  color: #b13b3b;
 }
 .numberInputRow.is-active{
   margin-bottom: 64px;

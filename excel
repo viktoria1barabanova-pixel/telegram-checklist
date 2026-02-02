@@ -107,6 +107,20 @@ function doGet(e) {
       const limitRaw = e?.parameter?.limit ? String(e.parameter.limit).trim() : "";
       payload = getMySubmissionsPayload_(ss, tgUserId, limitRaw);
     }
+    else if (action === "telegram_login") {
+      const loginData = {};
+      const fields = ["id", "first_name", "last_name", "username", "photo_url", "auth_date", "hash"];
+      fields.forEach((key) => {
+        const value = e?.parameter?.[key];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+          loginData[key] = String(value);
+        }
+      });
+      const verified = verifyTelegramLogin_(loginData, TELEGRAM_BOT_TOKEN);
+      payload = verified
+        ? { ok: true, user: verified }
+        : { ok: false, error: "telegram_login_invalid" };
+    }
     else if (action === "submission") {
       const submissionId = e?.parameter?.submission_id ? String(e.parameter.submission_id).trim() : "";
       payload = getSubmissionPayload_(ss, submissionId);
@@ -395,14 +409,12 @@ function buildTelegramMessageText_(payload, { action } = {}) {
     zoneRaw ? "серую зону" : ""
   );
   const link = safe_(payload?.result_link || payload?.link || "");
-  const linkHtml = link
-    ? `<a href="${escapeHtml_(link)}">Открыть проверку</a>`
-    : "";
+  const linkText = link ? String(link) : "";
 
   let text = zoneText
     ? `Проверка завершена. Вы прошли на ${zoneText}.`
     : "Проверка завершена.";
-  if (linkHtml) text += ` Ссылка на проверку: ${linkHtml}`;
+  if (linkText) text += ` Ссылка на проверку: ${linkText}`;
   if (!text && action) text = `Проверка завершена (${action}).`;
   return text;
 }
@@ -451,6 +463,16 @@ function verifyInitData_(initData, botToken) {
   } catch (_) {
     return null;
   }
+}
+
+function verifyTelegramLogin_(loginData, botToken) {
+  if (!botToken || !loginData || !loginData.hash) return null;
+  const checkString = buildDataCheckString_(loginData);
+  const secret = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, botToken);
+  const hash = Utilities.computeHmacSha256Signature(checkString, secret);
+  const hex = bytesToHex_(hash);
+  if (hex !== String(loginData.hash).toLowerCase()) return null;
+  return loginData;
 }
 
 function parseInitData_(initData) {
