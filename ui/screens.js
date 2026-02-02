@@ -3168,7 +3168,8 @@
 
     const resultId = norm(STATE.lastResultId);
     const canSendTelegram = !!getCheckerMeta().tg_user_id;
-    if (canSendTelegram && resultId && STATE.lastBotSendStatus !== "sent") {
+    const allowFrontendTelegramSend = false;
+    if (allowFrontendTelegramSend && canSendTelegram && resultId && STATE.lastBotSendStatus !== "sent") {
       (async () => {
         try {
           const sent = await sendTelegramResultMessage(safeResult, resultId);
@@ -3196,7 +3197,7 @@
     }
 
     const sendBotAgainBtn = document.getElementById("sendBotAgainBtn");
-    if (sendBotAgainBtn) {
+    if (sendBotAgainBtn && allowFrontendTelegramSend) {
       sendBotAgainBtn.onclick = async () => {
         const id = norm(STATE.lastResultId);
         if (!id) return;
