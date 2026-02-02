@@ -266,6 +266,7 @@
     const branchLine = [norm(STATE.city || ""), branchName].filter(Boolean).join(", ");
     const checker = getCheckerMeta();
     const percentText = formatPercentDisplay(result?.percent);
+    const percentSuffix = (percentText && percentText !== "—") ? ` ${percentText}` : "";
     const submittedAtText = STATE.lastSubmittedAt ? formatRuDateTime(STATE.lastSubmittedAt) : "";
 
     const template = (typeof TELEGRAM_RESULT_MESSAGE_TEMPLATE !== "undefined")
@@ -278,7 +279,7 @@
       zoneEmoji,
       branch: escapeHtml(branchLine || "—"),
       checker: escapeHtml(checker.fio || "—"),
-      percent: escapeHtml(percentText || "—"),
+      percent: escapeHtml(percentSuffix),
       date: escapeHtml(submittedAtText || "—"),
       link: linkHtml,
     };
@@ -298,7 +299,7 @@
           "",
           `Филиал: ${escapeHtml(branchLine || "—")}`,
           `Проверяющий: ${escapeHtml(checker.fio || "—")}`,
-          `Зона: ${zoneEmoji} ${escapeHtml(zoneLabel)}${percentText && percentText !== "—" ? ` ${escapeHtml(percentText)}` : ""}`,
+          `Зона: ${zoneEmoji} ${escapeHtml(zoneLabel)}${percentSuffix}`,
           `Дата проверки: ${escapeHtml(submittedAtText || "—")}`,
           "",
           "Ссылка на проверку",
@@ -323,6 +324,7 @@
       submitted_at: submittedAtText || "",
       init_data: initData,
       tg_user_id: tgUserId,
+      parse_mode: "HTML",
     };
 
     try {

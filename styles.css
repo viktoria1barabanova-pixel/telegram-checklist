@@ -1322,9 +1322,12 @@ body.is-number-editing .bottomBar{
   height: 44px;
   border-radius: 14px;
   font-size: 20px;
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid rgba(17,24,39,.14);
+  box-shadow: 0 10px 22px rgba(17,24,39,.1);
 }
 .numberLabel{
   font-size: 13px;
@@ -1366,13 +1369,17 @@ body.is-number-editing .bottomBar{
 .numberHideBtn.is-sticky{
   position: fixed;
   right: 16px;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0));
   z-index: 140;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: 64px;
+  height: 44px;
+  border-radius: 14px;
   text-align: center;
-  box-shadow: 0 12px 24px rgba(17,24,39,0.2);
+  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 16px 30px rgba(17,24,39,0.22);
 }
 .numberMeta{
   display: flex;

@@ -61,4 +61,14 @@ const AUTO_CLOSE_AFTER_SUBMIT = false;
 // Поддерживаемые плейсхолдеры:
 // {zoneText}, {zone}, {zoneLabel}, {zoneEmoji}, {branch}, {checker}, {percent}, {date}, {link}.
 // Оставьте пустым, чтобы использовать стандартный текст.
-const TELEGRAM_RESULT_MESSAGE_TEMPLATE = "";
+const TELEGRAM_RESULT_MESSAGE_TEMPLATE = [
+  "<b>Проверка завершена 🤝</b>",
+  "",
+  "Филиал: {branch}",
+  "Проверяющий: {checker}",
+  "Зона: {zoneEmoji} {zoneLabel}{percent}",
+  "Дата проверки: {date}",
+  "",
+  "Ссылка на проверку",
+  "{link}",
+].join("\n");
