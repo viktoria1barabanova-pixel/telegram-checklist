@@ -64,12 +64,12 @@ const AUTO_CLOSE_AFTER_SUBMIT = false;
 // {zoneText}, {zone}, {zoneLabel}, {zoneEmoji}, {branch}, {checker}, {percent}, {date}, {link}.
 // Оставьте пустым, чтобы использовать стандартный текст.
 const TELEGRAM_RESULT_MESSAGE_TEMPLATE = [
-  "✅ <b>Проверка завершена</b>",
+  "Проверка завершена 🤝",
   "",
   "Филиал: {branch}",
   "Проверяющий: {checker}",
-  "Зона: {zoneEmoji} {zoneLabel}{percent}",
+  "Зона: {zoneLabel} {zoneEmoji} -{percent}",
   "Дата: {date}",
   "",
-  "Ссылка: {linkPlain}",
+  "{link}",
 ].join("\n");
