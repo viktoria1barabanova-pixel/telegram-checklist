@@ -277,7 +277,7 @@
     );
     const link = buildResultLink(submissionId) || "";
     const linkPlain = link || "—";
-    const linkHtml = link ? `<a href="${escapeHtml(link)}">Открыть проверку</a>` : "—";
+    const linkHtml = link ? `<a href="${escapeHtml(link)}">Ссылка на проверку</a>` : "—";
     const { branchName } = getBranchMeta();
     const branchLine = [norm(STATE.city || ""), branchName].filter(Boolean).join(", ");
     const checker = getCheckerMeta();
@@ -317,11 +317,10 @@
           "",
           `Филиал: ${escapeHtml(branchLine || "—")}`,
           `Проверяющий: ${escapeHtml(checker.fio || "—")}`,
-          `Зона: ${zoneEmoji} ${escapeHtml(zoneLabel)}${percentSuffix}`,
-          `Дата проверки: ${escapeHtml(submittedAtText || "—")}`,
+          `Зона: ${escapeHtml(zoneLabel)} ${zoneEmoji} -${percentSuffix}`,
+          `Дата: ${escapeHtml(submittedAtText || "—")}`,
           "",
-          "Ссылка на проверку",
-          linkPlain,
+          linkHtml,
         ].join("\n");
     const initData = getTelegramInitData();
     const fallbackUserId = getTelegramUserIdFromInitData(initData);
