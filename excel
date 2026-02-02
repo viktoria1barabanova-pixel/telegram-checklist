@@ -225,7 +225,7 @@ function doPost(e) {
       appendObjectsRowsByHeaders_(shAns, rows);
     }
 
-    const shouldSendTelegram = !payload.partial;
+    const shouldSendTelegram = !payload.partial && !payload.skip_telegram;
     const tgSendRes = shouldSendTelegram
       ? sendTelegramMessageFromPayload_(ss, payload, { action })
       : { ok: false, info: "skip_partial" };
