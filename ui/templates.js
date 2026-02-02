@@ -111,7 +111,7 @@
           <div id="nonTgBlock" class="noticeBlock" style="display:none;">
             <div class="noticeTitle">Открыто вне Telegram</div>
             <div class="noticeText">
-              Можно пройти проверку и в браузере, но для корректной отправки результатов лучше открывать через бота @sc_control_bot.
+              Вы вошли через Telegram и можете работать в браузере.
             </div>
           </div>
 
@@ -137,6 +137,39 @@
 
           ${versionLine}
           <div id="homeCabinetHint" class="hint" style="display:none;"></div>
+        </div>
+      </div>
+    `;
+  };
+
+  // ---------- browser auth screen ----------
+  window.tplBrowserAuthScreen = function tplBrowserAuthScreen() {
+    const appVersion = (typeof APP_VERSION !== "undefined" && APP_VERSION) ? `v${APP_VERSION}` : "";
+    const versionLine = appVersion ? `<div class="muted homeVersion">Версия: ${h(appVersion)}</div>` : "";
+
+    return `
+      <div class="container">
+        <div class="card homeCard">
+          <div class="screenHeader">
+            <div class="screenHeaderTitles">
+              <div class="title">Вход через Telegram</div>
+              <div class="subTitle">Чтобы работать в браузере, подтвердите аккаунт Telegram.</div>
+            </div>
+          </div>
+
+          <div class="noticeBlock">
+            <div class="noticeTitle">Без пароля</div>
+            <div class="noticeText">
+              Авторизация проходит через Telegram Login Widget. Данные подтверждаются ботом.
+            </div>
+          </div>
+
+          <div class="authWidgetWrap">
+            <div id="tgLoginWidget" class="authWidget"></div>
+            <div id="tgLoginStatus" class="hint" style="margin-top:10px;"></div>
+          </div>
+
+          ${versionLine}
         </div>
       </div>
     `;
@@ -170,7 +203,7 @@
             <div id="nonTgBlock" class="noticeBlock" style="display:none;">
               <div class="noticeTitle">Открыто вне Telegram</div>
               <div class="noticeText">
-                Можно пройти проверку и в браузере, но для корректной отправки результатов лучше открывать через бота @sc_control_bot.
+                Вы вошли через Telegram и можете работать в браузере.
               </div>
             </div>
             <div id="tgUserCard" class="userCard" style="display:none;">
@@ -473,6 +506,8 @@
           <span class="numberLabel">Факт, г</span>
           <div class="numberInputRow">
             <input class="numberInput" data-role="actual" type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" placeholder="Введите вес" value="${h(actualValue)}" />
+            <button class="numberOkBtn" type="button">Ок</button>
+            <span class="numberStatus" data-role="number-status" aria-hidden="true"></span>
           </div>
         </label>
         <div class="numberMeta">

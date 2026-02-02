@@ -25,14 +25,9 @@
 
   function hasTelegramUserInfo() {
     try {
-      const tg = window.Telegram?.WebApp;
-      const user = tg?.initDataUnsafe?.user;
-      if (!tg || !user) return false;
-      const hasId = user.id !== undefined && user.id !== null && String(user.id).trim() !== "";
-      const hasUsername = String(user.username || "").trim() !== "";
-      const hasFirstName = String(user.first_name || "").trim() !== "";
-      const hasLastName = String(user.last_name || "").trim() !== "";
-      const hasDisplayName = hasUsername || hasFirstName || hasLastName;
+      const user = window.getAuthTgUser ? window.getAuthTgUser() : null;
+      const hasId = user?.id !== undefined && user?.id !== null && String(user?.id || "").trim() !== "";
+      const hasDisplayName = String(user?.name || user?.username || "").trim() !== "";
       return hasId && hasDisplayName;
     } catch {
       return false;
@@ -53,8 +48,14 @@
       return;
     }
 
-    // if opened by share link: ?result=SUBMISSION_ID
     const resultId = qs("result");
+    const hasAuth = hasTelegramUserInfo();
+    if (!IS_TG && !hasAuth) {
+      renderBrowserAuthScreen(data, { resultId });
+      return;
+    }
+
+    // if opened by share link: ?result=SUBMISSION_ID
     if (FEATURE_PUBLIC_RESULT_VIEW && resultId) {
       try {
         setLoading("Открываю результат…");

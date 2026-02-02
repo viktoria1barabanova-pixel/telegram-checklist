@@ -120,6 +120,21 @@
     }
   }
 
+  function normalizeLoginUser(user) {
+    if (!user || typeof user !== "object") return null;
+    const first = norm(user.first_name || "");
+    const last = norm(user.last_name || "");
+    const username = norm(user.username || "");
+    const name = norm([last, first].filter(Boolean).join(" ")) || username || "";
+    return {
+      id: user.id ?? "",
+      username: user.username ?? "",
+      first_name: user.first_name ?? "",
+      last_name: user.last_name ?? "",
+      name,
+    };
+  }
+
   function zoneLabelLower(zone) {
     const v = String(zone ?? "").toLowerCase();
     if (v === "green") return "зелёная зона";
@@ -261,6 +276,7 @@
       "⚪️"
     );
     const link = buildResultLink(submissionId) || "";
+    const linkPlain = link || "—";
     const linkHtml = link ? `<a href="${escapeHtml(link)}">Открыть проверку</a>` : "—";
     const { branchName } = getBranchMeta();
     const branchLine = [norm(STATE.city || ""), branchName].filter(Boolean).join(", ");
@@ -282,6 +298,7 @@
       percent: escapeHtml(percentSuffix),
       date: escapeHtml(submittedAtText || "—"),
       link: linkHtml,
+      linkPlain: escapeHtml(linkPlain),
     };
     const text = template
       ? template
@@ -294,6 +311,7 @@
         .replace(/\{percent\}/g, placeholderValues.percent)
         .replace(/\{date\}/g, placeholderValues.date)
         .replace(/\{link\}/g, placeholderValues.link)
+        .replace(/\{linkPlain\}/g, placeholderValues.linkPlain)
       : [
           "Проверка завершена 🤝",
           "",
@@ -303,7 +321,7 @@
           `Дата проверки: ${escapeHtml(submittedAtText || "—")}`,
           "",
           "Ссылка на проверку",
-          linkHtml,
+          linkPlain,
         ].join("\n");
     const initData = getTelegramInitData();
     const fallbackUserId = getTelegramUserIdFromInitData(initData);
@@ -1372,16 +1390,17 @@
     const userCardHandle = document.getElementById("tgUserHandle");
     const userCardAvatar = document.getElementById("tgUserAvatar");
 
-    const tgUser = IS_TG ? (window.getTgUser ? window.getTgUser() : null) : null;
+    const tgUser = window.getAuthTgUser ? window.getAuthTgUser() : null;
     STATE.tgUser = tgUser;
     const tgId = norm(tgUser?.id || "");
+    const hasAuth = !!tgId;
 
     if (branchBackBtn) {
       branchBackBtn.onclick = () => renderStart(DATA);
     }
 
     // TG vs non-TG
-    if (IS_TG) {
+    if (hasAuth) {
       if (fioRow) fioRow.style.display = "none";
       STATE.fio = getTgName();
       if (nonTgBlock) nonTgBlock.style.display = "none";
@@ -1392,7 +1411,7 @@
     }
 
     function updateUserCard() {
-      if (userCard && IS_TG && tgUser?.name) {
+      if (userCard && hasAuth && tgUser?.name) {
         userCard.style.display = "flex";
         if (userCardName) userCardName.textContent = tgUser.name;
         if (userCardHandle) {
@@ -1425,7 +1444,7 @@
     }
 
     updateUserCard();
-    updateUserLine(!IS_TG ? norm(STATE.fio) : "");
+    updateUserLine(!hasAuth ? norm(STATE.fio) : "");
 
     if (myChecksBtn) {
       if (!tgId) {
@@ -1477,13 +1496,13 @@
       STATE.city = city;
       STATE.branchId = branchId;
 
-      if (!IS_TG) {
+      if (!hasAuth) {
         fioInput.disabled = false;
         STATE.fio = norm(fioInput.value);
         if (startBtn.textContent !== startDefaultText) startBtn.textContent = startDefaultText;
       }
 
-      const fioReady = IS_TG || STATE.fio;
+      const fioReady = hasAuth || STATE.fio;
       startBtn.disabled = !(STATE.oblast && STATE.city && STATE.branchId && fioReady);
     }
 
@@ -1583,7 +1602,7 @@
       };
     }
 
-    if (!IS_TG && fioInput) {
+    if (!hasAuth && fioInput) {
       fioInput.oninput = () => {
         refreshStartReady();
         updateUserLine(norm(fioInput.value));
@@ -1596,7 +1615,7 @@
 
     if (startBtn) {
       startBtn.onclick = () => {
-        if (!IS_TG) {
+        if (!hasAuth) {
           STATE.fio = norm(fioInput?.value || "");
           if (!STATE.fio) {
             alert("Введите ФИО, чтобы начать проверку.");
@@ -1630,11 +1649,12 @@
     DATA = data;
     clearResultQuery();
 
-    const tgUser = IS_TG ? (window.getTgUser ? window.getTgUser() : null) : null;
+    const tgUser = window.getAuthTgUser ? window.getAuthTgUser() : null;
     STATE.tgUser = tgUser;
     const tgId = norm(tgUser?.id || "");
+    const hasAuth = !!tgId;
 
-    mount(tplHomeScreen({ showCabinet: IS_TG }));
+    mount(tplHomeScreen({ showCabinet: hasAuth }));
 
     const nonTgBlock = document.getElementById("nonTgBlock");
     const nameEl = document.getElementById("homeUserName");
@@ -1652,31 +1672,31 @@
     const displayName = tgUser?.name || "Пользователь Telegram";
 
     if (nameEl) {
-      nameEl.textContent = IS_TG ? displayName : "Откройте в Telegram";
+      nameEl.textContent = hasAuth ? displayName : "Войдите через Telegram";
     }
     if (handleEl) {
-      if (IS_TG && tgUser?.username) {
+      if (hasAuth && tgUser?.username) {
         handleEl.textContent = `@${tgUser.username}`;
         handleEl.style.display = "";
       } else {
-        handleEl.textContent = IS_TG ? "Без username" : "";
-        handleEl.style.display = IS_TG ? "" : "none";
+        handleEl.textContent = hasAuth ? "Без username" : "";
+        handleEl.style.display = hasAuth ? "" : "none";
       }
     }
     if (avatarEl) {
-      avatarEl.textContent = IS_TG ? initialsFromName(displayName) : "TG";
+      avatarEl.textContent = hasAuth ? initialsFromName(displayName) : "TG";
     }
 
-    if (nonTgBlock) nonTgBlock.style.display = IS_TG ? "none" : "";
+    if (nonTgBlock) nonTgBlock.style.display = hasAuth ? "none" : "";
 
     if (newCheckBtn) newCheckBtn.disabled = false;
-    if (historyBtn) historyBtn.disabled = !IS_TG || !tgId;
-    if (tasksBtn) tasksBtn.disabled = !IS_TG;
+    if (historyBtn) historyBtn.disabled = !hasAuth || !tgId;
+    if (tasksBtn) tasksBtn.disabled = !hasAuth;
 
     if (cabinetHint) {
-      if (!IS_TG) {
+      if (!hasAuth) {
         cabinetHint.style.display = "";
-        cabinetHint.textContent = "Личный кабинет доступен только из Telegram.";
+        cabinetHint.textContent = "Личный кабинет доступен после входа через Telegram.";
       } else if (!tgId) {
         cabinetHint.style.display = "";
         cabinetHint.textContent = "Не удалось определить ваш Telegram ID.";
@@ -1694,7 +1714,7 @@
 
     if (historyBtn) {
       historyBtn.onclick = () => {
-        if (!IS_TG || !tgId) return;
+        if (!hasAuth || !tgId) return;
         renderCabinetScreen(DATA);
       };
     }
@@ -1706,7 +1726,7 @@
     }
 
     function updateHomeCurrentCheck() {
-      if (!IS_TG) {
+      if (!hasAuth) {
         if (currentCheckBtn) currentCheckBtn.style.display = "none";
         if (currentCheckBlock) currentCheckBlock.style.display = "none";
         if (currentCheckHint) currentCheckHint.textContent = "";
@@ -1766,15 +1786,87 @@
     updateHomeCurrentCheck();
   };
 
+  // ---------- Browser auth screen ----------
+  window.renderBrowserAuthScreen = function renderBrowserAuthScreen(data, opts = {}) {
+    DATA = data;
+    clearResultQuery();
+
+    const pendingResultId = norm(opts?.resultId || "");
+    mount(tplBrowserAuthScreen());
+
+    const widgetHost = document.getElementById("tgLoginWidget");
+    const statusEl = document.getElementById("tgLoginStatus");
+
+    const setStatus = (text, isError = false) => {
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      statusEl.style.color = isError ? "var(--danger)" : "";
+    };
+
+    const botUsername = (typeof TELEGRAM_BOT_USERNAME !== "undefined")
+      ? String(TELEGRAM_BOT_USERNAME || "").trim()
+      : "";
+    if (!botUsername) {
+      setStatus("Не задан TELEGRAM_BOT_USERNAME в конфиге. Вход невозможен.", true);
+      return;
+    }
+
+    window.onTelegramAuth = async (user) => {
+      setStatus("Проверяю данные…");
+      try {
+        const res = await api.verifyTelegramLogin(user);
+        if (!res || res.ok !== true || !res.user) {
+          setStatus("Не удалось подтвердить Telegram-аккаунт.", true);
+          return;
+        }
+        const normalized = normalizeLoginUser(res.user);
+        if (!normalized || !normalized.id) {
+          setStatus("Не удалось получить данные пользователя.", true);
+          return;
+        }
+        if (window.setBrowserTgUser) window.setBrowserTgUser(normalized);
+        STATE.tgUser = normalized;
+
+        if (pendingResultId) {
+          setStatus("Открываю результат…");
+          const result = await api.getSubmission(pendingResultId);
+          if (result && result.ok) {
+            renderReadonlyResult(DATA, result);
+            return;
+          }
+          setStatus("Результат не найден или ссылка устарела 😕", true);
+          return;
+        }
+
+        renderStart(DATA);
+      } catch (err) {
+        setStatus("Ошибка авторизации. Попробуйте ещё раз.", true);
+      }
+    };
+
+    if (widgetHost) {
+      widgetHost.innerHTML = "";
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = "https://telegram.org/js/telegram-widget.js?22";
+      script.setAttribute("data-telegram-login", botUsername);
+      script.setAttribute("data-size", "large");
+      script.setAttribute("data-userpic", "false");
+      script.setAttribute("data-request-access", "write");
+      script.setAttribute("data-onauth", "onTelegramAuth(user)");
+      widgetHost.appendChild(script);
+    }
+  };
+
   // ---------- Cabinet screen ----------
   window.renderCabinetScreen = function renderCabinetScreen(data, { forceReload = false } = {}) {
     DATA = data;
     clearResultQuery();
 
-    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const tgUser = STATE.tgUser || (window.getAuthTgUser ? window.getAuthTgUser() : null);
     const tgId = norm(tgUser?.id || "");
-    if (!IS_TG || !tgId) {
-      alert("Личный кабинет доступен только из Telegram.");
+    if (!tgId) {
+      alert("Личный кабинет доступен после входа через Telegram.");
       renderStart(DATA);
       return;
     }
@@ -2287,6 +2379,8 @@
       const rollSelect = col.querySelector(".numberSelect");
       const actualInput = col.querySelector(".numberInput");
       const inputRow = col.querySelector(".numberInputRow");
+      const okBtn = col.querySelector(".numberOkBtn");
+      const statusEl = col.querySelector('[data-role="number-status"]');
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
@@ -2325,6 +2419,20 @@
         if (diffEl) {
           const diffText = meta.diff !== "" ? `${formatWeightDisplay(meta.diff, { signed: true })} г` : "—";
           diffEl.textContent = diffText;
+        }
+        if (statusEl) {
+          statusEl.classList.remove("is-ok", "is-bad");
+          if (meta.hasAnswer) {
+            if (meta.withinTolerance) {
+              statusEl.classList.add("is-ok");
+              statusEl.textContent = "✓";
+            } else {
+              statusEl.classList.add("is-bad");
+              statusEl.textContent = "×";
+            }
+          } else {
+            statusEl.textContent = "";
+          }
         }
       };
 
@@ -2371,6 +2479,7 @@
       if (isLockedSection) {
         if (rollSelect) rollSelect.disabled = true;
         if (actualInput) actualInput.disabled = true;
+        if (okBtn) okBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
         if (actualInput) {
@@ -2389,6 +2498,12 @@
               refreshEditingState();
             }, 0);
           });
+        }
+        if (okBtn) {
+          okBtn.onclick = () => {
+            updateFromInputs(true);
+            if (actualInput) actualInput.blur();
+          };
         }
       }
 
@@ -2536,7 +2651,8 @@
         const returnedId = norm(submitResult?.result_id || "");
         if (returnedId) STATE.lastResultId = returnedId;
 
-        STATE.lastBotSendStatus = IS_TG ? "pending" : "skipped";
+        const canSendTelegram = !!getCheckerMeta().tg_user_id;
+        STATE.lastBotSendStatus = canSendTelegram ? "pending" : "skipped";
         STATE.lastBotSendError = "";
 
         // invalidate cabinet cache so new check appears immediately
@@ -2674,7 +2790,7 @@
   }
 
   function getCheckerMeta() {
-    const tgUser = STATE.tgUser || (window.getTgUser ? window.getTgUser() : null);
+    const tgUser = STATE.tgUser || (window.getAuthTgUser ? window.getAuthTgUser() : null);
     const fio = norm(STATE.fio || tgUser?.name || "");
     if (!STATE.fio && fio) STATE.fio = fio;
     return {
@@ -3056,7 +3172,8 @@
     };
 
     const resultId = norm(STATE.lastResultId);
-    if (IS_TG && resultId && STATE.lastBotSendStatus !== "sent") {
+    const canSendTelegram = !!getCheckerMeta().tg_user_id;
+    if (canSendTelegram && resultId && STATE.lastBotSendStatus !== "sent") {
       (async () => {
         try {
           const sent = await sendTelegramResultMessage(safeResult, resultId);

@@ -31,6 +31,8 @@
     singleAnswerLabels: {}, // key -> human-readable label
   };
 
+  const BROWSER_TG_USER_KEY = "tg_browser_user_v1";
+
   // ---------- Telegram helpers ----------
   window.IS_TG = !!(window.Telegram && Telegram.WebApp);
 
@@ -57,8 +59,38 @@
     }
   };
 
+  window.getBrowserTgUser = function getBrowserTgUser() {
+    try {
+      const raw = localStorage.getItem(BROWSER_TG_USER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  window.setBrowserTgUser = function setBrowserTgUser(user) {
+    try {
+      if (!user || !user.id) return;
+      localStorage.setItem(BROWSER_TG_USER_KEY, JSON.stringify(user));
+    } catch {}
+  };
+
+  window.clearBrowserTgUser = function clearBrowserTgUser() {
+    try {
+      localStorage.removeItem(BROWSER_TG_USER_KEY);
+    } catch {}
+  };
+
+  window.getAuthTgUser = function getAuthTgUser() {
+    if (window.IS_TG) return window.getTgUser ? window.getTgUser() : null;
+    return window.getBrowserTgUser ? window.getBrowserTgUser() : null;
+  };
+
   window.getTgName = function getTgName() {
-    const user = window.getTgUser ? window.getTgUser() : null;
+    const user = window.getAuthTgUser ? window.getAuthTgUser() : null;
     return user?.name || "";
   };
 
