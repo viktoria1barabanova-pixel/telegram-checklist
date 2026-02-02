@@ -283,7 +283,7 @@
 
     const desc = norm(getAny(q, [
       // EN
-      "description", "desc", "help", "hint",
+      "description", "desc", "help", "hint", "question_description", "questionDescription", "question_desc",
       // RU
       "описание", "подсказка", "пояснение"
     ], ""));
@@ -473,7 +473,7 @@
           <span class="numberLabel">Факт, г</span>
           <div class="numberInputRow">
             <input class="numberInput" data-role="actual" type="number" inputmode="decimal" enterkeyhint="done" min="0" step="1" placeholder="Введите вес" value="${h(actualValue)}" />
-            <button type="button" class="btn btnSecondary numberHideBtn" aria-label="Готово" title="Готово">✓</button>
+            <button type="button" class="btn btnSecondary numberHideBtn" aria-label="Done" title="Done">Done</button>
           </div>
         </label>
         <div class="numberMeta">

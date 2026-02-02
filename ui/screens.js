@@ -266,6 +266,7 @@
     const branchLine = [norm(STATE.city || ""), branchName].filter(Boolean).join(", ");
     const checker = getCheckerMeta();
     const percentText = formatPercentDisplay(result?.percent);
+    const percentSuffix = (percentText && percentText !== "—") ? ` ${percentText}` : "";
     const submittedAtText = STATE.lastSubmittedAt ? formatRuDateTime(STATE.lastSubmittedAt) : "";
 
     const template = (typeof TELEGRAM_RESULT_MESSAGE_TEMPLATE !== "undefined")
@@ -278,7 +279,7 @@
       zoneEmoji,
       branch: escapeHtml(branchLine || "—"),
       checker: escapeHtml(checker.fio || "—"),
-      percent: escapeHtml(percentText || "—"),
+      percent: escapeHtml(percentSuffix),
       date: escapeHtml(submittedAtText || "—"),
       link: linkHtml,
     };
@@ -298,7 +299,7 @@
           "",
           `Филиал: ${escapeHtml(branchLine || "—")}`,
           `Проверяющий: ${escapeHtml(checker.fio || "—")}`,
-          `Зона: ${zoneEmoji} ${escapeHtml(zoneLabel)}${percentText && percentText !== "—" ? ` ${escapeHtml(percentText)}` : ""}`,
+          `Зона: ${zoneEmoji} ${escapeHtml(zoneLabel)}${percentSuffix}`,
           `Дата проверки: ${escapeHtml(submittedAtText || "—")}`,
           "",
           "Ссылка на проверку",
@@ -323,6 +324,7 @@
       submitted_at: submittedAtText || "",
       init_data: initData,
       tg_user_id: tgUserId,
+      parse_mode: "HTML",
     };
 
     try {
@@ -2288,9 +2290,30 @@
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
+      let trackingKeyboard = false;
       const clearStickyState = () => {
         document.querySelectorAll(".numberInputRow.is-active").forEach(row => row.classList.remove("is-active"));
         document.querySelectorAll(".numberHideBtn.is-sticky").forEach(btn => btn.classList.remove("is-sticky"));
+      };
+      const updateKeyboardInset = () => {
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const inset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+        document.documentElement.style.setProperty("--keyboard-inset", `${Math.round(inset)}px`);
+      };
+      const startKeyboardTracking = () => {
+        if (trackingKeyboard) return;
+        trackingKeyboard = true;
+        updateKeyboardInset();
+        window.visualViewport?.addEventListener("resize", updateKeyboardInset);
+        window.visualViewport?.addEventListener("scroll", updateKeyboardInset);
+      };
+      const stopKeyboardTracking = () => {
+        if (!trackingKeyboard) return;
+        trackingKeyboard = false;
+        window.visualViewport?.removeEventListener("resize", updateKeyboardInset);
+        window.visualViewport?.removeEventListener("scroll", updateKeyboardInset);
+        document.documentElement.style.setProperty("--keyboard-inset", "0px");
       };
       const refreshEditingState = () => {
         const activeEl = document.activeElement;
@@ -2299,12 +2322,14 @@
         }
         document.body.classList.remove("is-number-editing");
         clearStickyState();
+        stopKeyboardTracking();
       };
       const setStickyState = () => {
         clearStickyState();
         if (inputRow) inputRow.classList.add("is-active");
         if (hideBtn) hideBtn.classList.add("is-sticky");
         document.body.classList.add("is-number-editing");
+        startKeyboardTracking();
       };
       const ensureInputInView = () => {
         if (!actualInput) return;
