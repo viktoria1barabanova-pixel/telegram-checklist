@@ -472,7 +472,7 @@
         <label class="numberField">
           <span class="numberLabel">Факт, г</span>
           <div class="numberInputRow">
-            <input class="numberInput" data-role="actual" type="tel" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" placeholder="Введите вес" value="${h(actualValue)}" />
+            <input class="numberInput" data-role="actual" type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" placeholder="Введите вес" value="${h(actualValue)}" />
           </div>
         </label>
         <div class="numberMeta">
