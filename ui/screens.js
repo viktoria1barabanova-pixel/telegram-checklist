@@ -1716,7 +1716,8 @@
 
       const lastDraftBranchId = (window.getLastDraftBranchId ? window.getLastDraftBranchId() : "") || "";
       const draft = lastDraftBranchId ? loadDraft(lastDraftBranchId) : null;
-      if (!draft || draft.isFinished) {
+      if (!draft || draft.isFinished || draft.lastSubmittedAt) {
+        if (draft?.branchId) clearLastDraftBranchId(draft.branchId);
         if (currentCheckBtn) currentCheckBtn.style.display = "none";
         if (currentCheckBlock) currentCheckBlock.style.display = "none";
         if (currentCheckHint) currentCheckHint.textContent = "";
@@ -2285,14 +2286,12 @@
       const qid = card.getAttribute("data-qid");
       const rollSelect = col.querySelector(".numberSelect");
       const actualInput = col.querySelector(".numberInput");
-      const hideBtn = col.querySelector(".numberHideBtn");
       const inputRow = col.querySelector(".numberInputRow");
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
       const clearStickyState = () => {
         document.querySelectorAll(".numberInputRow.is-active").forEach(row => row.classList.remove("is-active"));
-        document.querySelectorAll(".numberHideBtn.is-sticky").forEach(btn => btn.classList.remove("is-sticky"));
       };
       const refreshEditingState = () => {
         const activeEl = document.activeElement;
@@ -2305,7 +2304,6 @@
       const setStickyState = () => {
         clearStickyState();
         if (inputRow) inputRow.classList.add("is-active");
-        if (hideBtn) hideBtn.classList.add("is-sticky");
         document.body.classList.add("is-number-editing");
       };
       const ensureInputInView = () => {
@@ -2373,7 +2371,6 @@
       if (isLockedSection) {
         if (rollSelect) rollSelect.disabled = true;
         if (actualInput) actualInput.disabled = true;
-        if (hideBtn) hideBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
         if (actualInput) {
@@ -2392,13 +2389,6 @@
               refreshEditingState();
             }, 0);
           });
-        }
-        if (hideBtn) {
-          hideBtn.onclick = () => {
-            updateFromInputs(true);
-            if (actualInput) actualInput.blur();
-            refreshEditingState();
-          };
         }
       }
 

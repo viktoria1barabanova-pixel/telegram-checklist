@@ -472,8 +472,7 @@
         <label class="numberField">
           <span class="numberLabel">Факт, г</span>
           <div class="numberInputRow">
-            <input class="numberInput" data-role="actual" type="number" inputmode="decimal" enterkeyhint="done" min="0" step="1" placeholder="Введите вес" value="${h(actualValue)}" />
-            <button type="button" class="btn btnSecondary numberHideBtn" aria-label="Готово" title="Готово">✓</button>
+            <input class="numberInput" data-role="actual" type="tel" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" placeholder="Введите вес" value="${h(actualValue)}" />
           </div>
         </label>
         <div class="numberMeta">

@@ -1312,23 +1312,6 @@ body.is-number-editing .bottomBar{
   flex-direction: column;
   gap: 6px;
 }
-.numberActions{
-  display: flex;
-  justify-content: flex-end;
-}
-.numberHideBtn{
-  padding: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  font-size: 20px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.95);
-  border: 1px solid rgba(17,24,39,.14);
-  box-shadow: 0 10px 22px rgba(17,24,39,.1);
-}
 .numberLabel{
   font-size: 13px;
   font-weight: 600;
@@ -1361,25 +1344,6 @@ body.is-number-editing .bottomBar{
 }
 .numberInputRow .numberInput{
   flex: 1;
-}
-.numberInputRow .numberHideBtn{
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-.numberHideBtn.is-sticky{
-  position: fixed;
-  right: 16px;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0));
-  z-index: 140;
-  width: 64px;
-  height: 44px;
-  border-radius: 14px;
-  text-align: center;
-  font-size: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 16px 30px rgba(17,24,39,0.22);
 }
 .numberMeta{
   display: flex;
