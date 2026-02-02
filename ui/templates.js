@@ -111,8 +111,9 @@
           <div id="nonTgBlock" class="noticeBlock" style="display:none;">
             <div class="noticeTitle">Открыто вне Telegram</div>
             <div class="noticeText">
-              Вы вошли через Telegram и можете работать в браузере.
+              Чтобы начать проверку, войдите через Telegram.
             </div>
+            <button id="homeAuthBtn" class="btn btnPrimary homeActionBtn" type="button">Авторизоваться в Telegram</button>
           </div>
 
           <div class="homeActions">
@@ -506,8 +507,6 @@
           <span class="numberLabel">Факт, г</span>
           <div class="numberInputRow">
             <input class="numberInput" data-role="actual" type="text" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done" autocomplete="off" placeholder="Введите вес" value="${h(actualValue)}" />
-            <button class="numberOkBtn" type="button">Ок</button>
-            <span class="numberStatus" data-role="number-status" aria-hidden="true"></span>
           </div>
         </label>
         <div class="numberMeta">
