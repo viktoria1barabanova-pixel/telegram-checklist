@@ -254,8 +254,7 @@
     return `<span class="zoneBadge ${escapeHtml(cls)}">${escapeHtml(cap)}</span>`;
   }
 
-  async function sendTelegramResultMessage(result, submissionId) {
-    if (!STATE.isFinished) return false;
+  function buildTelegramResultPayload(result, submissionId) {
     const zoneRaw = String(result?.zone ?? "").toLowerCase();
     const zoneText = (
       zoneRaw === "green" ? "зелёную зону" :
@@ -322,44 +321,54 @@
           "",
           linkHtml,
         ].join("\n");
+
     const initData = getTelegramInitData();
     const fallbackUserId = getTelegramUserIdFromInitData(initData);
     const tgUserId = checker.tg_user_id || checker.tg_id || fallbackUserId || "";
-    const payload = {
-      action: "send_message",
-      message_text: text,
-      result_link: link,
-      result_id: norm(submissionId),
-      zone: zoneRaw || "unknown",
-      zone_text: zoneText,
-      zone_label: zoneLabel,
-      zone_emoji: zoneEmoji,
-      inspection_area: "Общая",
-      branch_name: branchLine || branchName || "",
-      checker_fio: checker.fio || "",
-      percent: percentText || "",
-      submitted_at: submittedAtText || "",
-      init_data: initData,
-      tg_user_id: tgUserId,
-      parse_mode: "HTML",
+
+    return {
+      messageText: text,
+      payload: {
+        action: "send_message",
+        message_text: text,
+        result_link: link,
+        result_id: norm(submissionId),
+        zone: zoneRaw || "unknown",
+        zone_text: zoneText,
+        zone_label: zoneLabel,
+        zone_emoji: zoneEmoji,
+        inspection_area: "Общая",
+        branch_name: branchLine || branchName || "",
+        checker_fio: checker.fio || "",
+        percent: percentText || "",
+        submitted_at: submittedAtText || "",
+        init_data: initData,
+        tg_user_id: tgUserId,
+        parse_mode: "HTML",
+      },
     };
+  }
+
+  async function sendTelegramResultMessage(result, submissionId) {
+    if (!STATE.isFinished) return false;
+    const telegramPayload = buildTelegramResultPayload(result, submissionId);
 
     try {
-      await api.sendBotMessage(payload, { usePostMessage: false });
+      await api.sendBotMessage(telegramPayload.payload, { usePostMessage: false });
       const tgApp = window.Telegram?.WebApp;
       const shouldAutoClose = (typeof AUTO_CLOSE_AFTER_SUBMIT !== "undefined") ? AUTO_CLOSE_AFTER_SUBMIT : false;
       if (shouldAutoClose && typeof tgApp?.close === "function") {
         setTimeout(() => tgApp.close(), 500);
       }
       console.info("Telegram message sent", {
-        result_id: payload.result_id,
-        tg_user_id: payload.tg_user_id,
+        result_id: telegramPayload.payload.result_id,
+        tg_user_id: telegramPayload.payload.tg_user_id,
       });
       return true;
     } catch (err) {
       console.info("Telegram message failed", {
-        result_id: payload.result_id,
-        tg_user_id: payload.tg_user_id,
+        result_id: telegramPayload.payload.result_id,
+        tg_user_id: telegramPayload.payload.tg_user_id,
         error: String(err),
       });
       return false;
@@ -2396,6 +2405,7 @@
       const rollSelect = col.querySelector(".numberSelect");
       const actualInput = col.querySelector(".numberInput");
       const inputRow = col.querySelector(".numberInputRow");
+      const doneBtn = col.querySelector(".numberDoneBtn");
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
@@ -2484,6 +2494,12 @@
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
         if (actualInput) {
           actualInput.oninput = () => updateFromInputs(true);
+          actualInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              actualInput.blur();
+            }
+          });
           actualInput.addEventListener("focus", () => {
             setStickyState();
             requestAnimationFrame(() => {
@@ -2497,6 +2513,11 @@
             setTimeout(() => {
               refreshEditingState();
             }, 0);
+          });
+        }
+        if (doneBtn && actualInput) {
+          doneBtn.addEventListener("click", () => {
+            actualInput.blur();
           });
         }
       }
@@ -3052,6 +3073,7 @@
     const { branchName } = getBranchMeta();
     const answers_rows = buildAnswersRows(submissionId, ts);
     const answers_rows_count = answers_rows.length;
+    const telegramPayload = buildTelegramResultPayload(result, submissionId);
 
     const payload = {
       action: "submit",
@@ -3059,6 +3081,8 @@
       submitted_at: ts,
       init_data: getTelegramInitData(),
       result_link: buildResultLink(submissionId),
+      message_text: telegramPayload.messageText,
+      skip_telegram: !!checker.tg_user_id,
       zone_room: "общая",
       inspection_area: "Общая",
 

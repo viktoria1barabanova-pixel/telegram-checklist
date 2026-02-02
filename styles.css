@@ -1354,6 +1354,24 @@ body.is-number-editing .bottomBar{
 .numberInputRow .numberInput{
   flex: 1;
 }
+.numberDoneBtn{
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(17,24,39,.12);
+  background: rgba(255,255,255,0.95);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 10px 22px rgba(17,24,39,.06);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.numberInputRow.is-active .numberDoneBtn{
+  display: inline-flex;
+}
 .numberMeta{
   display: flex;
   flex-wrap: wrap;
