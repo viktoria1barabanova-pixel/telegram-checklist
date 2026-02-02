@@ -2862,7 +2862,7 @@
           const emptyLabel = hasItems ? "Нет нарушений" : "";
           baseRow.answer_value = hasAnswer ? ids.join(", ") : (hasItems ? "0" : "0");
           baseRow.answer_label = labels.length ? labels.join(", ") : (hasItems ? emptyLabel : "");
-          baseRow.answer_key = baseRow.answer_value;
+          baseRow.answer_key = isIssue ? "bad" : "good";
           baseRow.answer_text = baseRow.answer_label;
           baseRow.is_issue = isIssue;
           baseRow.score_earned = earned;
@@ -2874,10 +2874,14 @@
           const scoreUnit = hasAnswer && meta.withinTolerance ? 1 : 0;
           const earned = isExcluded ? "" : scoreUnit * qScore;
           const labelText = formatWeightComparison(meta);
+          const commentParts = [];
+          if (note.text) commentParts.push(note.text);
+          if (meta.rollName) commentParts.push(`Ролл: ${meta.rollName}`);
           baseRow.answer_value = meta.actualWeight !== "" ? String(meta.actualWeight) : "";
           baseRow.answer_label = labelText;
-          baseRow.answer_key = meta.rollId || meta.rollName || "";
+          baseRow.answer_key = hasAnswer ? (meta.withinTolerance ? "good" : "bad") : "";
           baseRow.answer_text = labelText;
+          baseRow.comment = commentParts.join("\n");
           baseRow.is_issue = hasAnswer ? !meta.withinTolerance : false;
           baseRow.score_earned = earned;
         } else {
