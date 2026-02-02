@@ -1317,9 +1317,14 @@ body.is-number-editing .bottomBar{
   justify-content: flex-end;
 }
 .numberHideBtn{
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .numberLabel{
   font-size: 13px;
@@ -1356,14 +1361,16 @@ body.is-number-editing .bottomBar{
 }
 .numberInputRow .numberHideBtn{
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 .numberHideBtn.is-sticky{
   position: fixed;
-  left: 16px;
   right: 16px;
   bottom: calc(16px + env(safe-area-inset-bottom, 0));
   z-index: 140;
-  width: auto;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
   text-align: center;
   box-shadow: 0 12px 24px rgba(17,24,39,0.2);
 }
