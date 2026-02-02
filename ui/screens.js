@@ -1366,6 +1366,13 @@
     DATA = data;
     clearResultQuery();
 
+    const authUser = window.getAuthTgUser ? window.getAuthTgUser() : null;
+    const authId = norm(authUser?.id || "");
+    if (!authId) {
+      renderBrowserAuthScreen(DATA);
+      return;
+    }
+
     const BRANCHES = getBranches();
     const oblasts = listOblasts(BRANCHES);
     mount(tplStartScreen({ oblasts, showCabinet: IS_TG }));
@@ -1668,6 +1675,7 @@
     const historyBtn = document.getElementById("homeHistoryBtn");
     const tasksBtn = document.getElementById("homeTasksBtn");
     const cabinetHint = document.getElementById("homeCabinetHint");
+    const authBtn = document.getElementById("homeAuthBtn");
 
     const displayName = tgUser?.name || "Пользователь Telegram";
 
@@ -1689,14 +1697,14 @@
 
     if (nonTgBlock) nonTgBlock.style.display = hasAuth ? "none" : "";
 
-    if (newCheckBtn) newCheckBtn.disabled = false;
+    if (newCheckBtn) newCheckBtn.disabled = !hasAuth;
     if (historyBtn) historyBtn.disabled = !hasAuth || !tgId;
     if (tasksBtn) tasksBtn.disabled = !hasAuth;
 
     if (cabinetHint) {
       if (!hasAuth) {
         cabinetHint.style.display = "";
-        cabinetHint.textContent = "Личный кабинет доступен после входа через Telegram.";
+        cabinetHint.textContent = "Чтобы начать проверку, войдите через Telegram.";
       } else if (!tgId) {
         cabinetHint.style.display = "";
         cabinetHint.textContent = "Не удалось определить ваш Telegram ID.";
@@ -1708,7 +1716,17 @@
 
     if (newCheckBtn) {
       newCheckBtn.onclick = () => {
+        if (!hasAuth) {
+          renderBrowserAuthScreen(DATA);
+          return;
+        }
         renderBranchPickerScreen(DATA);
+      };
+    }
+
+    if (authBtn) {
+      authBtn.onclick = () => {
+        renderBrowserAuthScreen(DATA);
       };
     }
 
@@ -2379,8 +2397,6 @@
       const rollSelect = col.querySelector(".numberSelect");
       const actualInput = col.querySelector(".numberInput");
       const inputRow = col.querySelector(".numberInputRow");
-      const okBtn = col.querySelector(".numberOkBtn");
-      const statusEl = col.querySelector('[data-role="number-status"]');
       const planEl = col.querySelector('[data-role="plan"]');
       const diffEl = col.querySelector('[data-role="diff"]');
       const rollCatalog = getRollWeightsCatalog();
@@ -2419,20 +2435,6 @@
         if (diffEl) {
           const diffText = meta.diff !== "" ? `${formatWeightDisplay(meta.diff, { signed: true })} г` : "—";
           diffEl.textContent = diffText;
-        }
-        if (statusEl) {
-          statusEl.classList.remove("is-ok", "is-bad");
-          if (meta.hasAnswer) {
-            if (meta.withinTolerance) {
-              statusEl.classList.add("is-ok");
-              statusEl.textContent = "✓";
-            } else {
-              statusEl.classList.add("is-bad");
-              statusEl.textContent = "×";
-            }
-          } else {
-            statusEl.textContent = "";
-          }
         }
       };
 
@@ -2479,7 +2481,6 @@
       if (isLockedSection) {
         if (rollSelect) rollSelect.disabled = true;
         if (actualInput) actualInput.disabled = true;
-        if (okBtn) okBtn.disabled = true;
       } else {
         if (rollSelect) rollSelect.onchange = () => updateFromInputs(true);
         if (actualInput) {
@@ -2498,12 +2499,6 @@
               refreshEditingState();
             }, 0);
           });
-        }
-        if (okBtn) {
-          okBtn.onclick = () => {
-            updateFromInputs(true);
-            if (actualInput) actualInput.blur();
-          };
         }
       }
 
