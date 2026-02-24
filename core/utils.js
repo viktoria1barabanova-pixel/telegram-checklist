@@ -95,6 +95,10 @@
   window.driveToDirect = function driveToDirect(url) {
     const u = norm(url);
     if (!u) return "";
+
+    // local previews before upload and already-direct blobs should pass as-is
+    if (/^data:image\//i.test(u) || /^blob:/i.test(u)) return u;
+
     if (!/^https?:\/\//i.test(u)) return "";
 
     let id = "";
