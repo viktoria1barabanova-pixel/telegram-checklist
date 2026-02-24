@@ -570,8 +570,24 @@ function resolveBranchDriveFolder_(ss, payload) {
     return { ok: true, folder, status: "resolved", folder_id: folderId };
   } catch (err) {
     logError_("resolveBranchDriveFolder: DriveApp.getFolderById failed", err);
-    return { ok: false, status: "folder_access_error", reason: String(err || ""), folder_id: folderId };
+    const scopeIssue = getDriveScopeIssue_(err);
+    return {
+      ok: false,
+      status: scopeIssue ? "drive_scope_missing" : "folder_access_error",
+      reason: String(err || ""),
+      folder_id: folderId,
+      action_required: scopeIssue
+        ? "Re-authorize Apps Script deployment with Google Drive scope (https://www.googleapis.com/auth/drive)."
+        : "Check folder access rights and shared permissions for script account.",
+    };
   }
+}
+
+function getDriveScopeIssue_(err) {
+  const text = String(err && (err.message || err.stack) ? (err.message || err.stack) : err || "");
+  if (!text) return false;
+  return /DriveApp\.getFolderById/i.test(text)
+    && /(auth\/drive|auth\/drive\.readonly|нет разрешения|permission)/i.test(text);
 }
 
 function findBranchRowData_(branchesSheet, payload) {
