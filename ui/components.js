@@ -70,6 +70,7 @@
     const close = () => {
       overlay.classList.remove("open");
       overlay.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
     };
 
     closeBtn.onclick = close;
@@ -92,15 +93,6 @@
     return _modal;
   }
 
-  function centerImageInView(modal) {
-    try {
-      // ждём 1 frame чтобы браузер посчитал размеры
-      requestAnimationFrame(() => {
-        modal.img.scrollIntoView({ behavior: "instant", block: "center", inline: "center" });
-      });
-    } catch {}
-  }
-
   function showIndex(i) {
     const modal = ensureModal();
     if (!modal.ok) return;
@@ -119,7 +111,6 @@
     if (modal.prevBtn) modal.prevBtn.style.display = _imgs.length > 1 ? "" : "none";
     if (modal.nextBtn) modal.nextBtn.style.display = _imgs.length > 1 ? "" : "none";
 
-    centerImageInView(modal);
   }
 
   // public: open modal with one or many photos (urls or dataURLs)
@@ -130,6 +121,7 @@
     _imgs = (photos || []).map((u) => driveToDirect(u)).filter(Boolean);
     if (!_imgs.length) return;
 
+    document.body.classList.add("modal-open");
     modal.overlay.classList.add("open");
     modal.overlay.setAttribute("aria-hidden", "false");
     showIndex(startIndex);
