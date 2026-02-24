@@ -472,10 +472,14 @@ label{
 .zoneBanner.green .zonePct{ background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.30); }
 
 /* Image modal */
+body.modal-open {
+  overflow: hidden;
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.78);
+  background: rgba(0,0,0,.82);
   display: none;
   align-items: center;
   justify-content: center;
@@ -484,17 +488,21 @@ label{
 }
 .modalOverlay.open { display: flex; }
 
+.imgModalInner,
 .modalBox {
-  max-width: 920px;
-  width: 100%;
+  width: min(100%, 920px);
+  max-height: calc(100vh - 36px);
+  position: relative;
   background: #0B0C10;
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 24px 70px rgba(0,0,0,.45);
 }
+
+.imgModalImg,
 .modalImg {
   width: 100%;
-  max-height: 82vh;
+  height: min(82vh, calc(100vh - 36px));
   object-fit: contain;
   display: block;
 }
@@ -525,7 +533,6 @@ label{
   box-shadow: 0 14px 38px rgba(0,0,0,.35);
 }
 
-#imgClose{ position: absolute; top: 14px; right: 14px; }
 #imgClose{ position: absolute; top: 14px; right: 14px; }
 
 .modalOverlay.open #imgClose{
