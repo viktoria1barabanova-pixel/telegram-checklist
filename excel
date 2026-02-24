@@ -9,6 +9,7 @@ const SHEET_NAMES = {
   inspectors: "Проверяющие",
   submissions: "Результаты",
   answers: "Ответы",
+  logs: "Логи",
 };
 
 // IMPORTANT: set this to the ID of the Google Spreadsheet that contains your questions
@@ -75,6 +76,8 @@ const SETTINGS = {
 };
 
 const MY_SUBMISSIONS_DEFAULT_LIMIT = 200;
+
+const LOG_HEADERS = ["ts", "level", "message", "data"];
 
 /***************
  * GET (data API)
@@ -406,7 +409,26 @@ function uploadAnswerPhotosToDrive_(ss, payload, flatRows) {
   }
 
   const dateFolderName = formatDateFolderNameMsk_(new Date());
-  const dateFolder = ensureChildFolderByName_(resolver.folder, dateFolderName);
+  let dateFolder;
+  try {
+    dateFolder = ensureChildFolderByName_(resolver.folder, dateFolderName);
+  } catch (err) {
+    logError_("uploadAnswerPhotosToDrive: date folder create/open failed", err);
+    return {
+      flat: rows,
+      meta: {
+        ok: false,
+        status: "date_folder_access_error",
+        reason: String(err || ""),
+        uploaded: 0,
+        failed: 0,
+        total: countPhotosInRows_(rows),
+        branch_folder_id: resolver.folder.getId(),
+        branch_folder_url: resolver.folder.getUrl(),
+        date_folder_name: dateFolderName,
+      },
+    };
+  }
 
   if (!rows.length) {
     return {
@@ -517,17 +539,18 @@ function resolveBranchDriveFolder_(ss, payload) {
     return { ok: false, status: "branch_not_found", reason: "Branch row not found" };
   }
 
-  const folderUrl = String(getByKeys_(found.obj, [
-    "ссылка_на_папку", "ссылка на папку", "папка", "папка_drive",
+  const folderAliases = [
+    "ссылка_на_папку", "ссылка на папку", "папка", "папка_drive", "папка drive", "диск",
     "folder_url", "folder_link", "drive_folder_url", "drive_folder", "folder_id",
-  ]) || "").trim();
+  ];
 
-  const richFolderUrl = extractFolderUrlFromRichText_(branchesSheet, found.rowIndex, found.headerIndexMap, [
-    "ссылка_на_папку", "ссылка на папку", "папка", "папка_drive",
-    "folder_url", "folder_link", "drive_folder_url", "drive_folder", "folder_id",
-  ]);
+  const folderUrl = String(getByKeys_(found.obj, folderAliases) || "").trim();
+  const richFolderUrl = extractFolderUrlFromRichText_(branchesSheet, found.rowIndex, found.headerIndexMap, folderAliases);
 
-  const folderId = extractDriveFolderId_(folderUrl) || extractDriveFolderId_(richFolderUrl);
+  const fallbackCell = extractFolderCellByHeaderGuess_(branchesSheet, found.rowIndex, found.headerIndexMap);
+  const guessedFolderUrl = extractDriveFolderId_(fallbackCell) ? fallbackCell : "";
+
+  const folderId = extractDriveFolderId_(folderUrl) || extractDriveFolderId_(richFolderUrl) || extractDriveFolderId_(guessedFolderUrl);
   if (!folderId) {
     return {
       ok: false,
@@ -537,16 +560,17 @@ function resolveBranchDriveFolder_(ss, payload) {
         row_index: found.rowIndex,
         folder_url_raw: folderUrl,
         folder_url_rich_text: richFolderUrl,
+        folder_url_guessed: guessedFolderUrl,
       },
     };
   }
 
   try {
     const folder = DriveApp.getFolderById(folderId);
-    return { ok: true, folder, status: "resolved" };
+    return { ok: true, folder, status: "resolved", folder_id: folderId };
   } catch (err) {
     logError_("resolveBranchDriveFolder: DriveApp.getFolderById failed", err);
-    return { ok: false, status: "folder_access_error", reason: String(err || "") };
+    return { ok: false, status: "folder_access_error", reason: String(err || ""), folder_id: folderId };
   }
 }
 
@@ -566,6 +590,9 @@ function findBranchRowData_(branchesSheet, payload) {
   const branchId = String(payload?.branch_id || "").trim();
   const branchName = String(payload?.branch_name || "").trim();
 
+  const branchIdKeys = ["branch_id", "id", "branchid", "код", "код_филиала", "код_адреса"];
+  const branchNameKeys = ["branch_name", "address", "addr", "name", "title", "адрес", "название", "филиал", "точка"];
+
   for (let i = 1; i < values.length; i += 1) {
     const row = values[i] || [];
     if (!row.some(cell => String(cell || "").trim() !== "")) continue;
@@ -575,7 +602,7 @@ function findBranchRowData_(branchesSheet, payload) {
       obj[h] = row[idx];
     });
 
-    const rowBranchId = String(getByKeys_(obj, ["branch_id", "id", "branchid"]) || "").trim();
+    const rowBranchId = String(getByKeys_(obj, branchIdKeys) || "").trim();
     if (branchId && rowBranchId === branchId) {
       return { obj, rowIndex: i + 1, headerIndexMap };
     }
@@ -592,7 +619,7 @@ function findBranchRowData_(branchesSheet, payload) {
         obj[h] = row[idx];
       });
 
-      const label = String(getByKeys_(obj, ["branch_name", "address", "addr", "name", "title", "адрес", "название"]) || "").trim();
+      const label = String(getByKeys_(obj, branchNameKeys) || "").trim();
       if (label && normalizeTextKey_(label) === target) {
         return { obj, rowIndex: i + 1, headerIndexMap };
       }
@@ -625,6 +652,24 @@ function extractFolderUrlFromRichText_(sheet, rowIndex, headerIndexMap, folderKe
   return "";
 }
 
+
+function extractFolderCellByHeaderGuess_(sheet, rowIndex, headerIndexMap) {
+  if (!sheet || !rowIndex || !headerIndexMap) return "";
+  const keys = Object.keys(headerIndexMap || {});
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    if (!/(папк|folder|drive|диск)/i.test(key)) continue;
+    const idx = headerIndexMap[key];
+    if (idx === undefined || idx < 0) continue;
+    const value = sheet.getRange(rowIndex, idx + 1).getDisplayValue();
+    if (value && extractDriveFolderId_(value)) return String(value).trim();
+
+    const rich = extractFolderUrlFromRichText_(sheet, rowIndex, headerIndexMap, [key]);
+    if (rich && extractDriveFolderId_(rich)) return String(rich).trim();
+  }
+  return "";
+}
+
 function findHeaderIndexByAliases_(headerIndexMap, aliases) {
   const list = Array.isArray(aliases) ? aliases : [];
   for (let i = 0; i < list.length; i += 1) {
@@ -636,15 +681,31 @@ function findHeaderIndexByAliases_(headerIndexMap, aliases) {
 }
 
 function logInfo_(msg, data) {
+  const text = `[INFO] ${msg}${data !== undefined ? ` | ${json_(data)}` : ""}`;
   try {
-    Logger.log(`[INFO] ${msg}${data !== undefined ? ` | ${json_(data)}` : ""}`);
+    Logger.log(text);
   } catch (_) {}
+  appendLogRow_("INFO", msg, data !== undefined ? data : "");
 }
 
 function logError_(msg, err) {
   const text = err && err.stack ? String(err.stack) : String(err || "");
   try {
     Logger.log(`[ERROR] ${msg}${text ? ` | ${text}` : ""}`);
+  } catch (_) {}
+  appendLogRow_("ERROR", msg, text);
+}
+
+function appendLogRow_(level, message, data) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = getOrCreateSheet_(ss, SHEET_NAMES.logs, LOG_HEADERS);
+    sh.appendRow([
+      Utilities.formatDate(new Date(), "Europe/Moscow", "yyyy-MM-dd HH:mm:ss"),
+      String(level || ""),
+      String(message || ""),
+      typeof data === "string" ? data : json_(data),
+    ]);
   } catch (_) {}
 }
 
