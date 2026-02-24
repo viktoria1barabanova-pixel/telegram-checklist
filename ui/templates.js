@@ -301,6 +301,7 @@
     const answerState = (opts.answerState === undefined) ? null : opts.answerState;
     const showRightToggle = (opts.showRightToggle === undefined) ? true : !!opts.showRightToggle;
     const showNotes = !!opts.showNotes;
+    const allowPhotos = (opts.allowPhotos === undefined) ? true : !!opts.allowPhotos;
     const sectionTitle = norm(getAny(q, [
       // EN
       "section_title", "section", "section_name", "block", "block_title", "group", "group_title",
@@ -362,7 +363,7 @@
         ? tplCheckboxOptions(q, answerState)
         : tplSingleOptions(q, answerState);
 
-    const notesHtml = showNotes ? tplIssueNotesBlock(q) : "";
+    const notesHtml = showNotes ? tplIssueNotesBlock(q, { allowPhotos }) : "";
 
     return `
       <div class="card qCard" data-qid="${h(q.id)}">
@@ -614,16 +615,18 @@
   }
 
   // ---------- issue notes (comment + photos) ----------
-  function tplIssueNotesBlock(q) {
+  function tplIssueNotesBlock(q, opts) {
     // This block is shown/hidden by logic depending on answer != good
+    opts = opts || {};
+    const allowPhotos = (opts.allowPhotos === undefined) ? true : !!opts.allowPhotos;
     return `
-      <div class="noteBlock" data-note-for="${h(q.id)}" style="display:none">
+      <div class="noteBlock" data-note-for="${h(q.id)}" data-allow-photos="${allowPhotos ? "1" : "0"}" style="display:none">
         <div class="noteRow noteRowTop">
           <textarea class="noteInput noteCompact" rows="1" placeholder="Комментарий (по желанию)"></textarea>
-          <label class="fileBtn" aria-label="Добавить фото">
+          ${allowPhotos ? `<label class="fileBtn" aria-label="Добавить фото">
             <input class="noteFile" type="file" accept="image/*" multiple />
             <span class="fileBtnIcon" aria-hidden="true"></span>
-          </label>
+          </label>` : ""}
         </div>
 
         <div class="thumbRow"></div>

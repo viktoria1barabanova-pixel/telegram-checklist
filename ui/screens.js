@@ -2268,6 +2268,7 @@
 
     const qList = document.getElementById("qList");
     const rollCatalog = getRollWeightsCatalog();
+    const checkerMeta = getCheckerMeta();
     qList.innerHTML = qs.map(q => {
       const qWithSection = { ...q, section_title: activeTitle };
       const isCheckbox = isCheckboxQuestion(qWithSection);
@@ -2281,6 +2282,7 @@
         answerState: state,
         showRightToggle: true,
         showNotes: !isCheckbox,
+        allowPhotos: !!checkerMeta.isUkChecker,
         rollOptions: isNumber ? rollCatalog.options : [],
         tolerance: WEIGHT_TOLERANCE_GRAMS,
       });
@@ -2543,6 +2545,12 @@
       const file = block.querySelector(".noteFile");
       if (file) {
         file.onchange = async () => {
+          const allowPhotos = block.getAttribute("data-allow-photos") === "1";
+          if (!allowPhotos) {
+            file.value = "";
+            return;
+          }
+
           const files = Array.from(file.files || []);
           if (!files.length) return;
 
@@ -2757,6 +2765,12 @@
     const row = block.querySelector(".thumbRow");
     if (!row) return;
 
+    const allowPhotos = block.getAttribute("data-allow-photos") === "1";
+    if (!allowPhotos) {
+      row.innerHTML = "";
+      return;
+    }
+
     const photos = notePhotos(qid);
     row.innerHTML = photos.map((p, i) => {
       const src = driveToDirect(p);
@@ -2804,18 +2818,38 @@
     };
   }
 
+  function getInspectorMcStatus(tgUserId) {
+    const userId = norm(tgUserId);
+    if (!userId || !Array.isArray(DATA?.inspectors)) return "";
+
+    const row = DATA.inspectors.find((it) => {
+      const rid = norm(getAny(it, ["tg_user_id", "tg_id", "id"], ""));
+      return rid && rid === userId;
+    });
+    if (!row) return "";
+
+    return tkey(getAny(row, [
+      "MC or no?", "mc_or_no", "mc or no", "mc", "мс_или_нет", "ук"
+    ], ""));
+  }
+
   function getCheckerMeta() {
     const tgUser = STATE.tgUser || (window.getAuthTgUser ? window.getAuthTgUser() : null);
     const fio = norm(STATE.fio || tgUser?.name || "");
     if (!STATE.fio && fio) STATE.fio = fio;
+    const tgUserId = tgUser?.id || "";
+    const mcValue = getInspectorMcStatus(tgUserId);
+    const isUkChecker = mcValue === "ук";
     return {
       fio,
-      tg_id: tgUser?.id || "",
-      tg_user_id: tgUser?.id || "",
+      tg_id: tgUserId,
+      tg_user_id: tgUserId,
       tg_username: tgUser?.username || "",
       tg_first_name: tgUser?.first_name || "",
       tg_last_name: tgUser?.last_name || "",
       tg_name: tgUser?.name || "",
+      isUkChecker,
+      mc_or_no: mcValue,
     };
   }
 
