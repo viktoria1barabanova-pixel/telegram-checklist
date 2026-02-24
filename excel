@@ -331,6 +331,64 @@ function getOrCreateSheet_(ss, name, headers) {
   return sh;
 }
 
+
+
+function processPendingAnswerPhotos_(limit) {
+  const maxRows = Number(limit) > 0 ? Number(limit) : 50;
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const shAns = ss.getSheetByName(SHEET_NAMES.answers);
+  if (!shAns) return { ok: false, status: "answers_sheet_missing", processed: 0, uploaded: 0, failed: 0 };
+
+  const range = shAns.getDataRange();
+  const values = range.getValues();
+  if (!values || values.length < 2) return { ok: true, status: "empty", processed: 0, uploaded: 0, failed: 0 };
+
+  const headers = values[0].map(h => String(h || "").trim());
+  const idx = {};
+  headers.forEach((h, i) => { idx[h] = i; });
+
+  const need = ["submission_id", "branch_id", "branch_name", "section_title", "photos_json"];
+  if (need.some(k => idx[k] === undefined)) {
+    return { ok: false, status: "headers_missing", reason: "Required headers not found", processed: 0, uploaded: 0, failed: 0 };
+  }
+
+  let processed = 0;
+  let uploaded = 0;
+  let failed = 0;
+
+  for (let r = 1; r < values.length; r += 1) {
+    if (processed >= maxRows) break;
+
+    const photosCell = values[r][idx.photos_json];
+    const photos = normalizePhotosList_(photosCell);
+    if (!photos.some(isDataUrlImage_)) continue;
+
+    processed += 1;
+    const payload = {
+      submission_id: safe_(values[r][idx.submission_id]),
+      branch_id: safe_(values[r][idx.branch_id]),
+      branch_name: safe_(values[r][idx.branch_name]),
+    };
+
+    const row = {
+      section_title: safe_(values[r][idx.section_title]),
+      photos,
+    };
+
+    const res = uploadAnswerPhotosToDrive_(ss, payload, [row]);
+    if (!res.meta || !res.meta.ok) {
+      failed += 1;
+      continue;
+    }
+
+    const nextPhotos = (res.flat && res.flat[0] && res.flat[0].photos) ? res.flat[0].photos : photos;
+    shAns.getRange(r + 1, idx.photos_json + 1).setValue(json_(nextPhotos));
+    uploaded += Number(res.meta.uploaded || 0);
+  }
+
+  return { ok: failed === 0, status: failed === 0 ? "processed" : "processed_with_errors", processed, uploaded, failed };
+}
+
 function safe_(v) {
   if (v === null || v === undefined) return "";
   // Apps Script любит boolean/number норм, оставим как есть
@@ -577,7 +635,7 @@ function resolveBranchDriveFolder_(ss, payload) {
       reason: String(err || ""),
       folder_id: folderId,
       action_required: scopeIssue
-        ? "Re-authorize Apps Script deployment with Google Drive scope (https://www.googleapis.com/auth/drive)."
+        ? "Run processPendingAnswerPhotos_ from script owner account (or install a time trigger for it) so uploads execute with owner Drive permissions."
         : "Check folder access rights and shared permissions for script account.",
     };
   }
