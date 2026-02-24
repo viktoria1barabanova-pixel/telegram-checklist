@@ -570,8 +570,28 @@ function resolveBranchDriveFolder_(ss, payload) {
     return { ok: true, folder, status: "resolved", folder_id: folderId };
   } catch (err) {
     logError_("resolveBranchDriveFolder: DriveApp.getFolderById failed", err);
-    return { ok: false, status: "folder_access_error", reason: String(err || ""), folder_id: folderId };
+    const scopeIssue = getDriveScopeIssue_(err);
+    return {
+      ok: false,
+      status: scopeIssue ? "drive_scope_missing" : "folder_access_error",
+      reason: String(err || ""),
+      folder_id: folderId,
+      required_scopes: scopeIssue ? ["https://www.googleapis.com/auth/drive"] : [],
+      manifest_hint: scopeIssue
+        ? "If appsscript.json is not editable, ask project owner for Editor rights or use Deploy -> Manage deployments -> Edit -> Save to trigger re-authorization with Drive access."
+        : "",
+      action_required: scopeIssue
+        ? "Re-authorize Apps Script deployment with Google Drive scope (https://www.googleapis.com/auth/drive). If manifest editing is blocked, redeploy as the owner account."
+        : "Check folder access rights and shared permissions for script account.",
+    };
   }
+}
+
+function getDriveScopeIssue_(err) {
+  const text = String(err && (err.message || err.stack) ? (err.message || err.stack) : err || "");
+  if (!text) return false;
+  return /DriveApp\.getFolderById/i.test(text)
+    && /(auth\/drive|auth\/drive\.readonly|нет разрешения|permission)/i.test(text);
 }
 
 function findBranchRowData_(branchesSheet, payload) {
