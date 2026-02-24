@@ -2853,6 +2853,29 @@
     };
   }
 
+  function hasAnyAnsweredQuestionInSection(sectionId) {
+    const qs = questionsForSection(DATA.checklist, sectionId);
+    for (let i = 0; i < qs.length; i += 1) {
+      const q = qs[i];
+      const qid = q.id;
+      if (isCheckboxQuestion(q)) {
+        const set = STATE.checkboxAnswers[qid] instanceof Set ? STATE.checkboxAnswers[qid] : new Set(STATE.checkboxAnswers[qid] || []);
+        if (set.size > 0) return true;
+        continue;
+      }
+      if (isNumberQuestion(q)) {
+        const meta = computeNumberAnswerMeta(STATE.numberAnswers?.[qid] || {}, getRollWeightsCatalog());
+        if (meta.hasAnswer) return true;
+        continue;
+      }
+
+      const selectedValue = norm(STATE.singleAnswers[qid] || "");
+      const selectedLabel = norm(STATE.singleAnswerLabels?.[qid] || "");
+      if (selectedValue || selectedLabel) return true;
+    }
+    return false;
+  }
+
   function buildAnswersRows(submissionId, submittedAt) {
     const rows = [];
     const sections = activeSections(DATA.sections);
@@ -2860,6 +2883,7 @@
     const checker = getCheckerMeta();
 
     sections.forEach(section => {
+      if (!hasAnyAnsweredQuestionInSection(section.id)) return;
       const qs = questionsForSection(DATA.checklist, section.id);
       qs.forEach(q => {
         const qid = q.id;

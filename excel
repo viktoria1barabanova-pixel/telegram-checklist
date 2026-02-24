@@ -153,9 +153,17 @@ function doPost(e) {
     if (!raw) throw new Error("Empty payload");
 
     const payload = JSON.parse(raw);
+    logInfo_("doPost: received payload", {
+      action,
+      partial: !!payload?.partial,
+      submission_id: safe_(payload?.submission_id),
+      branch_id: safe_(payload?.branch_id),
+      branch_name: safe_(payload?.branch_name),
+    });
 
     if (action === "send_message") {
       const sendRes = sendTelegramMessageFromPayload_(ss, payload, { action });
+      logInfo_("doPost: send_message result", sendRes);
       return text_("OK");
     }
 
@@ -167,6 +175,7 @@ function doPost(e) {
     try {
       upsertInspector_(ss, payload);
     } catch (inspectorErr) {
+      logError_("doPost: upsertInspector failed", inspectorErr);
     }
 
     // Ensure output sheets exist & have headers
@@ -180,6 +189,7 @@ function doPost(e) {
 
     const driveUpload = uploadAnswerPhotosToDrive_(ss, payload, flat);
     const effectiveFlat = driveUpload.flat;
+    logInfo_("doPost: drive upload meta", driveUpload.meta);
 
     // Prepare values (one submission row)
     const tg = payload.tg || {};
@@ -236,9 +246,11 @@ function doPost(e) {
     const tgSendRes = shouldSendTelegram
       ? sendTelegramMessageFromPayload_(ss, payload, { action })
       : { ok: false, info: "skip_partial" };
+    logInfo_("doPost: telegram send result", tgSendRes);
     return text_("OK");
 
   } catch (err) {
+    logError_("doPost: failed", err);
     // Всё равно отдаём OK, чтобы iframe не ломал UX
     return text_("OK");
   }
@@ -377,15 +389,10 @@ function extractPayloadFromPost_(e, params) {
 
 function uploadAnswerPhotosToDrive_(ss, payload, flatRows) {
   const rows = Array.isArray(flatRows) ? flatRows : [];
-  if (!rows.length) {
-    return {
-      flat: rows,
-      meta: { ok: true, status: "no_answers_rows", uploaded: 0, total: 0 },
-    };
-  }
 
   const resolver = resolveBranchDriveFolder_(ss, payload);
   if (!resolver.ok || !resolver.folder) {
+    logInfo_("uploadAnswerPhotosToDrive: branch folder unresolved", resolver);
     return {
       flat: rows,
       meta: {
@@ -400,6 +407,23 @@ function uploadAnswerPhotosToDrive_(ss, payload, flatRows) {
 
   const dateFolderName = formatDateFolderNameMsk_(new Date());
   const dateFolder = ensureChildFolderByName_(resolver.folder, dateFolderName);
+
+  if (!rows.length) {
+    return {
+      flat: rows,
+      meta: {
+        ok: true,
+        status: "no_answers_rows",
+        uploaded: 0,
+        total: 0,
+        branch_folder_id: resolver.folder.getId(),
+        branch_folder_url: resolver.folder.getUrl(),
+        date_folder_id: dateFolder.getId(),
+        date_folder_url: dateFolder.getUrl(),
+        date_folder_name: dateFolderName,
+      },
+    };
+  }
 
   let uploaded = 0;
   let failed = 0;
@@ -437,6 +461,7 @@ function uploadAnswerPhotosToDrive_(ss, payload, flatRows) {
         nextPhotos.push(file.getUrl());
         uploaded += 1;
       } catch (err) {
+        logError_("uploadAnswerPhotosToDrive: photo upload failed", err);
         failed += 1;
       }
     });
@@ -508,7 +533,10 @@ function resolveBranchDriveFolder_(ss, payload) {
     return { ok: false, status: "branch_not_found", reason: "Branch row not found" };
   }
 
-  const folderUrl = String(getByKeys_(found, ["ссылка_на_папку", "ссылка на папку", "folder_url", "folder_link", "drive_folder_url"]) || "").trim();
+  const folderUrl = String(getByKeys_(found, [
+    "ссылка_на_папку", "ссылка на папку", "папка", "папка_drive",
+    "folder_url", "folder_link", "drive_folder_url", "drive_folder", "folder_id",
+  ]) || "").trim();
   const folderId = extractDriveFolderId_(folderUrl);
   if (!folderId) {
     return { ok: false, status: "folder_link_missing", reason: "Folder link not found in branch row" };
@@ -518,8 +546,22 @@ function resolveBranchDriveFolder_(ss, payload) {
     const folder = DriveApp.getFolderById(folderId);
     return { ok: true, folder, status: "resolved" };
   } catch (err) {
+    logError_("resolveBranchDriveFolder: DriveApp.getFolderById failed", err);
     return { ok: false, status: "folder_access_error", reason: String(err || "") };
   }
+}
+
+function logInfo_(msg, data) {
+  try {
+    Logger.log(`[INFO] ${msg}${data !== undefined ? ` | ${json_(data)}` : ""}`);
+  } catch (_) {}
+}
+
+function logError_(msg, err) {
+  const text = err && err.stack ? String(err.stack) : String(err || "");
+  try {
+    Logger.log(`[ERROR] ${msg}${text ? ` | ${text}` : ""}`);
+  } catch (_) {}
 }
 
 function getByKeys_(obj, keys) {
