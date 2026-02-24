@@ -172,10 +172,20 @@ function doPost(e) {
     const shSub = getOrCreateSheet_(ss, SHEET_NAMES.submissions, SUBMISSIONS_HEADERS);
     const shAns = getOrCreateSheet_(ss, SHEET_NAMES.answers, ANSWERS_HEADERS);
 
+    // Prepare answers rows (flat)
+    const flat = Array.isArray(payload.answers_rows)
+      ? payload.answers_rows
+      : (Array.isArray(payload.answers_flat) ? payload.answers_flat : []);
+
+    const driveUpload = uploadAnswerPhotosToDrive_(ss, payload, flat);
+    const effectiveFlat = driveUpload.flat;
+
     // Prepare values (one submission row)
     const tg = payload.tg || {};
     const meta = payload.meta || {};
-    const metaJson = payload.meta_json ? String(payload.meta_json) : "";
+    const metaJson = mergeMetaJsonWith_(payload.meta_json, {
+      drive_upload: driveUpload.meta,
+    });
     const tgUserId = safe_(payload.tg_user_id || payload.tg_id || tg.user_id || tg.id);
 
     const subRow = [
@@ -196,12 +206,8 @@ function doPost(e) {
 
     shSub.appendRow(subRow);
 
-    // Prepare answers rows (flat)
-    const flat = Array.isArray(payload.answers_rows)
-      ? payload.answers_rows
-      : (Array.isArray(payload.answers_flat) ? payload.answers_flat : []);
-    if (flat.length) {
-      const rows = flat.map(a => ({
+    if (effectiveFlat.length) {
+      const rows = effectiveFlat.map(a => ({
         submission_id: safe_(payload.submission_id),
         submitted_at: safe_(payload.submitted_at),
         fio: safe_(payload.fio),
@@ -329,6 +335,24 @@ function json_(v) {
   if (v === null || v === undefined) return "";
   try { return JSON.stringify(v); } catch { return ""; }
 }
+
+function parseJsonObject_(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function mergeMetaJsonWith_(metaJson, extra) {
+  const base = parseJsonObject_(metaJson);
+  const out = { ...base, ...(extra || {}) };
+  return json_(out);
+}
+
 function parseFormUrlEncoded_(s) {
   const out = {};
   String(s || "").split("&").forEach(pair => {
@@ -348,6 +372,241 @@ function extractPayloadFromPost_(e, params) {
     raw = parsed.payload ? String(parsed.payload) : "";
   }
   return raw;
+}
+
+function uploadAnswerPhotosToDrive_(ss, payload, flatRows) {
+  const rows = Array.isArray(flatRows) ? flatRows : [];
+  if (!rows.length) {
+    return {
+      flat: rows,
+      meta: { ok: true, status: "no_answers_rows", uploaded: 0, total: 0 },
+    };
+  }
+
+  const resolver = resolveBranchDriveFolder_(ss, payload);
+  if (!resolver.ok || !resolver.folder) {
+    return {
+      flat: rows,
+      meta: {
+        ok: false,
+        status: resolver.status || "branch_folder_not_found",
+        reason: resolver.reason || "",
+        uploaded: 0,
+        total: countPhotosInRows_(rows),
+      },
+    };
+  }
+
+  const dateFolderName = formatDateFolderNameMsk_(new Date());
+  const dateFolder = ensureChildFolderByName_(resolver.folder, dateFolderName);
+
+  let uploaded = 0;
+  let failed = 0;
+  let total = 0;
+
+  const outRows = rows.map((row, rowIdx) => {
+    const photos = normalizePhotosList_(row?.photos);
+    if (!photos.length) return row;
+
+    const sectionTitle = safe_(row?.section_title || row?.section || row?.zone_room || "Общая");
+    const zoneFolder = ensureChildFolderByName_(dateFolder, sanitizeDriveName_(sectionTitle || "Общая"));
+
+    const nextPhotos = [];
+    photos.forEach((photo, photoIdx) => {
+      total += 1;
+      const src = String(photo || "").trim();
+      if (!src) return;
+
+      if (!isDataUrlImage_(src)) {
+        nextPhotos.push(src);
+        return;
+      }
+
+      try {
+        const decoded = decodeImageDataUrl_(src);
+        if (!decoded || !decoded.bytes || !decoded.bytes.length) {
+          failed += 1;
+          return;
+        }
+
+        const ext = mimeToFileExt_(decoded.mimeType);
+        const fileName = buildUploadedPhotoName_(payload, row, rowIdx, photoIdx, ext);
+        const blob = Utilities.newBlob(decoded.bytes, decoded.mimeType, fileName);
+        const file = zoneFolder.createFile(blob);
+        nextPhotos.push(file.getUrl());
+        uploaded += 1;
+      } catch (err) {
+        failed += 1;
+      }
+    });
+
+    return {
+      ...row,
+      photos: nextPhotos,
+    };
+  });
+
+  return {
+    flat: outRows,
+    meta: {
+      ok: failed === 0,
+      status: failed === 0 ? "uploaded" : (uploaded > 0 ? "partially_uploaded" : "upload_failed"),
+      uploaded,
+      failed,
+      total,
+      branch_folder_id: resolver.folder.getId(),
+      branch_folder_url: resolver.folder.getUrl(),
+      date_folder_id: dateFolder.getId(),
+      date_folder_url: dateFolder.getUrl(),
+      date_folder_name: dateFolderName,
+    },
+  };
+}
+
+function countPhotosInRows_(rows) {
+  return (rows || []).reduce((acc, row) => acc + normalizePhotosList_(row?.photos).length, 0);
+}
+
+function normalizePhotosList_(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (!value) return [];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch (_) {}
+    return [value];
+  }
+  return [];
+}
+
+function resolveBranchDriveFolder_(ss, payload) {
+  const branchesSheet = ss.getSheetByName(SHEET_NAMES.branches);
+  if (!branchesSheet) {
+    return { ok: false, status: "branches_sheet_missing", reason: "Sheet 'Адреса' not found" };
+  }
+
+  const rows = readSheetAsObjects_(ss, SHEET_NAMES.branches);
+  const branchId = String(payload?.branch_id || "").trim();
+  const branchName = String(payload?.branch_name || "").trim();
+
+  let found = null;
+  if (branchId) {
+    found = rows.find(r => String(getByKeys_(r, ["branch_id", "id", "branchid"]) || "").trim() === branchId) || null;
+  }
+
+  if (!found && branchName) {
+    const target = normalizeTextKey_(branchName);
+    found = rows.find(r => {
+      const label = String(getByKeys_(r, ["branch_name", "address", "addr", "name", "title", "адрес", "название"]) || "").trim();
+      return normalizeTextKey_(label) === target;
+    }) || null;
+  }
+
+  if (!found) {
+    return { ok: false, status: "branch_not_found", reason: "Branch row not found" };
+  }
+
+  const folderUrl = String(getByKeys_(found, ["ссылка_на_папку", "ссылка на папку", "folder_url", "folder_link", "drive_folder_url"]) || "").trim();
+  const folderId = extractDriveFolderId_(folderUrl);
+  if (!folderId) {
+    return { ok: false, status: "folder_link_missing", reason: "Folder link not found in branch row" };
+  }
+
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    return { ok: true, folder, status: "resolved" };
+  } catch (err) {
+    return { ok: false, status: "folder_access_error", reason: String(err || "") };
+  }
+}
+
+function getByKeys_(obj, keys) {
+  const map = {};
+  Object.keys(obj || {}).forEach(k => {
+    map[normalizeHeaderKey_(k)] = obj[k];
+  });
+  for (let i = 0; i < (keys || []).length; i += 1) {
+    const key = normalizeHeaderKey_(keys[i]);
+    if (map[key] !== undefined && map[key] !== null && String(map[key]).trim() !== "") {
+      return map[key];
+    }
+  }
+  return "";
+}
+
+function normalizeTextKey_(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractDriveFolderId_(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+
+  const m1 = raw.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (m1 && m1[1]) return m1[1];
+
+  const m2 = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2 && m2[1]) return m2[1];
+
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(raw)) return raw;
+  return "";
+}
+
+function ensureChildFolderByName_(parentFolder, name) {
+  const cleanName = sanitizeDriveName_(name || "Проверка");
+  const existing = parentFolder.getFoldersByName(cleanName);
+  if (existing.hasNext()) return existing.next();
+  return parentFolder.createFolder(cleanName);
+}
+
+function sanitizeDriveName_(value) {
+  const cleaned = String(value || "")
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "Без названия";
+}
+
+function formatDateFolderNameMsk_(date) {
+  return Utilities.formatDate(date || new Date(), "Europe/Moscow", "yyyy-MM-dd");
+}
+
+function isDataUrlImage_(value) {
+  return /^data:image\//i.test(String(value || ""));
+}
+
+function decodeImageDataUrl_(dataUrl) {
+  const m = String(dataUrl || "").match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i);
+  if (!m) return null;
+  const mimeType = m[1].toLowerCase();
+  const base64 = m[2] || "";
+  if (!base64) return null;
+  return {
+    mimeType,
+    bytes: Utilities.base64Decode(base64),
+  };
+}
+
+function mimeToFileExt_(mimeType) {
+  const mime = String(mimeType || "").toLowerCase();
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  if (mime === "image/gif") return "gif";
+  return "bin";
+}
+
+function buildUploadedPhotoName_(payload, row, rowIdx, photoIdx, ext) {
+  const sid = sanitizeDriveName_(payload?.submission_id || "submission");
+  const qid = sanitizeDriveName_(row?.question_id || `q_${rowIdx + 1}`);
+  const section = sanitizeDriveName_(row?.section_code || row?.section_id || "section");
+  const idx = photoIdx + 1;
+  return `${sid}_${section}_${qid}_${idx}.${ext || "bin"}`;
 }
 
 function extractTelegramUserId_(payload, initData) {
