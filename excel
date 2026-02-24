@@ -95,6 +95,7 @@ function doGet(e) {
         checklist: readSheetAsObjects_(ss, SHEET_NAMES.checklist),
         branches: readSheetAsObjects_(ss, SHEET_NAMES.branches),
         roll_weights: readSheetAsObjects_(ss, SHEET_NAMES.roll_weights),
+        inspectors: readSheetAsObjects_(ss, SHEET_NAMES.inspectors),
         settings: SETTINGS,
         meta: { updatedAt: new Date().toISOString() },
       };
