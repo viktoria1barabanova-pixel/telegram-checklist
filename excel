@@ -587,9 +587,14 @@ function normalizePhotosList_(value) {
 }
 
 function resolveBranchDriveFolder_(ss, payload) {
+  const directFolder = resolveDirectDriveFolder_(payload);
+  if (directFolder && directFolder.ok) return directFolder;
+
   const branchesSheet = ss.getSheetByName(SHEET_NAMES.branches);
   if (!branchesSheet) {
-    return { ok: false, status: "branches_sheet_missing", reason: "Sheet 'Адреса' not found" };
+    return directFolder && !directFolder.ok
+      ? directFolder
+      : { ok: false, status: "branches_sheet_missing", reason: "Sheet 'Адреса' not found" };
   }
 
   const found = findBranchRowData_(branchesSheet, payload);
@@ -599,7 +604,10 @@ function resolveBranchDriveFolder_(ss, payload) {
 
   const folderAliases = [
     "ссылка_на_папку", "ссылка на папку", "папка", "папка_drive", "папка drive", "диск",
+    "google_drive", "google drive", "gdrive", "google_disk", "google disk",
+    "посилання_на_папку", "папка_гугл", "папка_google",
     "folder_url", "folder_link", "drive_folder_url", "drive_folder", "folder_id",
+    "google_drive_folder", "gdrive_folder", "drive_folder_id", "drive_id", "folder",
   ];
 
   const folderUrl = String(getByKeys_(found.obj, folderAliases) || "").trim();
@@ -632,6 +640,56 @@ function resolveBranchDriveFolder_(ss, payload) {
     return {
       ok: false,
       status: scopeIssue ? "drive_scope_missing" : "folder_access_error",
+      reason: String(err || ""),
+      folder_id: folderId,
+      action_required: scopeIssue
+        ? "Run processPendingAnswerPhotos_ from script owner account (or install a time trigger for it) so uploads execute with owner Drive permissions."
+        : "Check folder access rights and shared permissions for script account.",
+    };
+  }
+}
+
+function resolveDirectDriveFolder_(payload) {
+  const fromPayload = [
+    payload?.drive_folder_id,
+    payload?.drive_folder_url,
+    payload?.folder_id,
+    payload?.folder_url,
+  ];
+
+  const props = PropertiesService.getScriptProperties();
+  const fromProps = [
+    props.getProperty("DRIVE_UPLOAD_FOLDER_ID"),
+    props.getProperty("DEFAULT_DRIVE_FOLDER_ID"),
+    props.getProperty("DRIVE_FOLDER_ID"),
+    props.getProperty("DRIVE_UPLOAD_FOLDER_URL"),
+  ];
+
+  const source = [...fromPayload, ...fromProps]
+    .map(v => String(v || "").trim())
+    .find(Boolean);
+
+  if (!source) return null;
+
+  const folderId = extractDriveFolderId_(source);
+  if (!folderId) {
+    return {
+      ok: false,
+      status: "direct_folder_invalid",
+      reason: "Direct Drive folder value is set, but folder id is invalid",
+      raw: source,
+    };
+  }
+
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    return { ok: true, folder, status: "resolved_direct", folder_id: folderId };
+  } catch (err) {
+    logError_("resolveDirectDriveFolder: DriveApp.getFolderById failed", err);
+    const scopeIssue = getDriveScopeIssue_(err);
+    return {
+      ok: false,
+      status: scopeIssue ? "drive_scope_missing" : "direct_folder_access_error",
       reason: String(err || ""),
       folder_id: folderId,
       action_required: scopeIssue
