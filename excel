@@ -190,7 +190,10 @@ function doPost(e) {
       ? payload.answers_rows
       : (Array.isArray(payload.answers_flat) ? payload.answers_flat : []);
 
-    const driveUpload = uploadAnswerPhotosToDrive_(ss, payload, flat);
+    const shouldUploadInline = shouldUploadPhotosInline_(payload);
+    const driveUpload = shouldUploadInline
+      ? uploadAnswerPhotosToDrive_(ss, payload, flat)
+      : buildDeferredDriveUploadMeta_(flat, "inline_upload_disabled");
     const effectiveFlat = driveUpload.flat;
     logInfo_("doPost: drive upload meta", driveUpload.meta);
 
@@ -425,6 +428,36 @@ function mergeMetaJsonWith_(metaJson, extra) {
   const base = parseJsonObject_(metaJson);
   const out = { ...base, ...(extra || {}) };
   return json_(out);
+}
+
+function shouldUploadPhotosInline_(payload) {
+  const props = PropertiesService.getScriptProperties();
+  const modeRaw = String(props.getProperty("PHOTO_UPLOAD_MODE") || "").trim().toLowerCase();
+  const mode = modeRaw || "deferred";
+
+  if (mode === "inline") return true;
+  if (mode === "deferred") return false;
+
+  if (mode === "auto") {
+    return !payload?.partial;
+  }
+
+  return false;
+}
+
+function buildDeferredDriveUploadMeta_(flatRows, reason) {
+  return {
+    flat: flatRows,
+    meta: {
+      ok: true,
+      status: "deferred",
+      uploaded: 0,
+      failed: 0,
+      total: countPhotosInRows_(flatRows),
+      action_required: "Run processPendingAnswerPhotos_ from script owner account (or install a time trigger for it) to upload queued data URL photos.",
+      reason: String(reason || "deferred"),
+    },
+  };
 }
 
 function parseFormUrlEncoded_(s) {
